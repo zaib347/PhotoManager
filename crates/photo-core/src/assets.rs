@@ -7,6 +7,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
 use crate::collections::{self, Named};
+use crate::places::{PLACE_COLUMNS, Place, place_row};
 use crate::{Error, Result};
 
 #[derive(Serialize, Debug)]
@@ -39,6 +40,8 @@ pub struct AssetDetails {
     pub camera_model: Option<String>,
     pub lat: Option<f64>,
     pub lon: Option<f64>,
+    /// The town nearest the GPS position, once places have been looked up.
+    pub place: Option<Place>,
     pub favorite: bool,
     pub rating: Option<u8>,
     pub hidden: bool,
@@ -53,10 +56,13 @@ pub struct AssetDetails {
 pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
     let asset = conn
         .query_row(
-            "SELECT a.media_kind, a.taken_at, a.taken_src, a.tz_offset_min, a.local_day, a.width,
-                    a.height, a.orientation, a.duration_ms, a.camera_make, a.camera_model, a.lat,
-                    a.lon, COALESCE(u.favorite, 0), u.rating, COALESCE(u.hidden, 0)
-             FROM assets a LEFT JOIN user_meta u ON u.asset_id = a.id WHERE a.id = ?1",
+            &format!(
+                "SELECT a.media_kind, a.taken_at, a.taken_src, a.tz_offset_min, a.local_day, a.width,
+                        a.height, a.orientation, a.duration_ms, a.camera_make, a.camera_model, a.lat,
+                        a.lon, COALESCE(u.favorite, 0), u.rating, COALESCE(u.hidden, 0), {PLACE_COLUMNS}
+                 FROM assets a LEFT JOIN user_meta u ON u.asset_id = a.id
+                 LEFT JOIN places p ON p.id = a.place_id WHERE a.id = ?1"
+            ),
             params![id],
             |r| {
                 Ok(AssetDetails {
@@ -74,6 +80,7 @@ pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
                     camera_model: r.get(10)?,
                     lat: r.get(11)?,
                     lon: r.get(12)?,
+                    place: place_row(r, 16)?,
                     favorite: r.get(13)?,
                     rating: r.get(14)?,
                     hidden: r.get(15)?,

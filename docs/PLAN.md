@@ -165,7 +165,15 @@ Batch 2:
 - [x] Events: group photos by time gaps (adaptive per person), rename/merge/split, event view
       (gaps judged against the ~10 gaps on each side; 1M assets: first detection 12 s, re-run 2.7 s,
       list 30 ms; edited events are never redrawn, removed ones never come back)
-- [ ] Places: offline reverse geocoding (GeoNames cities, bundled), place names in info and filters
+- [x] Places: offline reverse geocoding against GeoNames `cities15000` (31.8k towns, districts
+      and historical places dropped; 945 KiB embedded, ~565 KiB compressed). Nearest town where
+      big cities reach further (5 m × √population, so suburbs don't take the city's photos),
+      none past 60 km. Schema v8 `places` table (only towns in use) + `assets.place_id`
+      (0 = nothing nearby). Place in the info panel, place and country filters, events named
+      after their most common place until renamed. 1M assets (752k with GPS): first lookup
+      22 s in 20k-row batches (lookups ~2.5 µs, the row updates dominate), one-place filter
+      146 ms. Also fixed: merge/split/create now pull in the loose items inside the new span
+      right away, so the next detection doesn't change the edited event
 - [ ] Trips: multi-day events far from home
 - [ ] Browse by place
 

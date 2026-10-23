@@ -26,7 +26,16 @@ cargo run --release -p photo-core --example scan_bench -- "D:\Photos" ./scratch
 
 # What the indexer extracts from one file
 cargo run -p photo-core --example exif_dump -- "D:\Photos\IMG_0001.jpg"
+
+# Rebuild the bundled place list (crates/photo-core/data/places.bin) from GeoNames dumps
+cargo run -p photo-core --example build_places -- ./geonames
 ```
+
+## Data credits
+
+Place names come from [GeoNames](https://www.geonames.org/) (`cities15000`, admin1 codes
+and country info), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+They are repacked into a compact binary file with no other changes.
 
 ## Layout
 

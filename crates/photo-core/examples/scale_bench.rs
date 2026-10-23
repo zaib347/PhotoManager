@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use photo_core::{db::Db, events, schema, synth, timeline};
+use photo_core::{db::Db, events, places, schema, synth, timeline};
 
 fn main() -> photo_core::Result<()> {
     let mut args = std::env::args().skip(1);
@@ -79,6 +79,32 @@ fn main() -> photo_core::Result<()> {
         println!(
             "filter {name}: layout {first:?}, first 10 days {:?}",
             t.elapsed() - first
+        );
+    }
+
+    let t = Instant::now();
+    let placed = places::assign(&db)?;
+    println!("place lookup ({placed} with GPS): {:?}", t.elapsed());
+    let t = Instant::now();
+    let options = timeline::filter_options(&db.read())?;
+    println!(
+        "filter options ({} places, {} countries): {:?}",
+        options.places.len(),
+        options.countries.len(),
+        t.elapsed()
+    );
+    if let Some(top) = options.places.first() {
+        let filter = timeline::Filter {
+            place_ids: vec![top.place.id],
+            ..Default::default()
+        };
+        let t = Instant::now();
+        timeline::layout(&db.read(), timeline::View::All, &filter)?;
+        println!(
+            "filter one place ({}, {} items): {:?}",
+            top.place.name,
+            top.count,
+            t.elapsed()
         );
     }
 

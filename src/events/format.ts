@@ -22,6 +22,12 @@ export function formatEventDates(e: Pick<EventSummary, "start" | "end">) {
   return `${from} – ${full.format(e.end)}`;
 }
 
-export const eventTitle = (e: EventSummary) => e.title ?? formatEventDates(e);
+/** What an untitled event is called: where it happened, else when. */
+export const defaultEventTitle = (e: EventSummary) => e.place?.name ?? formatEventDates(e);
+
+export const eventTitle = (e: EventSummary) => e.title ?? defaultEventTitle(e);
+
+/** The title isn't the dates, so the dates need showing next to it. */
+export const hasName = (e: EventSummary) => e.title !== null || e.place !== null;
 
 export const eventYear = (e: EventSummary) => yearOf(e.start);

@@ -29,10 +29,25 @@ export type Filter = {
   fromDay?: number;
   toDay?: number;
   minRating?: number;
+  /** Towns (GeoNames ids) and countries (ISO codes); matching either is enough. */
+  placeIds?: number[];
+  countries?: string[];
+};
+
+/** A town from the bundled GeoNames list. */
+export type Place = {
+  id: number;
+  name: string;
+  region: string | null;
+  country: string;
+  countryCode: string;
 };
 
 export type FilterOptions = {
   cameras: { model: string; count: number }[];
+  /** The most common places and every country, most photos first. */
+  places: (Place & { count: number })[];
+  countries: { code: string; name: string; count: number }[];
   firstDay: number | null;
   lastDay: number | null;
 };
@@ -46,6 +61,8 @@ export function normalizeFilter(f: Filter): Filter {
   if (f.fromDay !== undefined) out.fromDay = f.fromDay;
   if (f.toDay !== undefined) out.toDay = f.toDay;
   if (f.minRating) out.minRating = f.minRating;
+  if (f.placeIds?.length) out.placeIds = [...f.placeIds].sort((a, b) => a - b);
+  if (f.countries?.length) out.countries = [...f.countries].sort();
   return out;
 }
 
@@ -72,6 +89,8 @@ export type EventSummary = {
   end: number;
   count: number;
   coverId: number | null;
+  /** Where most of its photos were taken; the default name when untitled. */
+  place: Place | null;
   /** Renamed, merged, split or made by hand; detection leaves it alone. */
   edited: boolean;
 };
@@ -133,6 +152,8 @@ export type AssetDetails = {
   cameraModel: string | null;
   lat: number | null;
   lon: number | null;
+  /** The town nearest the GPS position, once looked up. */
+  place: Place | null;
   favorite: boolean;
   rating: number | null;
   hidden: boolean;

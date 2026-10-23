@@ -2,7 +2,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { AssetDetails, View } from "../api";
 import { useCollections } from "../collections/context";
 import { TagInput } from "../collections/TagInput";
-import { fileName, formatBytes, formatDuration, formatOffset, formatTakenAt } from "../format";
+import { fileName, formatBytes, formatDuration, formatOffset, formatTakenAt, placeLabel } from "../format";
 import { eventTitle } from "../events/format";
 
 const TIME_SOURCES = ["from photo metadata", "from video metadata", "from the file name", "from the file's modified date", "set by you"];
@@ -61,6 +61,7 @@ export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate, onRestoreD
       {asset.lat !== null && asset.lon !== null && (
         <section>
           <h3>Location</h3>
+          {asset.place && <p>{placeLabel(asset.place)}</p>}
           <p className="muted">
             {asset.lat.toFixed(5)}, {asset.lon.toFixed(5)}
           </p>

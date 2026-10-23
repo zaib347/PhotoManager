@@ -11,6 +11,8 @@ use std::collections::{HashMap, HashSet};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::Serialize;
 
+use crate::places::{Place, place_row};
+use crate::timeline::DAY_MS;
 use crate::{Error, Result};
 
 const MINUTE: i64 = 60_000;
@@ -42,6 +44,8 @@ pub struct EventSummary {
     pub end: i64,
     pub count: i64,
     pub cover_id: Option<i64>,
+    /// Where most of its photos were taken; the default name when it has no title.
+    pub place: Option<Place>,
     /// Renamed, merged, split or made by hand; detection leaves it alone.
     pub edited: bool,
 }
@@ -87,11 +91,12 @@ struct Member {
     event_status: Option<String>,
     /// Visible, favorite, rating, photo: higher makes a better cover.
     score: (bool, bool, u8, bool),
+    place: Option<i64>,
 }
 
 const MEMBER_SQL: &str = "SELECT a.id, a.taken_at + a.tz_offset_min * 60000, a.event_id, e.status,
             COALESCE(u.hidden, 0) = 0, COALESCE(u.favorite, 0), COALESCE(u.rating, 0),
-            a.media_kind != 1
+            a.media_kind != 1, NULLIF(a.place_id, 0)
      FROM assets a
      LEFT JOIN user_meta u ON u.asset_id = a.id
      LEFT JOIN events e ON e.id = a.event_id
@@ -104,12 +109,22 @@ fn read_member(r: &rusqlite::Row) -> rusqlite::Result<Member> {
         event: r.get(2)?,
         event_status: r.get(3)?,
         score: (r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?),
+        place: r.get(8)?,
     })
 }
 
-/// (start, end, count, cover) of members sorted by time. The cover is the best-scored
-/// item, nearest the middle among equals.
-fn summarize(members: &[&Member]) -> Option<(i64, i64, i64, i64)> {
+/// What `events` stores about a group of members.
+struct Summary {
+    start: i64,
+    end: i64,
+    count: i64,
+    cover: i64,
+    place: Option<i64>,
+}
+
+/// Summary of members sorted by time. The cover is the best-scored item, nearest the
+/// middle among equals; the place is the most common one.
+fn summarize(members: &[&Member]) -> Option<Summary> {
     let first = members.first()?;
     let last = members.last()?;
     let middle = members.len() / 2;
@@ -118,7 +133,29 @@ fn summarize(members: &[&Member]) -> Option<(i64, i64, i64, i64)> {
         .enumerate()
         .max_by_key(|(i, m)| (m.score, std::cmp::Reverse(i.abs_diff(middle))))
         .map(|(_, m)| m.id)?;
-    Some((first.wall, last.wall, members.len() as i64, cover))
+    let mut places: HashMap<i64, usize> = HashMap::new();
+    for place in members.iter().filter_map(|m| m.place) {
+        *places.entry(place).or_default() += 1;
+    }
+    let place = places
+        .into_iter()
+        .max_by_key(|&(id, n)| (n, std::cmp::Reverse(id)))
+        .map(|(id, _)| id);
+    Some(Summary {
+        start: first.wall,
+        end: last.wall,
+        count: members.len() as i64,
+        cover,
+        place,
+    })
+}
+
+const UPDATE_SUMMARY: &str = "UPDATE events SET start_at = ?2, end_at = ?3, count = ?4,
+     cover_asset_id = ?5, place_id = ?6 WHERE id = ?1";
+
+fn write_summary(update: &mut rusqlite::CachedStatement, id: i64, s: &Summary) -> Result<()> {
+    update.execute(params![id, s.start, s.end, s.count, s.cover, s.place])?;
+    Ok(())
 }
 
 /// Redraws suggested events over the whole library. Cheap to re-run: ids are reused
@@ -226,13 +263,14 @@ pub fn detect(conn: &mut Connection) -> Result<()> {
 
 /// Writes start/end/count/cover for `groups` and zeroes every other event.
 fn store_summaries(tx: &Transaction, groups: &HashMap<i64, Vec<&Member>>) -> Result<()> {
-    tx.execute("UPDATE events SET count = 0, cover_asset_id = NULL", [])?;
-    let mut update = tx.prepare_cached(
-        "UPDATE events SET start_at = ?2, end_at = ?3, count = ?4, cover_asset_id = ?5 WHERE id = ?1",
+    tx.execute(
+        "UPDATE events SET count = 0, cover_asset_id = NULL, place_id = NULL",
+        [],
     )?;
+    let mut update = tx.prepare_cached(UPDATE_SUMMARY)?;
     for (id, members) in groups {
-        if let Some((start, end, count, cover)) = summarize(members) {
-            update.execute(params![id, start, end, count, cover])?;
+        if let Some(summary) = summarize(members) {
+            write_summary(&mut update, *id, &summary)?;
         }
     }
     Ok(())
@@ -243,18 +281,14 @@ fn refresh(tx: &Transaction, ids: &[i64]) -> Result<()> {
     let mut stmt = tx.prepare_cached(&format!(
         "{MEMBER_SQL} AND a.event_id = ?1 ORDER BY a.taken_at + a.tz_offset_min * 60000, a.id"
     ))?;
-    let mut update = tx.prepare_cached(
-        "UPDATE events SET start_at = ?2, end_at = ?3, count = ?4, cover_asset_id = ?5 WHERE id = ?1",
-    )?;
+    let mut update = tx.prepare_cached(UPDATE_SUMMARY)?;
     for &id in ids {
         let members: Vec<Member> = stmt
             .query_map(params![id], read_member)?
             .collect::<rusqlite::Result<_>>()?;
         let refs: Vec<&Member> = members.iter().collect();
         match summarize(&refs) {
-            Some((start, end, count, cover)) => {
-                update.execute(params![id, start, end, count, cover])?;
-            }
+            Some(summary) => write_summary(&mut update, id, &summary)?,
             None => {
                 tx.execute(
                     "UPDATE assets SET event_id = NULL WHERE event_id = ?1",
@@ -267,12 +301,53 @@ fn refresh(tx: &Transaction, ids: &[i64]) -> Result<()> {
     Ok(())
 }
 
+/// Refreshes edited events and pulls in the loose or suggested items inside their
+/// new spans, as `detect` would on its next run, so a re-run changes nothing.
+fn settle(tx: &Transaction, ids: &[i64]) -> Result<()> {
+    refresh(tx, ids)?;
+    let mut touched = ids.to_vec();
+    for &id in ids {
+        let span: Option<(i64, i64)> = tx
+            .query_row(
+                "SELECT start_at, end_at FROM events WHERE id = ?1 AND status = ?2",
+                params![id, ACCEPTED],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        let Some((start, end)) = span else {
+            continue;
+        };
+        // local_day bounds let SQLite use the timeline index.
+        let (first_day, last_day) = (start.div_euclid(DAY_MS), end.div_euclid(DAY_MS));
+        const CLAIMABLE: &str = "a.status = 0 AND a.paired_with IS NULL
+             AND a.local_day BETWEEN ?1 AND ?2
+             AND a.taken_at + a.tz_offset_min * 60000 BETWEEN ?3 AND ?4
+             AND (a.event_id IS NULL
+                  OR a.event_id IN (SELECT id FROM events WHERE status = ?5))";
+        let bounds = params![first_day, last_day, start, end, SUGGESTED];
+        {
+            let mut stmt = tx.prepare(&format!(
+                "SELECT DISTINCT a.event_id FROM assets a WHERE {CLAIMABLE} AND a.event_id IS NOT NULL"
+            ))?;
+            for event in stmt.query_map(bounds, |r| r.get::<_, i64>(0))? {
+                touched.push(event?);
+            }
+        }
+        tx.execute(
+            &format!("UPDATE assets AS a SET event_id = ?6 WHERE {CLAIMABLE}"),
+            params![first_day, last_day, start, end, SUGGESTED, id],
+        )?;
+    }
+    touched.sort_unstable();
+    touched.dedup();
+    refresh(tx, &touched)
+}
+
 /// Every event worth showing, newest first.
 pub fn list(conn: &Connection) -> Result<Vec<EventSummary>> {
-    let mut stmt = conn.prepare_cached(
-        "SELECT id, title, start_at, end_at, count, cover_asset_id, status FROM events
-         WHERE status != ?1 AND count > 0 ORDER BY start_at DESC",
-    )?;
+    let mut stmt = conn.prepare_cached(&format!(
+        "{SUMMARY_SQL} WHERE e.status != ?1 AND e.count > 0 ORDER BY e.start_at DESC"
+    ))?;
     let rows = stmt
         .query_map(params![REJECTED], summary_row)?
         .collect::<rusqlite::Result<_>>()?;
@@ -282,8 +357,7 @@ pub fn list(conn: &Connection) -> Result<Vec<EventSummary>> {
 pub fn get(conn: &Connection, id: i64) -> Result<Option<EventSummary>> {
     Ok(conn
         .query_row(
-            "SELECT id, title, start_at, end_at, count, cover_asset_id, status FROM events
-             WHERE id = ?1 AND status != ?2",
+            &format!("{SUMMARY_SQL} WHERE e.id = ?1 AND e.status != ?2"),
             params![id, REJECTED],
             summary_row,
         )
@@ -306,6 +380,12 @@ pub fn of_asset(conn: &Connection, asset_id: i64) -> Result<Option<EventSummary>
     }
 }
 
+const SUMMARY_SQL: &str = concat!(
+    "SELECT e.id, e.title, e.start_at, e.end_at, e.count, e.cover_asset_id, e.status, ",
+    "p.id, p.name, p.region, p.country, p.country_code ",
+    "FROM events e LEFT JOIN places p ON p.id = e.place_id"
+);
+
 fn summary_row(r: &rusqlite::Row) -> rusqlite::Result<EventSummary> {
     Ok(EventSummary {
         id: r.get(0)?,
@@ -315,6 +395,7 @@ fn summary_row(r: &rusqlite::Row) -> rusqlite::Result<EventSummary> {
         count: r.get(4)?,
         cover_id: r.get(5)?,
         edited: r.get::<_, String>(6)? == ACCEPTED,
+        place: place_row(r, 7)?,
     })
 }
 
@@ -392,7 +473,7 @@ pub fn merge(conn: &mut Connection, ids: &[i64]) -> Result<i64> {
         "UPDATE events SET title = ?2, status = ?3 WHERE id = ?1",
         params![target, title, ACCEPTED],
     )?;
-    refresh(&tx, &[target])?;
+    settle(&tx, &[target])?;
     tx.commit()?;
     Ok(target)
 }
@@ -444,7 +525,7 @@ pub fn split(conn: &mut Connection, id: i64, at_asset: i64) -> Result<i64> {
         "UPDATE events SET status = ?2 WHERE id = ?1",
         params![id, ACCEPTED],
     )?;
-    refresh(&tx, &[id, new_id])?;
+    settle(&tx, &[id, new_id])?;
     tx.commit()?;
     Ok(new_id)
 }
@@ -478,7 +559,7 @@ pub fn create(conn: &mut Connection, asset_ids: &[i64], title: &str) -> Result<i
         }
     }
     previous.push(new_id);
-    refresh(&tx, &previous)?;
+    settle(&tx, &previous)?;
     if require(&tx, new_id).is_err() {
         return Err(Error::Invalid(
             "None of those items are in the library".into(),
@@ -580,7 +661,17 @@ mod tests {
         assert_eq!(merged, b.id, "merges into the earlier event");
         let m = get(&conn, merged).unwrap().unwrap();
         assert_eq!(m.title.as_deref(), Some("Beach day"));
-        assert_eq!(m.count, a.count + b.count);
+        // Loose items between the two (too few to be an event) join as well.
+        let between: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM assets WHERE event_id IS NULL AND status = 0
+                   AND taken_at + tz_offset_min * 60000 BETWEEN ?1 AND ?2",
+                params![m.start, m.end],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(between, 0);
+        assert!(m.count >= a.count + b.count);
         assert!(m.edited && get(&conn, a.id).unwrap().is_none());
 
         let ids = members_of(&conn, c.id);
@@ -607,6 +698,30 @@ mod tests {
             "detection keeps edits and removals"
         );
         assert!(get(&conn, gone).unwrap().is_none());
+    }
+
+    #[test]
+    fn events_are_placed_where_most_photos_were_taken() {
+        let mut conn = library(5_000);
+        crate::places::assign_conn(&mut conn).unwrap();
+        detect(&mut conn).unwrap();
+        let events = list(&conn).unwrap();
+        let placed: Vec<&EventSummary> = events.iter().filter(|e| e.place.is_some()).collect();
+        assert!(
+            placed.len() > events.len() / 2,
+            "most synthetic events have GPS"
+        );
+        for e in placed {
+            let place = e.place.as_ref().unwrap();
+            let in_place: i64 = conn
+                .query_row(
+                    "SELECT count(*) FROM assets WHERE event_id = ?1 AND place_id = ?2",
+                    params![e.id, place.id],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(in_place > 0, "{} has photos in {}", e.id, place.name);
+        }
     }
 
     #[test]

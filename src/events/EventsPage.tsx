@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { api, thumbUrl, type EventSummary } from "../api";
 import { useCollections } from "../collections/context";
-import { eventTitle, eventYear, formatEventDates } from "./format";
+import { eventTitle, eventYear, formatEventDates, hasName } from "./format";
 
 type Props = {
   /** Bumped by the parent when scans or detection change events. */
@@ -110,7 +110,7 @@ export function EventsPage({ version, onError }: Props) {
                 </div>
                 <span className="event-name">{eventTitle(e)}</span>
                 <span className="muted small">
-                  {e.title ? `${formatEventDates(e)} · ` : ""}
+                  {hasName(e) ? `${formatEventDates(e)} · ` : ""}
                   {e.count.toLocaleString()} items
                 </span>
               </button>

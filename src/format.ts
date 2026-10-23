@@ -1,3 +1,5 @@
+import type { Place } from "./api";
+
 const DAY_MS = 86_400_000;
 
 // Local days and wall-clock times are pre-shifted, so format them as UTC to avoid a
@@ -53,4 +55,8 @@ export function formatBytes(bytes: number) {
   return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-export const fileName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+/** "Lahore, Punjab, Pakistan"; a region named like its city ("Dubai, Dubai") is left out. */
+export const placeLabel = (p: Place) =>
+  [p.name, p.region !== p.name ? p.region : null, p.country].filter(Boolean).join(", ");
+
+export const fileName =(path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
