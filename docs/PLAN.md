@@ -181,7 +181,25 @@ Batch 2:
       Named after its towns ("Islamabad & Gilgit") or countries; rename/remove like events.
       Trips page, trip view, trip link in the info panel. 1M assets: detection 236 ms (reads
       only per-day place counts from the covering index), list 9 ms, view 28 ms
-- [ ] Browse by place
+- [ ] Browse by place (skipped for now to start M4)
+
+## M4 checklist
+
+- [x] Safe file operations (`fileops`, schema v10 `file_op_items`): removing moves a file into
+      `.photomanager-trash/<op>/` at the top of its library folder (a same-drive rename, instant,
+      undoable any time; never scanned). The plan and each file's `files` row are journaled
+      before anything moves; files changed since the last scan are skipped; `recover` settles a
+      crashed operation at startup. Emptying sends to the OS Recycle Bin only on drives Windows
+      calls fixed (on network shares and USB sticks the shell deletes for good, silently); other
+      drives are left with a note. Nothing in the app deletes a file outright
+- [x] Exact duplicates: assets with 2+ present files. Duplicates page with space used, which copy
+      to keep (suggested: reachable, fewest "copy/backup/download/(1)" hints, oldest, shortest
+      path; changeable), remove per photo or all at once (never the last copy), Recently removed
+      with Undo / Send to Recycle Bin. Fixed in the scanner: identical files in the same batch of
+      256 were never joined (each only checked rows already committed)
+- [ ] Near-duplicates and bursts (phash within a time window, BK-tree)
+- [ ] Best-shot ranking
+- [ ] Other planned/previewed operations on top of `fileops` (e.g. remove a selection)
 
 ## M0 results
 

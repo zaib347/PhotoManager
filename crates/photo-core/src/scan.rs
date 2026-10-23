@@ -28,6 +28,8 @@ const EXCLUDED_DIRS: &[&str] = &[
     "#recycle",
     "lost+found",
     "node_modules",
+    // Our own trash (already hidden by its dot, but never worth the risk).
+    crate::fileops::TRASH_DIR,
 ];
 
 #[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -316,7 +318,10 @@ impl Scanner<'_> {
         {
             let mut library = self.library.write();
             let tx = library.transaction()?;
-            for p in prepared {
+            // New files of this batch by (size, quick hash). They were prepared in
+            // parallel, so none could see the others; identical ones join here.
+            let mut twins: HashMap<(i64, [u8; 32]), Vec<Twin>> = HashMap::new();
+            for mut p in prepared {
                 let Some(quick) = p.quick else {
                     // Unreadable right now: keep the existing row so it isn't marked missing.
                     summary.errors += 1;
@@ -325,8 +330,13 @@ impl Scanner<'_> {
                     }
                     continue;
                 };
+                let mut link_asset = p.link_asset;
+                if p.work.existing.is_none() && link_asset.is_none() {
+                    let key = (p.work.size, quick);
+                    link_asset = twin_in_batch(&tx, twins.get_mut(&key), &p.work.abs, &mut p.full)?;
+                }
 
-                let asset_id = match (p.work.existing, p.link_asset) {
+                let asset_id = match (p.work.existing, link_asset) {
                     // Same path, changed content: update its asset unless copies share it.
                     (Some((file_id, Some(asset_id))), _) if !shared(&tx, asset_id, file_id)? => {
                         update_asset(&tx, asset_id, p.work.kind, &p.meta)?;
@@ -372,6 +382,14 @@ impl Scanner<'_> {
                     }
                 };
                 seen.push(file_id);
+                if p.work.existing.is_none() {
+                    twins.entry((p.work.size, quick)).or_default().push(Twin {
+                        asset_id,
+                        file_id,
+                        path: p.work.abs.clone(),
+                        full: p.full,
+                    });
+                }
 
                 if let Some((other, h)) = p.candidate_full {
                     tx.execute(
@@ -379,7 +397,7 @@ impl Scanner<'_> {
                         params![other, &h[..]],
                     )?;
                 }
-                if p.link_asset.is_none()
+                if link_asset.is_none()
                     && let Some(thumb) = p.thumb
                 {
                     new_thumbs.push((asset_id, thumb));
@@ -436,6 +454,46 @@ fn find_candidates(conn: &Connection, size: i64, quick: &[u8; 32]) -> Result<Vec
         Ok((r.get(0)?, r.get(1)?, full.and_then(|f| f.try_into().ok())))
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+/// A file added earlier in the same batch.
+struct Twin {
+    asset_id: i64,
+    file_id: i64,
+    path: PathBuf,
+    full: Option<[u8; 32]>,
+}
+
+/// The asset of an identical file added earlier in this batch, comparing full hashes
+/// (computed now, and stored, if they weren't yet). Only runs on quick-hash matches.
+fn twin_in_batch(
+    tx: &Connection,
+    twins: Option<&mut Vec<Twin>>,
+    path: &Path,
+    full: &mut Option<[u8; 32]>,
+) -> Result<Option<i64>> {
+    let Some(twins) = twins else {
+        return Ok(None);
+    };
+    for twin in twins {
+        if twin.full.is_none() {
+            let Ok(h) = hash::full_hash(&twin.path) else {
+                continue;
+            };
+            twin.full = Some(h);
+            tx.execute(
+                "UPDATE files SET full_hash = ?2 WHERE id = ?1",
+                params![twin.file_id, &h[..]],
+            )?;
+        }
+        if full.is_none() {
+            *full = hash::full_hash(path).ok();
+        }
+        if full.is_some() && *full == twin.full {
+            return Ok(Some(twin.asset_id));
+        }
+    }
+    Ok(None)
 }
 
 /// True if another file row also points at this asset.

@@ -37,6 +37,13 @@ pub fn mounted() -> Vec<VolumeInfo> {
     imp::mounted()
 }
 
+/// Whether sending a file on this path to the OS trash really keeps it. On Windows only
+/// fixed drives have a Recycle Bin: on network shares and most USB sticks the shell
+/// deletes the file for good instead, without asking.
+pub fn has_recycle_bin(path: &Path) -> bool {
+    imp::has_recycle_bin(path)
+}
+
 #[cfg(windows)]
 mod imp {
     use super::VolumeInfo;
@@ -44,8 +51,23 @@ mod imp {
     use std::os::windows::ffi::OsStrExt;
     use std::path::{Path, PathBuf};
     use windows_sys::Win32::Storage::FileSystem::{
-        GetLogicalDrives, GetVolumeInformationW, GetVolumePathNameW,
+        GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW, GetVolumePathNameW,
     };
+
+    /// `GetDriveTypeW` result for a fixed (internal or external hard) disk.
+    const DRIVE_FIXED: u32 = 3;
+
+    pub fn has_recycle_bin(path: &Path) -> bool {
+        let Ok(path) = std::path::absolute(path) else {
+            return false;
+        };
+        let input = wide(path.as_os_str());
+        let mut buf = [0u16; 1024];
+        // SAFETY: `input` is NUL-terminated and `buf` is valid for its length.
+        let ok = unsafe { GetVolumePathNameW(input.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) };
+        // SAFETY: `buf` holds a NUL-terminated root path written by the call above.
+        ok != 0 && unsafe { GetDriveTypeW(buf.as_ptr()) } == DRIVE_FIXED
+    }
 
     fn wide(s: &std::ffi::OsStr) -> Vec<u16> {
         s.encode_wide().chain(std::iter::once(0)).collect()
@@ -130,6 +152,11 @@ mod imp {
 
     pub fn mounted() -> Vec<VolumeInfo> {
         Vec::new()
+    }
+
+    /// The freedesktop and macOS trash implementations fail rather than delete.
+    pub fn has_recycle_bin(_path: &Path) -> bool {
+        true
     }
 }
 

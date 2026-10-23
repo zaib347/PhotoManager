@@ -10,25 +10,38 @@ The full plan and milestone checklists are in [docs/PLAN.md](docs/PLAN.md).
 | M0 Foundations, M1 Scanner + timeline, M2 Organize | Done, merged to `main` |
 | M3 Memory features | In progress |
 
-**M3 done so far:**
-- Date fixing, Select all / Ctrl+A, On This Day, Events, Places. All merged to `main`.
-- **Trips**. On branch **`m3-trips`**, **not merged yet**.
+**Done:** M3 except Browse by place (Date fixing, On This Day, Events, Places, Trips), all on `main`.
+**M4 in progress:** exact duplicates + safe file operations on branch **`m4-duplicates`**,
+**not merged yet**.
 
 ## First thing to do
 
-1. Ask whether Trips work in the app. The user has no GPS photos, so test with **Test data** →
-   **Generate 100k** (synthetic photos have GPS: home Lahore, trips elsewhere):
-   - The **Trips** sidebar entry: cards named after towns (e.g. "Dubai", "Islamabad & Gilgit").
-   - Open a trip: header with dates, length, rename (click the title), **Remove trip**.
-   - Info panel (**I**) on a trip photo shows a trip chip next to the event.
-2. If they're OK, merge:
-   `git checkout main && git merge --no-ff m3-trips`
-3. Start a new branch for the next feature.
+1. Ask whether Duplicates work in the app. Test with real files (synthetic photos have no files):
+   copy a few photos into a second folder inside a library folder (also try "IMG (1).jpg" names),
+   then **Rescan**.
+   - **Duplicates** in the sidebar: summary with space used; each photo lists its copies, the
+     suggested one to keep is selected.
+   - **Remove other copies** on one photo, and **Remove extra copies** for all.
+   - Removed files are in `<library folder>\.photomanager-trash\<n>\…`; a rescan reports nothing missing.
+   - **Recently removed** → **Undo** puts them back; **Send to Recycle Bin** empties.
+2. If they're OK, merge: `git checkout main && git merge --no-ff m4-duplicates`
+3. Next in M4: near-duplicates / bursts (phash), best-shot ranking. Browse by place (M3) is
+   still open too.
 
-## What's next in M3
+## How the cleanup code works
 
-1. **Browse by place.** Country → town page, like the Events page. The info panel's place could
-   link to it. This is the last M3 item.
+- `crates/photo-core/src/fileops.rs`: `trash` (plan → move → record, per 64 files), `undo`,
+  `empty` (OS trash only where `volume::has_recycle_bin`), `recover` (startup), `list`.
+- `crates/photo-core/src/duplicates.rs`: `overview`, `groups` (paged), `extras` (which file ids
+  to remove), `keep_rank` heuristics.
+- Tauri: `src-tauri/src/cleanup_commands.rs`; refuses to move files while a scan runs.
+- Scanner: `twin_in_batch` joins identical new files within one commit batch.
+
+## Disk space
+
+D: filled up (0 GB) during this session: `target/` had grown to 17 GB. `target/debug/incremental`
+(6 GB) was deleted to continue; `CARGO_INCREMENTAL=0` keeps it from coming back during checks.
+Run `cargo clean` if space runs low again.
 
 ## How the trips code works
 

@@ -6,7 +6,7 @@ use image::{Rgb, RgbImage};
 use photo_core::db::Db;
 use photo_core::scan::{Scanner, Summary};
 use photo_core::timeline::View;
-use photo_core::{library, schema, thumbs, timeline};
+use photo_core::{duplicates, fileops, library, schema, thumbs, timeline};
 use rusqlite::params;
 
 struct Fixture {
@@ -468,7 +468,8 @@ fn live_photos_pair_and_release() {
     write_mp4(&f.photos.join("2019/IMG_0001.MOV"), 3);
     write_jpeg(&f.photos.join("2019/IMG_0002.JPG"), 11);
     write_mp4(&f.photos.join("2019/IMG_0002.MOV"), 30); // a real video, not a Live Photo
-    write_mp4(&f.photos.join("IMG_0001.MOV"), 3); // same name, different folder
+    // Same name, different folder (and different bytes: identical files would be one asset).
+    write_mp4(&f.photos.join("IMG_0001.MOV"), 4);
     f.scan();
 
     let photo = f.asset_of("2019/IMG_0001.JPG");
@@ -595,4 +596,50 @@ fn date_corrections_shift_restore_and_survive_rescans() {
 
     let all = timeline::asset_ids(&f.library.read(), View::All, &Default::default()).unwrap();
     assert_eq!(all.len(), 4);
+}
+
+#[test]
+fn duplicate_copies_are_removed_safely_and_come_back_on_undo() {
+    let f = fixture();
+    fs::create_dir_all(f.photos.join("backup")).unwrap();
+    fs::copy(
+        f.photos.join("2019/beach.jpg"),
+        f.photos.join("backup/beach.jpg"),
+    )
+    .unwrap();
+    fs::copy(
+        f.photos.join("2019/beach.jpg"),
+        f.photos.join("2019/beach (1).jpg"),
+    )
+    .unwrap();
+    f.scan();
+    let overview = duplicates::overview(&f.library.read()).unwrap();
+    assert_eq!((overview.groups, overview.extra_files), (1, 2));
+    let group = &duplicates::groups(&f.library.read(), 0, 10).unwrap()[0];
+    assert!(group.copies[0].path.ends_with("beach.jpg") && group.copies[0].path.contains("2019"));
+
+    let extras = duplicates::extras(&f.library.read(), None, &Default::default()).unwrap();
+    assert_eq!(extras.len(), 2);
+    let report = fileops::trash(&f.library, &extras, "duplicates", true).unwrap();
+    assert_eq!((report.done, report.failed), (2, 0), "{:?}", report.errors);
+    assert!(!f.photos.join("backup/beach.jpg").exists());
+    assert_eq!(duplicates::overview(&f.library.read()).unwrap().groups, 0);
+
+    // The trash folder is never indexed, and nothing is reported missing.
+    let s = f.scan();
+    assert_eq!((s.added, s.missing), (0, 0), "{s:?}");
+    assert_eq!(f.visible_assets(), 4);
+
+    fileops::undo(&f.library, report.op_id).unwrap();
+    assert!(f.photos.join("backup/beach.jpg").is_file());
+    let s = f.scan();
+    assert_eq!(
+        (s.added, s.unchanged),
+        (0, 6),
+        "restored rows match the files: {s:?}"
+    );
+    assert_eq!(
+        duplicates::overview(&f.library.read()).unwrap().extra_files,
+        2
+    );
 }
