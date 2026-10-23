@@ -98,14 +98,24 @@ pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
     let Some(mut asset) = asset else {
         return Ok(None);
     };
+    asset.files = files_of(conn, id)?;
+    asset.albums = collections::albums_of(conn, id)?;
+    asset.tags = collections::tags_of(conn, id)?;
+    asset.live_clip_id = crate::live::clip_of(conn, id)?;
+    asset.event = crate::events::of_asset(conn, id)?;
+    asset.trip = crate::trips::of_day(conn, asset.local_day)?;
+    Ok(Some(asset))
+}
 
-    let mut stmt = conn.prepare(
+/// Every file of an asset, present ones first. `online` checks the disk.
+pub fn files_of(conn: &Connection, asset_id: i64) -> Result<Vec<FileInfo>> {
+    let mut stmt = conn.prepare_cached(
         "SELECT f.id, v.last_mount_path, r.rel_path, f.rel_path, f.size, f.mtime,
                 f.missing_since IS NOT NULL, v.status = 'online'
          FROM files f JOIN roots r ON r.id = f.root_id JOIN volumes v ON v.id = r.volume_id
          WHERE f.asset_id = ?1 ORDER BY f.missing_since IS NOT NULL, f.id",
     )?;
-    let rows = stmt.query_map(params![id], |r| {
+    let rows = stmt.query_map(params![asset_id], |r| {
         let mount: Option<String> = r.get(1)?;
         let path = PathBuf::from(mount.unwrap_or_default())
             .join(r.get::<_, String>(2)?)
@@ -120,13 +130,7 @@ pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
             missing: r.get(6)?,
         })
     })?;
-    asset.files = rows.collect::<rusqlite::Result<_>>()?;
-    asset.albums = collections::albums_of(conn, id)?;
-    asset.tags = collections::tags_of(conn, id)?;
-    asset.live_clip_id = crate::live::clip_of(conn, id)?;
-    asset.event = crate::events::of_asset(conn, id)?;
-    asset.trip = crate::trips::of_day(conn, asset.local_day)?;
-    Ok(Some(asset))
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 /// Applies one user_meta column to many assets in a single transaction.

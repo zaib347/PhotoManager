@@ -1,3 +1,4 @@
+mod cleanup_commands;
 mod collection_commands;
 mod diag;
 mod event_commands;
@@ -13,7 +14,9 @@ use std::time::{Duration, Instant};
 
 use photo_core::db::Db;
 use photo_core::timeline::{Filter, View};
-use photo_core::{assets, events, library, places, schema, synth, thumbs, timeline, trips};
+use photo_core::{
+    assets, events, fileops, library, places, schema, synth, thumbs, timeline, trips,
+};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 
 const VOLUME_POLL: Duration = Duration::from_secs(5);
@@ -287,6 +290,12 @@ pub fn run() {
             });
 
             library::refresh_volumes(&state.library.write())?;
+            // Before scans resume, so they see the files where the journal says they are.
+            match fileops::recover(&state.library) {
+                Ok(0) => {}
+                Ok(n) => diag::log(format!("{n} interrupted file operations settled")),
+                Err(e) => diag::log(format!("file operation recovery failed: {e}")),
+            }
             for root_id in library::take_interrupted_scans(&state.library.write())? {
                 scans::start(app.handle(), &state, root_id);
             }
@@ -322,6 +331,12 @@ pub fn run() {
             event_commands::get_trip,
             event_commands::rename_trip,
             event_commands::remove_trip,
+            cleanup_commands::duplicate_overview,
+            cleanup_commands::duplicate_groups,
+            cleanup_commands::remove_duplicates,
+            cleanup_commands::list_file_ops,
+            cleanup_commands::undo_file_op,
+            cleanup_commands::empty_file_op,
             collection_commands::list_albums,
             collection_commands::create_album,
             collection_commands::rename_album,

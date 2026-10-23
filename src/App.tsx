@@ -18,6 +18,7 @@ import {
   type View,
 } from "./api";
 import { CollectionsContext, type Collections } from "./collections/context";
+import { DuplicatesPage } from "./cleanup/DuplicatesPage";
 import { EventsPage } from "./events/EventsPage";
 import { LibraryPanel } from "./library/LibraryPanel";
 import { FilterBar } from "./photos/FilterBar";
@@ -43,6 +44,7 @@ function emptyState(view: View): { title: string; hint: string } {
     hidden: { title: "Nothing hidden", hint: "Hidden photos stay in your folders but leave the timeline." },
     events: { title: "", hint: "" },
     trips: { title: "", hint: "" },
+    duplicates: { title: "", hint: "" },
   }[view];
 }
 
@@ -249,6 +251,8 @@ export default function App() {
             <EventsPage version={eventsVersion} onError={report} />
           ) : view === "trips" ? (
             <TripsPage version={eventsVersion} onError={report} />
+          ) : view === "duplicates" ? (
+            <DuplicatesPage version={eventsVersion} onNotice={setNotice} onError={report} />
           ) : current && current.days.length > 0 ? (
             <PhotosView
               key={key}

@@ -208,6 +208,27 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
         PRIMARY KEY (trip_id, place_id)
     ) WITHOUT ROWID;
     ",
+    // v10: journaled file operations. `file_ops` (from v1) holds one row per operation
+    // (`plan_json` = {kind, reason}); each file it touches is written here before it
+    // moves, with the old `files` row so an undo can put it back exactly.
+    "
+    CREATE TABLE file_op_items (
+        op_id      INTEGER NOT NULL REFERENCES file_ops(id) ON DELETE CASCADE,
+        seq        INTEGER NOT NULL,
+        root_id    INTEGER NOT NULL,
+        rel_path   TEXT NOT NULL,      -- where the file was, relative to its root
+        trash_rel  TEXT NOT NULL,      -- where it went, relative to the same root
+        size       INTEGER NOT NULL,
+        mtime      INTEGER NOT NULL,
+        quick_hash BLOB,
+        full_hash  BLOB,
+        asset_id   INTEGER,
+        state      TEXT NOT NULL DEFAULT 'planned', -- planned | moved | restored | emptied | failed
+        error      TEXT,
+        PRIMARY KEY (op_id, seq)
+    ) WITHOUT ROWID;
+    CREATE INDEX idx_file_ops_status ON file_ops (status);
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

@@ -1,12 +1,13 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-/** "events" and "trips" are overview pages; the others are timelines. */
-export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | "events" | "trips";
+/** "events", "trips" and "duplicates" are pages; the others are timelines. */
+export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | "events" | "trips" | "duplicates";
 export type View = BuiltinView | { album: number } | { tag: number } | { event: number } | { trip: number };
-/** Views that are pages of cards rather than timelines. */
-export type PageView = "events" | "trips";
-export const isPage = (view: View): view is PageView => view === "events" || view === "trips";
+/** Views that are pages rather than timelines. */
+export type PageView = "events" | "trips" | "duplicates";
+export const isPage = (view: View): view is PageView =>
+  view === "events" || view === "trips" || view === "duplicates";
 /** Views the backend can lay out as a timeline. */
 export type TimelineView = Exclude<View, PageView>;
 
@@ -118,7 +119,33 @@ export type TripSummary = {
   edited: boolean;
 };
 
-export type DayMemory ={ day: number; yearsAgo: number; count: number; coverIds: number[] };
+export type DuplicateOverview = { groups: number; extraFiles: number; extraBytes: number };
+
+/** A photo stored more than once; the suggested copy to keep is first. */
+export type DuplicateGroup = {
+  assetId: number;
+  mediaKind: number;
+  takenAt: number;
+  tzOffsetMin: number;
+  size: number;
+  copies: FileInfo[];
+};
+
+/** One removal, under "Recently removed". */
+export type FileOp = {
+  id: number;
+  reason: string;
+  createdAt: number;
+  status: "running" | "done" | "undoing" | "undone" | "emptied";
+  /** Files still in the trash folder (undoable). */
+  inTrash: number;
+  inTrashBytes: number;
+  failed: number;
+};
+
+export type FileOpReport = { opId: number; done: number; bytes: number; failed: number; errors: string[] };
+
+export type DayMemory = { day: number; yearsAgo: number; count: number; coverIds: number[] };
 
 /** Wall-clock ms (the time as shown, in each photo's own zone). */
 export type WallRange = { first: number; last: number };
@@ -252,6 +279,15 @@ export const api = {
   trip: (id: number) => invoke<TripSummary | null>("get_trip", { id }),
   renameTrip: (id: number, title: string) => invoke<void>("rename_trip", { id, title }),
   removeTrip: (id: number) => invoke<void>("remove_trip", { id }),
+  duplicateOverview: () => invoke<DuplicateOverview>("duplicate_overview"),
+  duplicateGroups: (offset: number, limit: number) =>
+    invoke<DuplicateGroup[]>("duplicate_groups", { offset, limit }),
+  /** `keep`: asset id → file id to keep instead of the suggestion; `only`: just these photos. */
+  removeDuplicates: (keep: Record<number, number>, only?: number[]) =>
+    invoke<FileOpReport>("remove_duplicates", { keep, only: only ?? null }),
+  listFileOps: () => invoke<FileOp[]>("list_file_ops"),
+  undoFileOp: (id: number) => invoke<FileOpReport>("undo_file_op", { id }),
+  emptyFileOp: (id: number) => invoke<FileOpReport>("empty_file_op", { id }),
   listRoots: () => invoke<RootInfo[]>("list_roots"),
   scanningRoots: () => invoke<number[]>("scanning_roots"),
   addRoot: (path: string) => invoke<number>("add_root", { path }),
