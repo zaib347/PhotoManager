@@ -1,6 +1,6 @@
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { api, MediaKind, mediaUrl, thumbUrl, type AssetDetails, type View } from "../api";
+import { api, liveUrl, MediaKind, mediaUrl, thumbUrl, type AssetDetails, type View } from "../api";
 import { formatTakenAt } from "../format";
 import type { DayStore, Position } from "../timeline/dayStore";
 import { InfoPanel } from "./InfoPanel";
@@ -34,6 +34,7 @@ export function Viewer({ store, start, onClose, onFavorite, onHidden, onAddTag, 
   const [asset, setAsset] = useState<AssetDetails | null>(null);
   const [failed, setFailed] = useState(false);
   const [showInfo, setShowInfo] = useState(readShowInfo);
+  const [playingLive, setPlayingLive] = useState(false);
   const id = store.idAt(pos);
 
   const [detailsVersion, setDetailsVersion] = useState(0);
@@ -42,6 +43,7 @@ export function Viewer({ store, start, onClose, onFavorite, onHidden, onAddTag, 
   useEffect(() => {
     setFailed(false);
     setAsset(null);
+    setPlayingLive(false);
   }, [id]);
 
   useEffect(() => {
@@ -124,6 +126,7 @@ export function Viewer({ store, start, onClose, onFavorite, onHidden, onAddTag, 
       else if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "i") toggleInfo();
       else if (e.key === "f") toggleFavorite();
+      else if (e.key === "l") setPlayingLive((p) => !p);
       else if (/^[0-5]$/.test(e.key)) setRating(e.key === "0" ? null : Number(e.key));
       else return;
       e.preventDefault();
@@ -146,6 +149,15 @@ export function Viewer({ store, start, onClose, onFavorite, onHidden, onAddTag, 
         <div className="spacer" />
         {asset && (
           <>
+            {asset.liveClipId !== null && (
+              <button
+                className={`ghost${playingLive ? " active" : ""}`}
+                onClick={() => setPlayingLive((p) => !p)}
+                title="Play Live Photo (L)"
+              >
+                ◉ Live
+              </button>
+            )}
             <div className="stars" role="radiogroup" aria-label="Rating">
               {[1, 2, 3, 4, 5].map((n) => (
                 <button
@@ -205,6 +217,15 @@ export function Viewer({ store, start, onClose, onFavorite, onHidden, onAddTag, 
             ) : (
               <ZoomableImage key={id} placeholder={thumbUrl(id)} src={mediaUrl(id)} onError={() => setFailed(true)} />
             ))}
+          {id !== undefined && playingLive && (
+            <video
+              className="viewer-video live-overlay"
+              src={liveUrl(id)}
+              autoPlay
+              onEnded={() => setPlayingLive(false)}
+              onError={() => setPlayingLive(false)}
+            />
+          )}
           <button className="nav prev" onClick={() => go(-1)} aria-label="Previous (←)">
             ‹
           </button>

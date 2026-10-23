@@ -126,7 +126,7 @@ Realistic solo estimate: **9–12 months** to paid 1.0.
 - [ ] Not yet: HEIC/RAW decoding (M5), video poster frames (M2), Live Photo pairing (M2),
       non-UTF-8 paths on Linux (counted as errors), filesystem UUIDs on macOS/Linux (M5)
 
-## M2 checklist
+## M2 checklist — complete
 
 Batch 1 (browsing core):
 - [x] Views: Photos, Favorites, Videos, Hidden (`View` filter shared by layout and day queries)
@@ -151,8 +151,10 @@ Batch 2:
       (what Explorer shows; ~0.3 s per video, cached after), system ffmpeg elsewhere if present.
       Same path gives HEIC/RAW thumbnails and viewer previews where Windows has the codec.
       macOS QuickLook in M5.
-- [ ] Live Photo pairing
-- [ ] Incremental day-bucket updates on hide (currently a full rebuild, ~0.5 s at 1M)
+- [x] Live Photos: same-name still + clip (≤ 4.5 s) in one folder become one item (schema v5
+      `paired_with`); LIVE badge, plays on hover in the grid, ◉ Live / L in the viewer;
+      clip is released as a normal video if its photo disappears
+- [x] Hide/unhide adjusts only the affected day counts (verified equal to a full rebuild)
 
 ## M0 results
 

@@ -28,15 +28,18 @@ pub enum View {
 impl View {
     /// SQL condition over `assets a LEFT JOIN user_meta u`.
     fn condition(self) -> String {
-        const VISIBLE: &str = "a.status = 0 AND COALESCE(u.hidden, 0) = 0";
+        // Present, and not the clip half of a Live Photo.
+        const PRESENT: &str = "a.status = 0 AND a.paired_with IS NULL";
+        const VISIBLE: &str =
+            "a.status = 0 AND a.paired_with IS NULL AND COALESCE(u.hidden, 0) = 0";
         match self {
             View::All => VISIBLE.to_owned(),
             View::Favorites => format!("{VISIBLE} AND u.favorite = 1"),
             View::Videos => format!("{VISIBLE} AND a.media_kind = 1"),
-            View::Hidden => "a.status = 0 AND u.hidden = 1".to_owned(),
+            View::Hidden => format!("{PRESENT} AND u.hidden = 1"),
             // Albums are explicit choices, so hidden items still show in them.
             View::Album(id) => format!(
-                "a.status = 0 AND a.id IN (SELECT asset_id FROM album_assets WHERE album_id = {id})"
+                "{PRESENT} AND a.id IN (SELECT asset_id FROM album_assets WHERE album_id = {id})"
             ),
             View::Tag(id) => format!(
                 "{VISIBLE} AND a.id IN (SELECT asset_id FROM asset_tags WHERE tag_id = {id})"

@@ -440,3 +440,103 @@ fn filters_narrow_any_view() {
     };
     assert_eq!(count(View::All, &this_root), 3);
 }
+
+/// A minimal MP4 whose moov says `seconds` long (enough for the metadata reader).
+fn write_mp4(path: &Path, seconds: u32) {
+    fn boxed(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
+        let mut out = ((body.len() + 8) as u32).to_be_bytes().to_vec();
+        out.extend_from_slice(kind);
+        out.extend_from_slice(body);
+        out
+    }
+    let mut mvhd = vec![0u8; 100];
+    mvhd[12..16].copy_from_slice(&600u32.to_be_bytes());
+    mvhd[16..20].copy_from_slice(&(600 * seconds).to_be_bytes());
+    let file = [
+        boxed(b"ftyp", b"qt  "),
+        boxed(b"moov", &boxed(b"mvhd", &mvhd)),
+    ]
+    .concat();
+    fs::write(path, file).unwrap();
+}
+
+#[test]
+fn live_photos_pair_and_release() {
+    use photo_core::{assets, live};
+    let f = fixture();
+    write_jpeg(&f.photos.join("2019/IMG_0001.JPG"), 10);
+    write_mp4(&f.photos.join("2019/IMG_0001.MOV"), 3);
+    write_jpeg(&f.photos.join("2019/IMG_0002.JPG"), 11);
+    write_mp4(&f.photos.join("2019/IMG_0002.MOV"), 30); // a real video, not a Live Photo
+    write_mp4(&f.photos.join("IMG_0001.MOV"), 3); // same name, different folder
+    f.scan();
+
+    let photo = f.asset_of("2019/IMG_0001.JPG");
+    let details = assets::details(&f.library.read(), photo).unwrap().unwrap();
+    assert_eq!(details.media_kind, live::KIND_LIVE);
+    assert_eq!(details.live_clip_id, Some(f.asset_of("2019/IMG_0001.MOV")));
+
+    let other = assets::details(&f.library.read(), f.asset_of("2019/IMG_0002.JPG"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (other.media_kind, other.live_clip_id),
+        (0, None),
+        "30 s video is not a clip"
+    );
+
+    // 4 fixture files + 2 photos + the 30 s video + the clip in another folder; the paired clip is hidden.
+    assert_eq!(f.visible_assets(), 8);
+
+    fs::remove_file(f.photos.join("2019/IMG_0001.JPG")).unwrap();
+    f.scan();
+    assert_eq!(
+        f.visible_assets(),
+        8,
+        "photo gone, its clip is a normal video again"
+    );
+    let clip = assets::details(&f.library.read(), f.asset_of("2019/IMG_0001.MOV"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(clip.media_kind, 1);
+}
+
+#[test]
+fn hiding_updates_day_counts_like_a_rebuild() {
+    use photo_core::{assets, synth};
+    let f = fixture();
+    f.scan();
+    synth::generate(&mut f.library.write(), 2_000, 3).unwrap();
+    let sample: Vec<i64> = f
+        .library
+        .read()
+        .prepare("SELECT id FROM assets ORDER BY id LIMIT 300")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+
+    let buckets = || -> Vec<(i64, i64)> {
+        f.library
+            .read()
+            .prepare("SELECT day, count FROM day_buckets ORDER BY day")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    };
+    let check = |label: &str| {
+        let incremental = buckets();
+        timeline::rebuild_day_buckets(&f.library.write()).unwrap();
+        assert_eq!(incremental, buckets(), "{label}");
+    };
+
+    assets::set_hidden(&mut f.library.write(), &sample, true).unwrap();
+    check("after hiding");
+    assets::set_hidden(&mut f.library.write(), &sample, true).unwrap();
+    check("hiding twice changes nothing");
+    assets::set_hidden(&mut f.library.write(), &sample[..100], false).unwrap();
+    check("after unhiding some");
+}

@@ -229,7 +229,9 @@ impl Scanner<'_> {
             "UPDATE roots SET last_scan_at = ?2 WHERE id = ?1",
             params![root_id, now_ms()],
         )?;
-        timeline::rebuild_day_buckets(&library)?;
+        drop(library);
+        crate::live::pair(&mut self.library.write(), root_id)?;
+        timeline::rebuild_day_buckets(&self.library.write())?;
         Ok(summary)
     }
 

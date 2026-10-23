@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use photo_core::library::{self, AssetSource};
-use photo_core::{media, thumbs};
+use photo_core::{live, media, thumbs};
 use tauri::http::{Request, Response, StatusCode, header};
 use tauri::{Manager, Runtime, UriSchemeContext, UriSchemeResponder};
 
@@ -120,8 +120,24 @@ pub fn handle_media<R: Runtime>(
         .get(header::RANGE)
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
+    // media://<photo id>?live serves the clip of a Live Photo.
+    let live = request
+        .uri()
+        .query()
+        .is_some_and(|q| q.split('&').any(|p| p == "live"));
 
     tauri::async_runtime::spawn_blocking(move || {
+        let asset_id = if live {
+            match live::clip_of(&state.library.read(), asset_id) {
+                Ok(Some(clip)) => clip,
+                _ => {
+                    responder.respond(status(StatusCode::NOT_FOUND));
+                    return;
+                }
+            }
+        } else {
+            asset_id
+        };
         let source = library::asset_source(&state.library.read(), asset_id);
         let Ok(Some(AssetSource::File {
             path,

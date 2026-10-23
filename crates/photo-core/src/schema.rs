@@ -153,6 +153,11 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     CREATE INDEX idx_assets_kind_day ON assets (media_kind, local_day);
     CREATE INDEX idx_assets_camera_day ON assets (camera_model, local_day);
     ",
+    // v5: Live Photo clips point at their still and leave the timeline.
+    "
+    ALTER TABLE assets ADD COLUMN paired_with INTEGER;
+    CREATE INDEX idx_assets_paired ON assets (paired_with) WHERE paired_with IS NOT NULL;
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

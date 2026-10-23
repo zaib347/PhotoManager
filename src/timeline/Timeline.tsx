@@ -9,7 +9,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
-import { MediaKind, thumbUrl } from "../api";
+import { liveUrl, MediaKind, thumbUrl } from "../api";
 import { formatDay, formatDuration } from "../format";
 import type { DayStore, Position } from "./dayStore";
 import { buildGrid, GAP, HEADER_H, sectionAt } from "./grid";
@@ -17,6 +17,8 @@ import { Scrubber } from "./Scrubber";
 import { useFps } from "./useFps";
 
 const OVERSCAN = 600;
+/** Hover this long before a Live Photo starts playing, so sweeping the mouse doesn't. */
+const LIVE_HOVER_MS = 300;
 
 type Props = {
   store: DayStore;
@@ -41,6 +43,14 @@ export function Timeline({ store, selection, keyboard, onActivate, onToggle, onT
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [offset, setOffset] = useState(0);
   const fps = useFps();
+  const [playingLive, setPlayingLive] = useState<number | null>(null);
+  const liveTimer = useRef<number | undefined>(undefined);
+  const hoverLive = (id: number | null) => {
+    window.clearTimeout(liveTimer.current);
+    if (id === null) setPlayingLive(null);
+    else liveTimer.current = window.setTimeout(() => setPlayingLive(id), LIVE_HOVER_MS);
+  };
+  useEffect(() => () => window.clearTimeout(liveTimer.current), []);
 
   useLayoutEffect(() => {
     const el = viewportRef.current!;
@@ -152,14 +162,20 @@ export function Timeline({ store, selection, keyboard, onActivate, onToggle, onT
         }
         const selected = selection.has(id);
         const duration = data?.durations[index];
+        const isLive = data?.kinds[index] === MediaKind.LivePhoto;
         nodes.push(
           <div
             key={id}
             className={`cell${selected ? " selected" : ""}`}
             style={style}
             onClick={(e) => onActivate(e, { day, index }, id)}
+            onMouseEnter={isLive ? () => hoverLive(id) : undefined}
+            onMouseLeave={isLive ? () => hoverLive(null) : undefined}
           >
             <img src={thumbUrl(id)} alt="" draggable={false} decoding="async" />
+            {isLive && playingLive === id && (
+              <video className="live-clip" src={liveUrl(id)} autoPlay muted loop playsInline />
+            )}
             <button
               className="check"
               aria-label={selected ? "Deselect" : "Select"}
@@ -171,6 +187,7 @@ export function Timeline({ store, selection, keyboard, onActivate, onToggle, onT
             {data?.kinds[index] === MediaKind.Video && (
               <span className="badge">▶ {duration ? formatDuration(duration) : ""}</span>
             )}
+            {isLive && <span className="badge">LIVE</span>}
             {data?.favorites[index] === 1 && <span className="fav-badge">♥</span>}
           </div>,
         );

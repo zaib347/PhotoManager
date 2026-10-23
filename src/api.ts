@@ -108,6 +108,8 @@ export type AssetDetails = {
   files: FileInfo[];
   albums: Named[];
   tags: Named[];
+  /** The clip of a Live Photo. */
+  liveClipId: number | null;
 };
 
 export type ScanProgress = {
@@ -176,3 +178,5 @@ export const events = {
 
 export const thumbUrl = (assetId: number) => convertFileSrc(String(assetId), "thumb");
 export const mediaUrl = (assetId: number) => convertFileSrc(String(assetId), "media");
+/** The motion clip of a Live Photo. */
+export const liveUrl = (assetId: number) => `${mediaUrl(assetId)}?live`;

@@ -8,6 +8,7 @@ pub mod collections;
 pub mod db;
 pub mod hash;
 pub mod library;
+pub mod live;
 pub mod media;
 pub mod os_thumb;
 pub mod scan;
