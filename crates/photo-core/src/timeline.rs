@@ -11,6 +11,7 @@ pub fn local_day(taken_at: i64, tz_offset_min: i32) -> i64 {
 
 /// Which assets a timeline shows. `All` is served from precomputed day buckets;
 /// the others are small or rarely used enough to aggregate on demand.
+/// From JSON: `"all"`, `"favorites"`, … or `{"album": 3}`, `{"tag": 7}`.
 #[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum View {
@@ -19,16 +20,26 @@ pub enum View {
     Favorites,
     Videos,
     Hidden,
+    Album(i64),
+    Tag(i64),
 }
 
 impl View {
     /// SQL condition over `assets a LEFT JOIN user_meta u`.
-    fn condition(self) -> &'static str {
+    fn condition(self) -> String {
+        const VISIBLE: &str = "a.status = 0 AND COALESCE(u.hidden, 0) = 0";
         match self {
-            View::All => "a.status = 0 AND COALESCE(u.hidden, 0) = 0",
-            View::Favorites => "a.status = 0 AND COALESCE(u.hidden, 0) = 0 AND u.favorite = 1",
-            View::Videos => "a.status = 0 AND COALESCE(u.hidden, 0) = 0 AND a.media_kind = 1",
-            View::Hidden => "a.status = 0 AND u.hidden = 1",
+            View::All => VISIBLE.to_owned(),
+            View::Favorites => format!("{VISIBLE} AND u.favorite = 1"),
+            View::Videos => format!("{VISIBLE} AND a.media_kind = 1"),
+            View::Hidden => "a.status = 0 AND u.hidden = 1".to_owned(),
+            // Albums are explicit choices, so hidden items still show in them.
+            View::Album(id) => format!(
+                "a.status = 0 AND a.id IN (SELECT asset_id FROM album_assets WHERE album_id = {id})"
+            ),
+            View::Tag(id) => format!(
+                "{VISIBLE} AND a.id IN (SELECT asset_id FROM asset_tags WHERE tag_id = {id})"
+            ),
         }
     }
 }

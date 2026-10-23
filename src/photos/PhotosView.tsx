@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { api, type Layout, type View } from "../api";
+import { AlbumHeader } from "../collections/AlbumHeader";
+import { useCollections } from "../collections/context";
 import { DayStore, type Position } from "../timeline/dayStore";
 import { Timeline } from "../timeline/Timeline";
 import { Viewer } from "../viewer/Viewer";
@@ -17,6 +19,9 @@ type Props = {
 export function PhotosView({ view, layout, onLibraryChanged, onError }: Props) {
   // `layout` only seeds a new store; later layouts arrive through setLayout below.
   const store = useMemo(() => new DayStore(view, layout), [view]);
+  const collections = useCollections();
+  const albumId = typeof view === "object" && "album" in view ? view.album : null;
+  const album = albumId === null ? undefined : collections.albums.find((a) => a.id === albumId);
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
   const anchor = useRef<Position | null>(null);
   const [viewing, setViewing] = useState<Position | null>(null);
@@ -102,8 +107,32 @@ export function PhotosView({ view, layout, onLibraryChanged, onError }: Props) {
 
   const run = (action: () => Promise<void>) => action().catch(onError);
 
+  /** After album/tag edits: refresh sidebar counts, and this grid if membership changed. */
+  const afterCollectionChange = async (affectsThisView: boolean) => {
+    await collections.reload();
+    if (affectsThisView) await onLibraryChanged();
+  };
+
+  const addTag = useCallback(
+    async (ids: number[], name: string) => {
+      await api.addTag(ids, name);
+      await collections.reload();
+    },
+    [collections],
+  );
+
+  const removeTag = useCallback(
+    async (ids: number[], tagId: number) => {
+      await api.removeTag(ids, tagId);
+      await collections.reload();
+      if (typeof view === "object" && "tag" in view && view.tag === tagId) await onLibraryChanged();
+    },
+    [collections, view, onLibraryChanged],
+  );
+
   return (
     <div className="photos-view">
+      {album && <AlbumHeader key={`${album.id}:${album.name}`} album={album} onError={onError} />}
       {selection.size > 0 && (
         <SelectionBar
           count={selection.size}
@@ -116,6 +145,47 @@ export function PhotosView({ view, layout, onLibraryChanged, onError }: Props) {
               await setHidden([...selection], hidden);
               clearSelection();
             })
+          }
+          onAddToAlbum={(id) =>
+            run(async () => {
+              await api.addToAlbum(id, [...selection]);
+              clearSelection();
+              await afterCollectionChange(false);
+            })
+          }
+          onCreateAlbum={(name) =>
+            run(async () => {
+              const id = await api.createAlbum(name, [...selection]);
+              clearSelection();
+              await collections.reload();
+              collections.navigate({ album: id });
+            })
+          }
+          onTag={(name) =>
+            run(async () => {
+              await addTag([...selection], name);
+              clearSelection();
+            })
+          }
+          onRemoveFromAlbum={
+            albumId === null
+              ? undefined
+              : () =>
+                  run(async () => {
+                    await api.removeFromAlbum(albumId, [...selection]);
+                    clearSelection();
+                    await afterCollectionChange(true);
+                  })
+          }
+          onSetCover={
+            albumId === null
+              ? undefined
+              : () =>
+                  run(async () => {
+                    await api.setAlbumCover(albumId, [...selection][0]);
+                    clearSelection();
+                    await collections.reload();
+                  })
           }
         />
       )}
@@ -138,6 +208,12 @@ export function PhotosView({ view, layout, onLibraryChanged, onError }: Props) {
           }}
           onFavorite={setFavorite}
           onHidden={setHidden}
+          onAddTag={addTag}
+          onRemoveTag={removeTag}
+          onNavigate={(target) => {
+            setViewing(null);
+            collections.navigate(target);
+          }}
         />
       )}
     </div>

@@ -269,3 +269,90 @@ fn favorites_and_hidden_views() {
     let i = day[0].ids.iter().position(|&id| id == beach).unwrap();
     assert_eq!(day[0].favorites[i], 1);
 }
+
+#[test]
+fn albums_hold_assets_without_touching_files() {
+    use photo_core::{assets, collections};
+    let f = fixture();
+    f.scan();
+    let beach = f.asset_of("2019/beach.jpg");
+    let chart = f.asset_of("chart.png");
+
+    let album = collections::create_album(&mut f.library.write(), "  Holiday ", &[beach]).unwrap();
+    assert!(collections::create_album(&mut f.library.write(), "   ", &[]).is_err());
+    let added = collections::add_to_album(&mut f.library.write(), album, &[beach, chart]).unwrap();
+    assert_eq!(added, 1, "beach was already in the album");
+
+    let albums = collections::list_albums(&f.library.read()).unwrap();
+    assert_eq!((albums[0].name.as_str(), albums[0].count), ("Holiday", 2));
+
+    // Hidden items stay visible inside albums.
+    assets::set_hidden(&mut f.library.write(), &[chart], true).unwrap();
+    let count = |view| -> u32 {
+        timeline::layout(&f.library.read(), view)
+            .unwrap()
+            .counts
+            .iter()
+            .sum()
+    };
+    assert_eq!(count(View::Album(album)), 2);
+
+    collections::set_album_cover(&f.library.write(), album, chart).unwrap();
+    assert!(
+        collections::set_album_cover(&f.library.write(), album, f.asset_of("clip.mp4")).is_err()
+    );
+    collections::remove_from_album(&mut f.library.write(), album, &[chart]).unwrap();
+    let albums = collections::list_albums(&f.library.read()).unwrap();
+    assert_eq!(albums[0].count, 1);
+    assert_eq!(
+        albums[0].cover_asset_id,
+        Some(beach),
+        "removed cover falls back to newest"
+    );
+
+    let details = assets::details(&f.library.read(), beach).unwrap().unwrap();
+    assert_eq!(details.albums.len(), 1);
+
+    collections::delete_album(&f.library.write(), album).unwrap();
+    assert!(
+        collections::list_albums(&f.library.read())
+            .unwrap()
+            .is_empty()
+    );
+    assert!(f.photos.join("2019/beach.jpg").exists());
+}
+
+#[test]
+fn tags_are_case_insensitive_and_cleaned_up() {
+    use photo_core::{assets, collections};
+    let f = fixture();
+    f.scan();
+    let beach = f.asset_of("2019/beach.jpg");
+    let chart = f.asset_of("chart.png");
+
+    let t1 = collections::add_tag(&mut f.library.write(), &[beach], "Family").unwrap();
+    let t2 = collections::add_tag(&mut f.library.write(), &[chart], "family").unwrap();
+    assert_eq!(t1, t2, "same tag regardless of case");
+
+    let tags = collections::list_tags(&f.library.read()).unwrap();
+    assert_eq!((tags.len(), tags[0].count), (1, 2));
+    let count: u32 = timeline::layout(&f.library.read(), View::Tag(t1))
+        .unwrap()
+        .counts
+        .iter()
+        .sum();
+    assert_eq!(count, 2);
+
+    let other = collections::add_tag(&mut f.library.write(), &[beach], "Beach").unwrap();
+    assert!(collections::rename_tag(&f.library.write(), other, "FAMILY").is_err());
+
+    collections::remove_tag(&mut f.library.write(), &[beach, chart], t1).unwrap();
+    let names: Vec<String> = collections::list_tags(&f.library.read())
+        .unwrap()
+        .into_iter()
+        .map(|t| t.name)
+        .collect();
+    assert_eq!(names, ["Beach"], "an unused tag is deleted");
+    let details = assets::details(&f.library.read(), beach).unwrap().unwrap();
+    assert_eq!(details.tags.len(), 1);
+}

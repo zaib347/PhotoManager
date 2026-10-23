@@ -1,14 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { confirm } from "@tauri-apps/plugin-dialog";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   events,
+  viewKey,
+  type AlbumInfo,
   type Layout,
   type RootInfo,
   type ScanFinished,
   type ScanProgress,
   type Stats,
+  type TagInfo,
   type View,
 } from "./api";
+import { CollectionsContext, type Collections } from "./collections/context";
 import { LibraryPanel } from "./library/LibraryPanel";
 import { PhotosView } from "./photos/PhotosView";
 import "./App.css";
@@ -16,19 +21,31 @@ import "./App.css";
 /** How often the timeline refreshes while a scan is adding photos. */
 const LIVE_RELOAD_MS = 3000;
 
-const EMPTY: Record<View, { title: string; hint: string }> = {
-  all: { title: "No photos yet", hint: "Add a folder on the left to start building your timeline." },
-  favorites: { title: "No favorites yet", hint: "Press F in the viewer, or select photos and choose Favorite." },
-  videos: { title: "No videos", hint: "Videos in your folders will appear here." },
-  hidden: { title: "Nothing hidden", hint: "Hidden photos stay in your folders but leave the timeline." },
-};
+function emptyState(view: View): { title: string; hint: string } {
+  if (typeof view === "object") {
+    return "album" in view
+      ? { title: "This album is empty", hint: "Select photos in the timeline and choose Add to album." }
+      : { title: "No photos with this tag", hint: "Tags appear here as you add them to photos." };
+  }
+  return {
+    all: { title: "No photos yet", hint: "Add a folder on the left to start building your timeline." },
+    favorites: { title: "No favorites yet", hint: "Press F in the viewer, or select photos and choose Favorite." },
+    videos: { title: "No videos", hint: "Videos in your folders will appear here." },
+    hidden: { title: "Nothing hidden", hint: "Hidden photos stay in your folders but leave the timeline." },
+  }[view];
+}
 
 export default function App() {
   const [view, setView] = useState<View>("all");
   // The layout is tagged with its view so a view switch never renders a stale layout.
-  const [loaded, setLoaded] = useState<{ view: View; layout: Layout } | null>(null);
+  const [loaded, setLoaded] = useState<{ key: string; layout: Layout } | null>(null);
+  const key = viewKey(view);
+  const keyRef = useRef(key);
+  keyRef.current = key;
   const viewRef = useRef(view);
   viewRef.current = view;
+  const [albums, setAlbums] = useState<AlbumInfo[]>([]);
+  const [tags, setTags] = useState<TagInfo[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [roots, setRoots] = useState<RootInfo[]>([]);
   const [progress, setProgress] = useState(new Map<number, ScanProgress>());
@@ -38,9 +55,16 @@ export default function App() {
 
   const reloadTimeline = useCallback(async () => {
     const current = viewRef.current;
+    const currentKey = viewKey(current);
     const [s, layout] = await Promise.all([api.stats(), api.layout(current)]);
     setStats(s);
-    if (viewRef.current === current) setLoaded({ view: current, layout });
+    if (keyRef.current === currentKey) setLoaded({ key: currentKey, layout });
+  }, []);
+
+  const reloadCollections = useCallback(async () => {
+    const [a, t] = await Promise.all([api.listAlbums(), api.listTags()]);
+    setAlbums(a);
+    setTags(t);
   }, []);
 
   const reloadRoots = useCallback(async () => setRoots(await api.listRoots()), []);
@@ -49,7 +73,16 @@ export default function App() {
 
   useEffect(() => {
     reloadTimeline().catch(report);
-  }, [view, reloadTimeline, report]);
+  }, [key, reloadTimeline, report]);
+
+  useEffect(() => {
+    reloadCollections().catch(report);
+  }, [reloadCollections, report]);
+
+  const collections = useMemo<Collections>(
+    () => ({ albums, tags, reload: reloadCollections, navigate: setView }),
+    [albums, tags, reloadCollections],
+  );
 
   useEffect(() => {
     reloadRoots().catch(report);
@@ -85,12 +118,13 @@ export default function App() {
         });
         setNotice(describeFinished(f));
         reloadTimeline().catch(report);
+        reloadCollections().catch(report);
         reloadRoots().catch(report);
       }),
       events.volumesChanged(() => reloadRoots().catch(report)),
     ];
     return () => unlisten.forEach((p) => p.then((off) => off()));
-  }, [reloadTimeline, reloadRoots, report]);
+  }, [reloadTimeline, reloadRoots, reloadCollections, report]);
 
   const run = async (label: string, action: () => Promise<string>) => {
     setBusy(label);
@@ -124,21 +158,24 @@ export default function App() {
       .catch((e) => setNotice(String(e)));
 
   const removeRoot = async (root: RootInfo) => {
-    const ok = window.confirm(
+    const ok = await confirm(
       `Remove "${root.path}" from the library?\n\nYour files are not touched. Favorites, tags and albums for photos that only exist in this folder are removed from the library.`,
+      { title: "Remove folder", kind: "warning", okLabel: "Remove" },
     );
     if (!ok) return;
     try {
       await api.removeRoot(root.id);
-      await Promise.all([reloadRoots(), reloadTimeline()]);
+      await Promise.all([reloadRoots(), reloadTimeline(), reloadCollections()]);
     } catch (e) {
       report(e);
     }
   };
 
-  const current = loaded && loaded.view === view ? loaded.layout : null;
+  const current = loaded && loaded.key === key ? loaded.layout : null;
+  const empty = emptyState(view);
 
   return (
+    <CollectionsContext.Provider value={collections}>
     <div className="app">
       <header className="toolbar">
         <strong>PhotoManager</strong>
@@ -175,16 +212,17 @@ export default function App() {
           {busy ? (
             <div className="empty">{busy}</div>
           ) : current && current.days.length > 0 ? (
-            <PhotosView key={view} view={view} layout={current} onLibraryChanged={reloadTimeline} onError={report} />
+            <PhotosView key={key} view={view} layout={current} onLibraryChanged={reloadTimeline} onError={report} />
           ) : current ? (
             <div className="empty">
-              <h2>{EMPTY[view].title}</h2>
-              <p className="muted">{EMPTY[view].hint}</p>
+              <h2>{empty.title}</h2>
+              <p className="muted">{empty.hint}</p>
             </div>
           ) : null}
         </main>
       </div>
     </div>
+    </CollectionsContext.Provider>
   );
 }
 

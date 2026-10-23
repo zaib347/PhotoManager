@@ -1,10 +1,20 @@
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import type { AssetDetails } from "../api";
+import type { AssetDetails, View } from "../api";
+import { useCollections } from "../collections/context";
+import { TagInput } from "../collections/TagInput";
 import { fileName, formatBytes, formatDuration, formatOffset, formatTakenAt } from "../format";
 
 const TIME_SOURCES = ["from photo metadata", "from video metadata", "from the file name", "from the file's modified date", "set by you"];
 
-export function InfoPanel({ asset }: { asset: AssetDetails | null }) {
+type Props = {
+  asset: AssetDetails | null;
+  onAddTag: (name: string) => void;
+  onRemoveTag: (tagId: number) => void;
+  onNavigate: (view: View) => void;
+};
+
+export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate }: Props) {
+  const { tags } = useCollections();
   if (!asset) return <aside className="info-panel" />;
   const camera = [asset.cameraMake, asset.cameraModel].filter(Boolean).join(" ");
   // Many cameras repeat the make in the model ("Canon Canon EOS 80D").
@@ -47,6 +57,36 @@ export function InfoPanel({ asset }: { asset: AssetDetails | null }) {
           <p className="muted">
             {asset.lat.toFixed(5)}, {asset.lon.toFixed(5)}
           </p>
+        </section>
+      )}
+
+      <section>
+        <h3>Tags</h3>
+        <div className="chips">
+          {asset.tags.map((t) => (
+            <span key={t.id} className="chip">
+              <button className="link" onClick={() => onNavigate({ tag: t.id })}>
+                {t.name}
+              </button>
+              <button className="chip-remove" onClick={() => onRemoveTag(t.id)} aria-label={`Remove tag ${t.name}`}>
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+        <TagInput tags={tags} exclude={new Set(asset.tags.map((t) => t.id))} onAdd={onAddTag} />
+      </section>
+
+      {asset.albums.length > 0 && (
+        <section>
+          <h3>Albums</h3>
+          <div className="chips">
+            {asset.albums.map((a) => (
+              <button key={a.id} className="chip link" onClick={() => onNavigate({ album: a.id })}>
+                {a.name}
+              </button>
+            ))}
+          </div>
         </section>
       )}
 

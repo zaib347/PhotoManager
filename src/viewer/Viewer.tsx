@@ -1,6 +1,6 @@
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { api, MediaKind, mediaUrl, thumbUrl, type AssetDetails } from "../api";
+import { api, MediaKind, mediaUrl, thumbUrl, type AssetDetails, type View } from "../api";
 import { formatTakenAt } from "../format";
 import type { DayStore, Position } from "../timeline/dayStore";
 import { InfoPanel } from "./InfoPanel";
@@ -14,6 +14,9 @@ type Props = {
   onClose: (last: Position) => void;
   onFavorite: (ids: number[], favorite: boolean) => Promise<void>;
   onHidden: (ids: number[], hidden: boolean) => Promise<void>;
+  onAddTag: (ids: number[], name: string) => Promise<void>;
+  onRemoveTag: (ids: number[], tagId: number) => Promise<void>;
+  onNavigate: (view: View) => void;
 };
 
 function readShowInfo() {
@@ -25,7 +28,7 @@ function readShowInfo() {
 }
 
 /** Full-window viewer that steps through the same order as the timeline grid. */
-export function Viewer({ store, start, onClose, onFavorite, onHidden }: Props) {
+export function Viewer({ store, start, onClose, onFavorite, onHidden, onAddTag, onRemoveTag, onNavigate }: Props) {
   useSyncExternalStore(store.subscribe, store.getVersion);
   const [pos, setPos] = useState(start);
   const [asset, setAsset] = useState<AssetDetails | null>(null);
@@ -33,16 +36,22 @@ export function Viewer({ store, start, onClose, onFavorite, onHidden }: Props) {
   const [showInfo, setShowInfo] = useState(readShowInfo);
   const id = store.idAt(pos);
 
+  const [detailsVersion, setDetailsVersion] = useState(0);
+  const refreshDetails = useCallback(() => setDetailsVersion((v) => v + 1), []);
+
   useEffect(() => {
     setFailed(false);
     setAsset(null);
+  }, [id]);
+
+  useEffect(() => {
     if (id === undefined) return;
     let current = true;
     api.asset(id).then((a) => current && setAsset(a));
     return () => {
       current = false;
     };
-  }, [id]);
+  }, [id, detailsVersion]);
 
   // Warm up neighbours so stepping through photos feels instant.
   useEffect(() => {
@@ -108,6 +117,8 @@ export function Viewer({ store, start, onClose, onFavorite, onHidden }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Typing a tag name must not trigger shortcuts.
+      if (e.target instanceof HTMLInputElement && e.key !== "Escape") return;
       if (e.key === "Escape") onClose(pos);
       else if (e.key === "ArrowRight") go(1);
       else if (e.key === "ArrowLeft") go(-1);
@@ -201,7 +212,14 @@ export function Viewer({ store, start, onClose, onFavorite, onHidden }: Props) {
             ›
           </button>
         </div>
-        {showInfo && <InfoPanel asset={asset} />}
+        {showInfo && (
+          <InfoPanel
+            asset={asset}
+            onAddTag={(name) => asset && onAddTag([asset.id], name).then(refreshDetails)}
+            onRemoveTag={(tagId) => asset && onRemoveTag([asset.id], tagId).then(refreshDetails)}
+            onNavigate={onNavigate}
+          />
+        )}
       </div>
     </div>
   );

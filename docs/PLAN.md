@@ -141,7 +141,9 @@ Batch 1 (browsing core):
 - [x] Favorite / rating / hide for one item (viewer keys F, 0–5) or a selection
 
 Batch 2:
-- [ ] Albums (create, add selection, album view) and tags
+- [x] Albums: create (sidebar + or from a selection), add/remove, rename, delete, cover,
+      album grid (hidden items still show), album chips in the info panel
+- [x] Tags: case-insensitive, add from selection or info panel, tag views, unused tags removed
 - [ ] Filters: media type, camera, folder/drive, date range
 - [ ] Video poster frames (ffmpeg on demand) — grid shows placeholders for videos until then
 - [ ] Live Photo pairing

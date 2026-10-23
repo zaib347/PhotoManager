@@ -17,6 +17,8 @@
           "path": "**"
         }
       ]
-    }
+    },
+    "dialog:allow-confirm",
+    "dialog:allow-ask"
   ]
 }

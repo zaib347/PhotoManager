@@ -1,7 +1,9 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import type { RootInfo, ScanProgress, View } from "../api";
+import { useState } from "react";
+import { api, thumbUrl, viewKey, type BuiltinView, type RootInfo, type ScanProgress, type View } from "../api";
+import { useCollections } from "../collections/context";
 
-const VIEWS: { id: View; label: string }[] = [
+const VIEWS: { id: BuiltinView; label: string }[] = [
   { id: "all", label: "Photos" },
   { id: "favorites", label: "Favorites" },
   { id: "videos", label: "Videos" },
@@ -20,6 +22,19 @@ type Props = {
 };
 
 export function LibraryPanel({ view, onView, roots, progress, onAdd, onRescan, onCancel, onRemove }: Props) {
+  const { albums, tags, reload } = useCollections();
+  const [newAlbum, setNewAlbum] = useState<string | null>(null);
+  const current = viewKey(view);
+
+  const createAlbum = async () => {
+    const name = newAlbum?.trim();
+    setNewAlbum(null);
+    if (!name) return;
+    const id = await api.createAlbum(name, []);
+    await reload();
+    onView({ album: id });
+  };
+
   const pickFolder = async () => {
     const path = await open({ directory: true, multiple: false, title: "Add a folder to your library" });
     if (typeof path === "string") onAdd(path);
@@ -31,14 +46,84 @@ export function LibraryPanel({ view, onView, roots, progress, onAdd, onRescan, o
         {VIEWS.map((v) => (
           <button
             key={v.id}
-            className={`view-link${v.id === view ? " active" : ""}`}
-            aria-current={v.id === view ? "page" : undefined}
+            className={`view-link${v.id === current ? " active" : ""}`}
+            aria-current={v.id === current ? "page" : undefined}
             onClick={() => onView(v.id)}
           >
             {v.label}
           </button>
         ))}
       </nav>
+
+      <div className="sidebar-title">
+        <span>Albums</span>
+        <button className="ghost" onClick={() => setNewAlbum("")} title="New album">
+          +
+        </button>
+      </div>
+      {newAlbum !== null && (
+        <input
+          className="sidebar-input"
+          autoFocus
+          placeholder="Album name"
+          value={newAlbum}
+          onChange={(e) => setNewAlbum(e.target.value)}
+          onBlur={() => setNewAlbum(null)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") createAlbum();
+            if (e.key === "Escape") setNewAlbum(null);
+          }}
+        />
+      )}
+      <nav className="views" aria-label="Albums">
+        {albums.map((a) => {
+          const active = current === viewKey({ album: a.id });
+          return (
+            <button
+              key={a.id}
+              className={`view-link album-link${active ? " active" : ""}`}
+              aria-current={active ? "page" : undefined}
+              onClick={() => onView({ album: a.id })}
+            >
+              {a.coverAssetId !== null ? (
+                <img className="album-cover" src={thumbUrl(a.coverAssetId)} alt="" />
+              ) : (
+                <span className="album-cover" />
+              )}
+              <span className="link-label">{a.name}</span>
+              <span className="muted count">{a.count.toLocaleString()}</span>
+            </button>
+          );
+        })}
+        {albums.length === 0 && newAlbum === null && (
+          <p className="muted sidebar-hint">Select photos and choose Add to album, or press +.</p>
+        )}
+      </nav>
+
+      {tags.length > 0 && (
+        <>
+          <div className="sidebar-title">
+            <span>Tags</span>
+          </div>
+          <nav className="views" aria-label="Tags">
+            {tags.map((t) => {
+              const active = current === viewKey({ tag: t.id });
+              return (
+                <button
+                  key={t.id}
+                  className={`view-link${active ? " active" : ""}`}
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => onView({ tag: t.id })}
+                >
+                  <span className="link-label"># {t.name}</span>
+                  <span className="muted count">{t.count.toLocaleString()}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </>
+      )}
+
       <div className="sidebar-title">
         <span>Folders</span>
         <button onClick={pickFolder}>Add folder</button>

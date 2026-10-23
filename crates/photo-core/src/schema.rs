@@ -140,6 +140,14 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     "
     ALTER TABLE assets ADD COLUMN status INTEGER NOT NULL DEFAULT 0;  -- 0 present, 1 all files missing
     ",
+    // v3: albums and tags.
+    "
+    ALTER TABLE albums ADD COLUMN cover_asset_id INTEGER;  -- NULL: newest item is the cover
+    ALTER TABLE albums ADD COLUMN updated_at INTEGER;
+    CREATE INDEX idx_album_assets_asset ON album_assets (asset_id);
+    CREATE INDEX idx_asset_tags_tag ON asset_tags (tag_id, asset_id);
+    CREATE UNIQUE INDEX idx_tags_name_nocase ON tags (name COLLATE NOCASE);
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

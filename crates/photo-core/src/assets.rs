@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
+use crate::collections::{self, Named};
 use crate::{Error, Result, timeline};
 
 #[derive(Serialize, Debug)]
@@ -41,6 +42,8 @@ pub struct AssetDetails {
     pub rating: Option<u8>,
     pub hidden: bool,
     pub files: Vec<FileInfo>,
+    pub albums: Vec<Named>,
+    pub tags: Vec<Named>,
 }
 
 pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
@@ -71,6 +74,8 @@ pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
                     rating: r.get(14)?,
                     hidden: r.get(15)?,
                     files: Vec::new(),
+                    albums: Vec::new(),
+                    tags: Vec::new(),
                 })
             },
         )
@@ -101,6 +106,8 @@ pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
         })
     })?;
     asset.files = rows.collect::<rusqlite::Result<_>>()?;
+    asset.albums = collections::albums_of(conn, id)?;
+    asset.tags = collections::tags_of(conn, id)?;
     Ok(Some(asset))
 }
 

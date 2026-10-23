@@ -1,7 +1,25 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type View = "all" | "favorites" | "videos" | "hidden";
+export type BuiltinView = "all" | "favorites" | "videos" | "hidden";
+export type View = BuiltinView | { album: number } | { tag: number };
+
+/** Stable string identity for a view (React keys, comparisons). */
+export const viewKey = (view: View) =>
+  typeof view === "string" ? view : "album" in view ? `album:${view.album}` : `tag:${view.tag}`;
+
+export type Named = { id: number; name: string };
+
+export type AlbumInfo = {
+  id: number;
+  name: string;
+  count: number;
+  coverAssetId: number | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type TagInfo = { id: number; name: string; count: number };
 
 /** Every day that has assets, newest first (parallel arrays). */
 export type Layout = { days: number[]; counts: number[] };
@@ -55,6 +73,8 @@ export type AssetDetails = {
   rating: number | null;
   hidden: boolean;
   files: FileInfo[];
+  albums: Named[];
+  tags: Named[];
 };
 
 export type ScanProgress = {
@@ -89,6 +109,18 @@ export const api = {
   setFavorite: (ids: number[], favorite: boolean) => invoke<void>("set_favorite", { ids, favorite }),
   setRating: (ids: number[], rating: number | null) => invoke<void>("set_rating", { ids, rating }),
   setHidden: (ids: number[], hidden: boolean) => invoke<void>("set_hidden", { ids, hidden }),
+  listAlbums: () => invoke<AlbumInfo[]>("list_albums"),
+  createAlbum: (name: string, ids: number[]) => invoke<number>("create_album", { name, ids }),
+  renameAlbum: (id: number, name: string) => invoke<void>("rename_album", { id, name }),
+  deleteAlbum: (id: number) => invoke<void>("delete_album", { id }),
+  addToAlbum: (albumId: number, ids: number[]) => invoke<number>("add_to_album", { albumId, ids }),
+  removeFromAlbum: (albumId: number, ids: number[]) => invoke<void>("remove_from_album", { albumId, ids }),
+  setAlbumCover: (albumId: number, assetId: number) => invoke<void>("set_album_cover", { albumId, assetId }),
+  listTags: () => invoke<TagInfo[]>("list_tags"),
+  addTag: (ids: number[], name: string) => invoke<number>("add_tag", { ids, name }),
+  removeTag: (ids: number[], tagId: number) => invoke<void>("remove_tag", { ids, tagId }),
+  renameTag: (id: number, name: string) => invoke<void>("rename_tag", { id, name }),
+  deleteTag: (id: number) => invoke<void>("delete_tag", { id }),
   listRoots: () => invoke<RootInfo[]>("list_roots"),
   scanningRoots: () => invoke<number[]>("scanning_roots"),
   addRoot: (path: string) => invoke<number>("add_root", { path }),

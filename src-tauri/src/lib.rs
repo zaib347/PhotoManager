@@ -1,3 +1,4 @@
+mod collection_commands;
 mod diag;
 mod protocol;
 mod scans;
@@ -24,11 +25,11 @@ pub(crate) struct AppState {
     decode_pool: rayon::ThreadPool,
 }
 
-type CmdResult<T> = Result<T, String>;
+pub(crate) type CmdResult<T> = Result<T, String>;
 
 /// Runs database work off the main thread. Non-async Tauri commands execute on the
 /// UI thread, so every command that touches SQLite goes through here.
-async fn blocking<T, F>(state: &Arc<AppState>, f: F) -> CmdResult<T>
+pub(crate) async fn blocking<T, F>(state: &Arc<AppState>, f: F) -> CmdResult<T>
 where
     T: Send + 'static,
     F: FnOnce(&AppState) -> photo_core::Result<T> + Send + 'static,
@@ -249,6 +250,18 @@ pub fn run() {
             set_favorite,
             set_rating,
             set_hidden,
+            collection_commands::list_albums,
+            collection_commands::create_album,
+            collection_commands::rename_album,
+            collection_commands::delete_album,
+            collection_commands::add_to_album,
+            collection_commands::remove_from_album,
+            collection_commands::set_album_cover,
+            collection_commands::list_tags,
+            collection_commands::add_tag,
+            collection_commands::remove_tag,
+            collection_commands::rename_tag,
+            collection_commands::delete_tag,
             list_roots,
             scanning_roots,
             add_root,
