@@ -1,3 +1,4 @@
+mod diag;
 mod protocol;
 mod scans;
 
@@ -10,7 +11,7 @@ use std::time::{Duration, Instant};
 use photo_core::db::Db;
 use photo_core::timeline::View;
 use photo_core::{assets, library, schema, synth, thumbs, timeline};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 
 const VOLUME_POLL: Duration = Duration::from_secs(5);
 
@@ -208,12 +209,15 @@ fn poll_volumes(app: AppHandle, state: Arc<AppState>) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    diag::install_panic_hook();
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
+            diag::init(&dir);
+            diag::log(format!("starting {}", app.package_info().version));
             let library = Db::open(&dir.join("library.sqlite"), 4, schema::migrate_library)?;
             let thumbs = Db::open(&dir.join("thumbs.sqlite"), 4, schema::migrate_thumbs)?;
             let decode_pool = rayon::ThreadPoolBuilder::new()
@@ -254,6 +258,25 @@ pub fn run() {
             generate_synthetic,
             clear_library
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!());
+
+    let app = match app {
+        Ok(app) => app,
+        Err(e) => {
+            diag::log(format!("startup failed: {e}"));
+            std::process::exit(1);
+        }
+    };
+    app.run(|_, event| match event {
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::CloseRequested { .. },
+            ..
+        } => diag::log(format!("window {label} close requested")),
+        RunEvent::ExitRequested { code, .. } => {
+            diag::log(format!("exit requested (code {code:?})"))
+        }
+        RunEvent::Exit => diag::log("exit"),
+        _ => {}
+    });
 }
