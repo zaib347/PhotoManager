@@ -5,6 +5,7 @@ mod event_commands;
 mod memory_commands;
 mod protocol;
 mod scans;
+mod similar_commands;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -31,6 +32,9 @@ pub(crate) struct AppState {
     /// Assets no decoder could thumbnail this session, so scrolling past them doesn't
     /// retry slow OS calls. Cleared on restart (a codec may have been installed).
     thumb_failures: Mutex<std::collections::HashSet<i64>>,
+    /// The similar-photos hashing pass is running / should stop (a scan started).
+    hashing: AtomicBool,
+    hash_cancel: AtomicBool,
 }
 
 impl AppState {
@@ -287,6 +291,8 @@ pub fn run() {
                 scans: Mutex::default(),
                 decode_pool,
                 thumb_failures: Mutex::default(),
+                hashing: AtomicBool::new(false),
+                hash_cancel: AtomicBool::new(false),
             });
 
             library::refresh_volumes(&state.library.write())?;
@@ -300,6 +306,7 @@ pub fn run() {
                 scans::start(app.handle(), &state, root_id);
             }
             event_commands::catch_up(app.handle(), &state);
+            similar_commands::run_in_background(app.handle(), &state);
             poll_volumes(app.handle().clone(), state.clone());
             app.manage(state);
             Ok(())
@@ -337,6 +344,10 @@ pub fn run() {
             cleanup_commands::list_file_ops,
             cleanup_commands::undo_file_op,
             cleanup_commands::empty_file_op,
+            similar_commands::similar_overview,
+            similar_commands::similar_groups,
+            similar_commands::remove_similar,
+            similar_commands::keep_similar,
             collection_commands::list_albums,
             collection_commands::create_album,
             collection_commands::rename_album,

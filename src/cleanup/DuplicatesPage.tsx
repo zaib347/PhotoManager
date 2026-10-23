@@ -1,15 +1,9 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState } from "react";
-import {
-  api,
-  thumbUrl,
-  type DuplicateGroup,
-  type DuplicateOverview,
-  type FileOp,
-  type FileOpReport,
-} from "../api";
+import { api, thumbUrl, type DuplicateGroup, type DuplicateOverview } from "../api";
 import { fileName, formatBytes, formatTakenAt } from "../format";
+import { describeReport, RecentlyRemoved } from "./RecentlyRemoved";
 
 const PAGE = 50;
 
@@ -20,30 +14,21 @@ type Props = {
   onError: (e: unknown) => void;
 };
 
-function describe(r: FileOpReport, verb: string) {
-  const parts = [`${verb} ${r.done.toLocaleString()} ${r.done === 1 ? "file" : "files"} (${formatBytes(r.bytes)})`];
-  if (r.failed) parts.push(`${r.failed.toLocaleString()} skipped: ${r.errors[0] ?? "see the list"}`);
-  return parts.join(". ");
-}
-
 /** Photos stored more than once, and the removals that can still be undone. */
 export function DuplicatesPage({ version, onNotice, onError }: Props) {
   const [overview, setOverview] = useState<DuplicateOverview | null>(null);
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
-  const [ops, setOps] = useState<FileOp[]>([]);
   /** The user's choice of copy to keep, by asset; otherwise the first (suggested) one. */
   const [keep, setKeep] = useState<Record<number, number>>({});
   const [busy, setBusy] = useState(false);
+  // Bumped after removals so Recently removed reloads.
+  const [removals, setRemovals] = useState(0);
 
-  const reload = useCallback(
-    async (count = PAGE) => {
-      const [o, g, f] = await Promise.all([api.duplicateOverview(), api.duplicateGroups(0, count), api.listFileOps()]);
-      setOverview(o);
-      setGroups(g);
-      setOps(f);
-    },
-    [],
-  );
+  const reload = useCallback(async (count = PAGE) => {
+    const [o, g] = await Promise.all([api.duplicateOverview(), api.duplicateGroups(0, count)]);
+    setOverview(o);
+    setGroups(g);
+  }, []);
 
   useEffect(() => {
     reload().catch(onError);
@@ -53,6 +38,7 @@ export function DuplicatesPage({ version, onNotice, onError }: Props) {
     setBusy(true);
     try {
       onNotice(await action());
+      setRemovals((n) => n + 1);
       await reload(Math.max(PAGE, groups.length));
     } catch (e) {
       onError(e);
@@ -69,23 +55,11 @@ export function DuplicatesPage({ version, onNotice, onError }: Props) {
         "next to them, and you can put them back from Recently removed.",
       { title: "Remove extra copies", kind: "warning", okLabel: "Remove copies" },
     );
-    if (ok) await act(async () => describe(await api.removeDuplicates(keep), "Moved"));
+    if (ok) await act(async () => describeReport(await api.removeDuplicates(keep), "Moved"));
   };
 
   const removeOne = (g: DuplicateGroup) =>
-    act(async () => describe(await api.removeDuplicates(keep, [g.assetId]), "Moved"));
-
-  const undo = (op: FileOp) => act(async () => describe(await api.undoFileOp(op.id), "Put back"));
-
-  const empty = async (op: FileOp) => {
-    const ok = await confirm(
-      `Send ${op.inTrash.toLocaleString()} files (${formatBytes(op.inTrashBytes)}) to the Recycle Bin?\n\n` +
-        "This frees the space. You can still restore them from the Recycle Bin, but not from here. " +
-        "Drives without a Recycle Bin (network drives, most USB sticks) are left as they are.",
-      { title: "Send to Recycle Bin", kind: "warning", okLabel: "Send to Recycle Bin" },
-    );
-    if (ok) await act(async () => describe(await api.emptyFileOp(op.id), "Sent"));
-  };
+    act(async () => describeReport(await api.removeDuplicates(keep, [g.assetId]), "Moved"));
 
   const more = () =>
     api
@@ -167,40 +141,12 @@ export function DuplicatesPage({ version, onNotice, onError }: Props) {
         </div>
       )}
 
-      {ops.length > 0 && (
-        <section className="cleanup-ops">
-          <h3>Recently removed</h3>
-          <ul>
-            {ops.map((op) => (
-              <li key={op.id}>
-                <span>{new Date(op.createdAt).toLocaleString()}</span>
-                <span className="muted">{op.reason === "duplicates" ? "Duplicate copies" : op.reason}</span>
-                <span className="muted small">
-                  {op.status === "undone"
-                    ? "Put back"
-                    : op.status === "emptied"
-                      ? "Sent to the Recycle Bin"
-                      : op.inTrash > 0
-                        ? `${op.inTrash.toLocaleString()} files · ${formatBytes(op.inTrashBytes)} in the trash folder`
-                        : "Nothing left in the trash folder"}
-                  {op.failed > 0 && ` · ${op.failed.toLocaleString()} skipped`}
-                </span>
-                <div className="spacer" />
-                {op.status === "done" && op.inTrash > 0 && (
-                  <>
-                    <button disabled={busy} onClick={() => undo(op)}>
-                      Undo
-                    </button>
-                    <button disabled={busy} onClick={() => empty(op)}>
-                      Send to Recycle Bin
-                    </button>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <RecentlyRemoved
+        version={removals}
+        onChanged={() => reload(Math.max(PAGE, groups.length)).catch(onError)}
+        onNotice={onNotice}
+        onError={onError}
+      />
     </div>
   );
 }

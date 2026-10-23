@@ -11,22 +11,31 @@ The full plan and milestone checklists are in [docs/PLAN.md](docs/PLAN.md).
 | M3 Memory features | In progress |
 
 **Done:** M3 except Browse by place (Date fixing, On This Day, Events, Places, Trips), all on `main`.
-**M4 in progress:** exact duplicates + safe file operations on branch **`m4-duplicates`**,
-**not merged yet**.
+**M4 in progress:** exact duplicates + safe file operations are on `main`. Similar photos
+(near-duplicates, bursts) on branch **`m4-similar`**, **not merged yet**.
 
 ## First thing to do
 
-1. Ask whether Duplicates work in the app. Test with real files (synthetic photos have no files):
-   copy a few photos into a second folder inside a library folder (also try "IMG (1).jpg" names),
-   then **Rescan**.
-   - **Duplicates** in the sidebar: summary with space used; each photo lists its copies, the
-     suggested one to keep is selected.
-   - **Remove other copies** on one photo, and **Remove extra copies** for all.
-   - Removed files are in `<library folder>\.photomanager-trash\<n>\…`; a rescan reports nothing missing.
-   - **Recently removed** → **Undo** puts them back; **Send to Recycle Bin** empties.
-2. If they're OK, merge: `git checkout main && git merge --no-ff m4-duplicates`
-3. Next in M4: near-duplicates / bursts (phash), best-shot ranking. Browse by place (M3) is
-   still open too.
+1. Ask whether Similar photos work in the app. Needs real photos (synthetic ones have no files):
+   a few shots of the same scene taken seconds apart, or a photo plus a resized/WhatsApp copy.
+   - On start (and after each scan) photos are hashed in the background; the page says
+     "Still comparing N photos" until done.
+   - **Similar photos** in the sidebar: groups with the best one ticked (Best badge).
+   - **Remove N** per group, **Keep all** (group disappears), or remove unticked in all shown.
+   - **Recently removed** (shared with Duplicates) → **Undo** brings removed photos back.
+2. If they're OK, merge: `git checkout main && git merge --no-ff m4-similar`
+3. Next in M4: better best-shot ranking, other planned/previewed operations. Browse by place
+   (M3) is still open too.
+
+## How the similar-photos code works
+
+- `crates/photo-core/src/similar.rs`: `fingerprint` (pHash + sharpness), `hash_pending`
+  (batches of 256, parallel, uses or creates grid thumbnails), `detect` (groups on a reader,
+  short write), `groups` with `best_index`, `dismiss`.
+- Tauri `similar_commands::run_in_background`: startup and after each scan; `scans::start` sets
+  `hash_cancel` so hashing pauses during scans.
+- Thresholds: `WINDOW_MS` 3 min / `SIMILAR_DIST` 10 bits / `COPY_DIST` 3 bits. Untested on real
+  libraries yet; expect to tune them.
 
 ## How the cleanup code works
 

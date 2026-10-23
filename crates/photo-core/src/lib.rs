@@ -19,6 +19,7 @@ pub mod os_thumb;
 pub mod places;
 pub mod scan;
 pub mod schema;
+pub mod similar;
 pub mod synth;
 pub mod thumbs;
 pub mod timeline;

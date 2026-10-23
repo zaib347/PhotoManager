@@ -1339,3 +1339,53 @@ button.primary:disabled {
   padding: 6px 0;
   border-top: 1px solid var(--border);
 }
+.similar-group {
+  padding: 10px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.similar-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-top: 6px;
+}
+
+.similar-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: none;
+  width: 150px;
+  cursor: pointer;
+}
+
+.similar-tile img {
+  width: 150px;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--placeholder);
+  outline: 3px solid transparent;
+  opacity: 0.55;
+}
+
+.similar-tile.kept img {
+  outline-color: var(--accent);
+  opacity: 1;
+}
+
+.similar-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge {
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+}

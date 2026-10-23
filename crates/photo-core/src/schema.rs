@@ -229,6 +229,30 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     ) WITHOUT ROWID;
     CREATE INDEX idx_file_ops_status ON file_ops (status);
     ",
+    // v11: similar photos. `phash` (64-bit pHash) and `blur` (sharpness: higher is
+    // sharper) come from v1; `phash_v` is the hashing version that processed the asset
+    // (NULL: not yet). Groups are recomputed by `similar::detect`.
+    "
+    ALTER TABLE assets ADD COLUMN phash_v INTEGER;
+    CREATE INDEX idx_assets_phash_pending ON assets (id) WHERE phash_v IS NULL;
+    CREATE TABLE similar_groups (
+        id         INTEGER PRIMARY KEY,   -- the smallest member asset id
+        kind       TEXT NOT NULL,         -- similar | copies
+        first_wall INTEGER NOT NULL,
+        count      INTEGER NOT NULL
+    );
+    CREATE INDEX idx_similar_groups_time ON similar_groups (first_wall);
+    CREATE TABLE similar_members (
+        asset_id INTEGER PRIMARY KEY,
+        group_id INTEGER NOT NULL
+    );
+    CREATE INDEX idx_similar_members_group ON similar_members (group_id);
+    -- Photos the user chose to keep all of; their group isn't shown again.
+    CREATE TABLE similar_dismissed (
+        asset_id INTEGER PRIMARY KEY,
+        at       INTEGER NOT NULL
+    );
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

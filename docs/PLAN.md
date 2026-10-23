@@ -197,8 +197,16 @@ Batch 2:
       path; changeable), remove per photo or all at once (never the last copy), Recently removed
       with Undo / Send to Recycle Bin. Fixed in the scanner: identical files in the same batch of
       256 were never joined (each only checked rows already committed)
-- [ ] Near-duplicates and bursts (phash within a time window, BK-tree)
-- [ ] Best-shot ranking
+- [x] Near-duplicates and bursts (`similar`, schema v11): 64-bit DCT pHash + sharpness
+      (Laplacian variance) from the grid thumbnail, dark borders trimmed (letterboxed EXIF
+      thumbnails), near-blank images skipped. Similar shots: next 30 photos within 3 min,
+      ≤ 10 bits. Near copies at any time apart: ≤ 3 bits, found via four 16-bit chunk buckets
+      (pigeonhole) instead of a BK-tree. Hashing runs in the background after scans and at
+      startup, pauses while a scan runs (~4 ms per thumbnail on one core, parallel). Similar
+      photos page: tick what to keep, remove the rest through `fileops` (undoable), or
+      "Keep all" (group stays hidden). 1M hashed photos: grouping 3.3 s on a reader
+- [~] Best-shot ranking: first version picks favorites, ratings, then the sharpest shot
+      (similar) or biggest copy (copies). Still to do: eyes open / faces, exposure
 - [ ] Other planned/previewed operations on top of `fileops` (e.g. remove a selection)
 
 ## M0 results
