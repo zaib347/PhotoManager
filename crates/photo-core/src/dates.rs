@@ -4,7 +4,7 @@
 use rusqlite::{Connection, params};
 use serde::Serialize;
 
-use crate::{Result, timeline};
+use crate::{Result, events, timeline};
 
 const SRC_USER: u8 = 4;
 
@@ -76,6 +76,7 @@ pub fn shift(conn: &mut Connection, ids: &[i64], delta_ms: i64) -> Result<usize>
     }
     tx.commit()?;
     timeline::rebuild_day_buckets(conn)?;
+    events::detect(conn)?;
     Ok(changed)
 }
 
@@ -116,5 +117,6 @@ pub fn restore(conn: &mut Connection, ids: &[i64]) -> Result<usize> {
     }
     tx.commit()?;
     timeline::rebuild_day_buckets(conn)?;
+    events::detect(conn)?;
     Ok(restored)
 }

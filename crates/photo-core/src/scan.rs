@@ -231,6 +231,7 @@ impl Scanner<'_> {
         )?;
         drop(library);
         crate::live::pair(&mut self.library.write(), root_id)?;
+        crate::events::detect(&mut self.library.write())?;
         timeline::rebuild_day_buckets(&self.library.write())?;
         Ok(summary)
     }

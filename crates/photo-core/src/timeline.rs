@@ -12,7 +12,7 @@ pub fn local_day(taken_at: i64, tz_offset_min: i32) -> i64 {
 
 /// Which assets a timeline shows. `All` is served from precomputed day buckets;
 /// the others are small or rarely used enough to aggregate on demand.
-/// From JSON: `"all"`, `"favorites"`, … or `{"album": 3}`, `{"tag": 7}`.
+/// From JSON: `"all"`, `"favorites"`, … or `{"album": 3}`, `{"tag": 7}`, `{"event": 9}`.
 #[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum View {
@@ -23,6 +23,7 @@ pub enum View {
     Hidden,
     Album(i64),
     Tag(i64),
+    Event(i64),
 }
 
 impl View {
@@ -41,6 +42,7 @@ impl View {
             View::Album(id) => format!(
                 "{PRESENT} AND a.id IN (SELECT asset_id FROM album_assets WHERE album_id = {id})"
             ),
+            View::Event(id) => format!("{VISIBLE} AND a.event_id = {id}"),
             View::Tag(id) => format!(
                 "{VISIBLE} AND a.id IN (SELECT asset_id FROM asset_tags WHERE tag_id = {id})"
             ),

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { api, isFilterEmpty, type Filter, type Layout, type View } from "../api";
+import { api, isFilterEmpty, type Filter, type Layout, type TimelineView } from "../api";
 import { AlbumHeader } from "../collections/AlbumHeader";
 import { useCollections } from "../collections/context";
+import { EventHeader } from "../events/EventHeader";
 import { DayStore, type Position } from "../timeline/dayStore";
 import { Timeline } from "../timeline/Timeline";
 import { Viewer } from "../viewer/Viewer";
@@ -9,7 +10,7 @@ import { OnThisDay } from "./OnThisDay";
 import { SelectionBar } from "./SelectionBar";
 
 type Props = {
-  view: View;
+  view: TimelineView;
   filter: Filter;
   layout: Layout;
   /** Reload layout and counts after changes that move items between views. */
@@ -25,6 +26,9 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
   const collections = useCollections();
   const albumId = typeof view === "object" && "album" in view ? view.album : null;
   const album = albumId === null ? undefined : collections.albums.find((a) => a.id === albumId);
+  const eventId = typeof view === "object" && "event" in view ? view.event : null;
+  // Bumped after edits that change this event's dates or members, to refresh its header.
+  const [eventVersion, setEventVersion] = useState(0);
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
   // Stable array identity, so panels keyed on the selection don't reset while open.
   const selectedIds = useMemo(() => [...selection], [selection]);
@@ -121,6 +125,12 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
 
   const run = (action: () => Promise<void>) => action().catch(onError);
 
+  /** After edits that change which items are in this view (and its event header). */
+  const afterTimelineChange = async () => {
+    setEventVersion((v) => v + 1);
+    await onLibraryChanged();
+  };
+
   /** After album/tag edits: refresh sidebar counts, and this grid if membership changed. */
   const afterCollectionChange = async (affectsThisView: boolean) => {
     await collections.reload();
@@ -148,6 +158,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
     <div className="photos-view">
       {view === "all" && isFilterEmpty(filter) && selection.size === 0 && <OnThisDay />}
       {album && <AlbumHeader key={`${album.id}:${album.name}`} album={album} onError={onError} />}
+      {eventId !== null && <EventHeader id={eventId} version={eventVersion} onError={onError} />}
       {selection.size > 0 && (
         <SelectionBar
           count={selection.size}
@@ -157,14 +168,14 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
             run(async () => {
               await api.shiftDates([...selection], delta);
               clearSelection();
-              await onLibraryChanged();
+              await afterTimelineChange();
             })
           }
           onRestoreDates={() =>
             run(async () => {
               await api.restoreDates([...selection]);
               clearSelection();
-              await onLibraryChanged();
+              await afterTimelineChange();
             })
           }
           view={view}
@@ -191,6 +202,23 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
               await collections.reload();
               collections.navigate({ album: id });
             })
+          }
+          onCreateEvent={(name) =>
+            run(async () => {
+              const id = await api.createEvent([...selection], name);
+              clearSelection();
+              collections.navigate({ event: id });
+            })
+          }
+          onSplitEvent={
+            eventId === null
+              ? undefined
+              : () =>
+                  run(async () => {
+                    await api.splitEvent(eventId, [...selection][0]);
+                    clearSelection();
+                    await afterTimelineChange();
+                  })
           }
           onTag={(name) =>
             run(async () => {
@@ -240,7 +268,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
           onFavorite={setFavorite}
           onHidden={setHidden}
           onAddTag={addTag}
-          onDatesChanged={onLibraryChanged}
+          onDatesChanged={afterTimelineChange}
           onRemoveTag={removeTag}
           onNavigate={(target) => {
             setViewing(null);
