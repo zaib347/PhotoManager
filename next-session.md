@@ -11,27 +11,33 @@ The full plan and milestone checklists are in [docs/PLAN.md](docs/PLAN.md).
 | M3 Memory features | In progress |
 
 **M3 done so far:**
-- Date fixing, Select all / Ctrl+A, On This Day, Events. All merged to `main`.
-- **Places**. On branch **`m3-places`**, **not merged yet**.
+- Date fixing, Select all / Ctrl+A, On This Day, Events, Places. All merged to `main`.
+- **Trips**. On branch **`m3-trips`**, **not merged yet**.
 
 ## First thing to do
 
-1. Ask whether Places work in the app (needs photos with GPS):
-   - On first start the existing library gets places in the background (log line
-     "N places looked up"), then events are re-detected.
-   - The info panel (**I**) shows "Town, Region, Country" above the coordinates.
-   - **Filter** has **Country** (if more than one) and **Place** lists (with search); chips show names.
-   - Untitled events show the place name instead of dates, with the dates underneath.
+1. Ask whether Trips work in the app. The user has no GPS photos, so test with **Test data** →
+   **Generate 100k** (synthetic photos have GPS: home Lahore, trips elsewhere):
+   - The **Trips** sidebar entry: cards named after towns (e.g. "Dubai", "Islamabad & Gilgit").
+   - Open a trip: header with dates, length, rename (click the title), **Remove trip**.
+   - Info panel (**I**) on a trip photo shows a trip chip next to the event.
 2. If they're OK, merge:
-   `git checkout main && git merge --no-ff m3-places`
+   `git checkout main && git merge --no-ff m3-trips`
 3. Start a new branch for the next feature.
 
 ## What's next in M3
 
-1. **Trips.** Multi-day events far from home. Work out "home" from where most photos are taken
-   (`assets.place_id`; synthetic libraries have a Lahore home and trips elsewhere).
-2. **Browse by place.** Country → town page, like the Events page. The info panel's place could
-   link to it.
+1. **Browse by place.** Country → town page, like the Events page. The info panel's place could
+   link to it. This is the last M3 item.
+
+## How the trips code works
+
+- `crates/photo-core/src/trips.rs`. A trip is a local-day range; `View::Trip` shows every
+  visible photo of those days. `trip_places` holds the away towns, with counts and first days.
+- Runs after places and events: scan finalize, date shift/restore, startup `catch_up`,
+  synthetic generate/clear.
+- Status works like events: `suggested` (redrawn), `accepted` (renamed, days fixed), `rejected`
+  (removed; overlapping candidates are dropped).
 
 ## How the places code works
 

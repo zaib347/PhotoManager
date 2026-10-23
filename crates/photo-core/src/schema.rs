@@ -185,7 +185,29 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     CREATE INDEX idx_places_country ON places (country_code);
     -- Covers place filters and per-place counts without reading the asset rows.
     CREATE INDEX idx_assets_place_day ON assets (place_id, local_day, status, paired_with)
-        WHERE place_id > 0;    ",
+        WHERE place_id > 0;
+    ",
+    // v9: trips, runs of local days away from home. Membership is the day range;
+    // `trip_places` holds the towns visited, kept by `trips::detect`.
+    "
+    CREATE TABLE trips (
+        id             INTEGER PRIMARY KEY,
+        title          TEXT,
+        first_day      INTEGER NOT NULL,
+        last_day       INTEGER NOT NULL,
+        count          INTEGER NOT NULL DEFAULT 0,
+        cover_asset_id INTEGER,
+        status         TEXT NOT NULL DEFAULT 'suggested'  -- suggested | accepted | rejected
+    );
+    CREATE INDEX idx_trips_days ON trips (first_day);
+    CREATE TABLE trip_places (
+        trip_id   INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+        place_id  INTEGER NOT NULL,
+        count     INTEGER NOT NULL,
+        first_day INTEGER NOT NULL,
+        PRIMARY KEY (trip_id, place_id)
+    ) WITHOUT ROWID;
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

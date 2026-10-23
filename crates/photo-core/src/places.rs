@@ -183,6 +183,7 @@ pub struct Index {
     /// `cells[c]..cells[c + 1]` is the range of `order` in cell `c`.
     cells: Vec<u32>,
     order: Vec<u32>,
+    by_id: HashMap<u32, u32>,
 }
 
 fn cell(lat_row: usize, lon_col: usize) -> usize {
@@ -224,11 +225,35 @@ impl Index {
         for c in 1..cells.len() {
             cells[c] += cells[c - 1];
         }
+        let by_id = cities
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.id, i as u32))
+            .collect();
         Index {
             cities,
             cells,
             order: keyed.into_iter().map(|(_, i)| i).collect(),
+            by_id,
         }
+    }
+
+    /// A city by its GeoNames id (what `assets.place_id` stores).
+    pub fn city(&self, id: i64) -> Option<&City> {
+        let i = *self.by_id.get(&u32::try_from(id).ok()?)?;
+        Some(&self.cities[i as usize])
+    }
+
+    /// Distance between two cities, if both are known.
+    pub fn km_between(&self, a: i64, b: i64) -> Option<f64> {
+        let (a, b) = (self.city(a)?, self.city(b)?);
+        Some(distance_km(
+            a.lat,
+            a.lon,
+            a.lat.to_radians().cos(),
+            b.lat,
+            b.lon,
+        ))
     }
 
     /// The bundled city list, decoded on first use.

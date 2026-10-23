@@ -174,7 +174,13 @@ Batch 2:
       22 s in 20k-row batches (lookups ~2.5 µs, the row updates dominate), one-place filter
       146 ms. Also fixed: merge/split/create now pull in the loose items inside the new span
       right away, so the next detection doesn't change the edited event
-- [ ] Trips: multi-day events far from home
+- [x] Trips: runs of days over 100 km from home (home = town with the most photo days that
+      year; thin years borrow the nearest year's, so moves work). Up to 2 days without located
+      photos inside a trip, a day at home ends it; 2–90 days, 10+ located photos away. A trip is
+      a day range (schema v9 `trips` + `trip_places`), shown with every photo of those days.
+      Named after its towns ("Islamabad & Gilgit") or countries; rename/remove like events.
+      Trips page, trip view, trip link in the info panel. 1M assets: detection 236 ms (reads
+      only per-day place counts from the covering index), list 9 ms, view 28 ms
 - [ ] Browse by place
 
 ## M0 results

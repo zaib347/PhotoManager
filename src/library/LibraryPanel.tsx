@@ -6,6 +6,7 @@ import { useCollections } from "../collections/context";
 const VIEWS: { id: BuiltinView; label: string }[] = [
   { id: "all", label: "Photos" },
   { id: "events", label: "Events" },
+  { id: "trips", label: "Trips" },
   { id: "favorites", label: "Favorites" },
   { id: "videos", label: "Videos" },
   { id: "hidden", label: "Hidden" },

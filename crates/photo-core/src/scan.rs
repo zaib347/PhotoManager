@@ -233,6 +233,7 @@ impl Scanner<'_> {
         crate::live::pair(&mut self.library.write(), root_id)?;
         crate::places::assign(self.library)?;
         crate::events::detect(&mut self.library.write())?;
+        crate::trips::detect(&mut self.library.write())?;
         timeline::rebuild_day_buckets(&self.library.write())?;
         Ok(summary)
     }

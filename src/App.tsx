@@ -5,6 +5,7 @@ import {
   events,
   filterKey,
   isFilterEmpty,
+  isPage,
   viewKey,
   type AlbumInfo,
   type Filter,
@@ -21,6 +22,7 @@ import { EventsPage } from "./events/EventsPage";
 import { LibraryPanel } from "./library/LibraryPanel";
 import { FilterBar } from "./photos/FilterBar";
 import { PhotosView } from "./photos/PhotosView";
+import { TripsPage } from "./trips/TripsPage";
 import "./App.css";
 
 /** How often the timeline refreshes while a scan is adding photos. */
@@ -31,6 +33,7 @@ function emptyState(view: View): { title: string; hint: string } {
     if ("album" in view)
       return { title: "This album is empty", hint: "Select photos in the timeline and choose Add to album." };
     if ("tag" in view) return { title: "No photos with this tag", hint: "Tags appear here as you add them to photos." };
+    if ("trip" in view) return { title: "This trip is empty", hint: "Its photos may be hidden or no longer in your folders." };
     return { title: "This event is empty", hint: "Its photos may be hidden or no longer in your folders." };
   }
   return {
@@ -39,6 +42,7 @@ function emptyState(view: View): { title: string; hint: string } {
     videos: { title: "No videos", hint: "Videos in your folders will appear here." },
     hidden: { title: "Nothing hidden", hint: "Hidden photos stay in your folders but leave the timeline." },
     events: { title: "", hint: "" },
+    trips: { title: "", hint: "" },
   }[view];
 }
 
@@ -70,7 +74,7 @@ export default function App() {
     const current = viewRef.current;
     const currentFilter = filterRef.current;
     const currentKey = `${viewKey(current)}|${filterKey(currentFilter)}`;
-    if (current === "events") {
+    if (isPage(current)) {
       setStats(await api.stats());
       return;
     }
@@ -238,11 +242,13 @@ export default function App() {
           onRemove={removeRoot}
         />
         <main className="content">
-          {!busy && view !== "events" && stats && stats.assets > 0 && <FilterBar filter={filter} roots={roots} onChange={setFilter} />}
+          {!busy && !isPage(view) && stats && stats.assets > 0 && <FilterBar filter={filter} roots={roots} onChange={setFilter} />}
           {busy ? (
             <div className="empty">{busy}</div>
           ) : view === "events" ? (
             <EventsPage version={eventsVersion} onError={report} />
+          ) : view === "trips" ? (
+            <TripsPage version={eventsVersion} onError={report} />
           ) : current && current.days.length > 0 ? (
             <PhotosView
               key={key}

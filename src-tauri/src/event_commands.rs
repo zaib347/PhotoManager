@@ -1,15 +1,16 @@
-//! Commands for events: automatic groups of photos taken close together.
+//! Commands for events (photos taken close together) and trips (days away from home).
 
 use std::sync::Arc;
 
 use photo_core::events::{self, EventSummary};
 use photo_core::places;
+use photo_core::trips::{self, TripSummary};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{AppState, CmdResult, blocking};
 
-/// Looks up places and groups events once for an existing library, after upgrading to
-/// a version with them. Later scans keep both up to date themselves.
+/// Looks up places and finds events and trips once for an existing library, after
+/// upgrading to a version with them. Later scans keep them up to date themselves.
 pub fn catch_up(app: &AppHandle, state: &Arc<AppState>) {
     let (app, state) = (app.clone(), state.clone());
     std::thread::spawn(move || {
@@ -25,18 +26,54 @@ pub fn catch_up(app: &AppHandle, state: &Arc<AppState>) {
                 Err(e) => crate::diag::log(format!("place lookup failed: {e}")),
             }
         }
-        if !needed {
-            return;
-        }
-        let started = std::time::Instant::now();
-        match events::detect(&mut state.library.write()) {
-            Ok(()) => {
-                crate::diag::log(format!("events detected in {:?}", started.elapsed()));
-                let _ = app.emit("events-changed", ());
+        let mut changed = false;
+        if needed {
+            let started = std::time::Instant::now();
+            match events::detect(&mut state.library.write()) {
+                Ok(()) => {
+                    crate::diag::log(format!("events detected in {:?}", started.elapsed()));
+                    changed = true;
+                }
+                Err(e) => crate::diag::log(format!("event detection failed: {e}")),
             }
-            Err(e) => crate::diag::log(format!("event detection failed: {e}")),
+        }
+        if needed || matches!(trips::needs_detection(&state.library.read()), Ok(true)) {
+            let started = std::time::Instant::now();
+            match trips::detect(&mut state.library.write()) {
+                Ok(()) => {
+                    crate::diag::log(format!("trips detected in {:?}", started.elapsed()));
+                    changed = true;
+                }
+                Err(e) => crate::diag::log(format!("trip detection failed: {e}")),
+            }
+        }
+        if changed {
+            let _ = app.emit("events-changed", ());
         }
     });
+}
+
+#[tauri::command]
+pub async fn list_trips(state: State<'_, Arc<AppState>>) -> CmdResult<Vec<TripSummary>> {
+    blocking(&state, move |s| trips::list(&s.library.read())).await
+}
+
+#[tauri::command]
+pub async fn get_trip(state: State<'_, Arc<AppState>>, id: i64) -> CmdResult<Option<TripSummary>> {
+    blocking(&state, move |s| trips::get(&s.library.read(), id)).await
+}
+
+#[tauri::command]
+pub async fn rename_trip(state: State<'_, Arc<AppState>>, id: i64, title: String) -> CmdResult<()> {
+    blocking(&state, move |s| {
+        trips::rename(&s.library.write(), id, &title)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn remove_trip(state: State<'_, Arc<AppState>>, id: i64) -> CmdResult<()> {
+    blocking(&state, move |s| trips::remove(&s.library.write(), id)).await
 }
 
 #[tauri::command]

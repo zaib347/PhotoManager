@@ -1,11 +1,14 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-/** "events" is the Events overview page; the others are timelines. */
-export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | "events";
-export type View = BuiltinView | { album: number } | { tag: number } | { event: number };
+/** "events" and "trips" are overview pages; the others are timelines. */
+export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | "events" | "trips";
+export type View = BuiltinView | { album: number } | { tag: number } | { event: number } | { trip: number };
+/** Views that are pages of cards rather than timelines. */
+export type PageView = "events" | "trips";
+export const isPage = (view: View): view is PageView => view === "events" || view === "trips";
 /** Views the backend can lay out as a timeline. */
-export type TimelineView = Exclude<View, "events">;
+export type TimelineView = Exclude<View, PageView>;
 
 /** Stable string identity for a view (React keys, comparisons). */
 export const viewKey = (view: View) =>
@@ -15,7 +18,9 @@ export const viewKey = (view: View) =>
       ? `album:${view.album}`
       : "tag" in view
         ? `tag:${view.tag}`
-        : `event:${view.event}`;
+        : "trip" in view
+          ? `trip:${view.trip}`
+          : `event:${view.event}`;
 
 export type Named = { id: number; name: string };
 
@@ -95,7 +100,25 @@ export type EventSummary = {
   edited: boolean;
 };
 
-export type DayMemory = { day: number; yearsAgo: number; count: number; coverIds: number[] };
+export type TripSummary = {
+  id: number;
+  /** null until named; show its places instead. */
+  title: string | null;
+  /** Local days, inclusive. */
+  firstDay: number;
+  lastDay: number;
+  count: number;
+  coverId: number | null;
+  /** The most photographed towns, in visit order. */
+  places: Place[];
+  /** Every town visited, and their countries in visit order. */
+  placeCount: number;
+  countries: string[];
+  /** Renamed; detection leaves its days alone. */
+  edited: boolean;
+};
+
+export type DayMemory ={ day: number; yearsAgo: number; count: number; coverIds: number[] };
 
 /** Wall-clock ms (the time as shown, in each photo's own zone). */
 export type WallRange = { first: number; last: number };
@@ -163,6 +186,8 @@ export type AssetDetails = {
   /** The clip of a Live Photo. */
   liveClipId: number | null;
   event: EventSummary | null;
+  /** The trip this item's day belongs to. */
+  trip: TripSummary | null;
 };
 
 export type ScanProgress = {
@@ -223,6 +248,10 @@ export const api = {
   splitEvent: (id: number, atAsset: number) => invoke<number>("split_event", { id, atAsset }),
   createEvent: (ids: number[], title: string) => invoke<number>("create_event", { ids, title }),
   removeEvent: (id: number) => invoke<void>("remove_event", { id }),
+  listTrips: () => invoke<TripSummary[]>("list_trips"),
+  trip: (id: number) => invoke<TripSummary | null>("get_trip", { id }),
+  renameTrip: (id: number, title: string) => invoke<void>("rename_trip", { id, title }),
+  removeTrip: (id: number) => invoke<void>("remove_trip", { id }),
   listRoots: () => invoke<RootInfo[]>("list_roots"),
   scanningRoots: () => invoke<number[]>("scanning_roots"),
   addRoot: (path: string) => invoke<number>("add_root", { path }),
