@@ -54,6 +54,15 @@ export type AlbumInfo = {
 
 export type TagInfo = { id: number; name: string; count: number };
 
+export type DayMemory = { day: number; yearsAgo: number; count: number; coverIds: number[] };
+
+/** Wall-clock ms (the time as shown, in each photo's own zone). */
+export type WallRange = { first: number; last: number };
+
+/** Today's date on this computer, as a local day number. */
+export const todayLocalDay = () =>
+  Math.floor((Date.now() - new Date().getTimezoneOffset() * 60_000) / 86_400_000);
+
 /** Every day that has assets, newest first (parallel arrays). */
 export type Layout = { days: number[]; counts: number[] };
 
@@ -158,6 +167,11 @@ export const api = {
   removeTag: (ids: number[], tagId: number) => invoke<void>("remove_tag", { ids, tagId }),
   renameTag: (id: number, name: string) => invoke<void>("rename_tag", { id, name }),
   deleteTag: (id: number) => invoke<void>("delete_tag", { id }),
+  onThisDay: (today: number) => invoke<DayMemory[]>("on_this_day", { today }),
+  dateRange: (ids: number[]) => invoke<WallRange | null>("date_range", { ids }),
+  shiftDates: (ids: number[], deltaMs: number) => invoke<number>("shift_dates", { ids, deltaMs }),
+  restoreDates: (ids: number[]) => invoke<number>("restore_dates", { ids }),
+  assetIds: (view: View, filter: Filter) => invoke<number[]>("asset_ids", { view, filter }),
   listRoots: () => invoke<RootInfo[]>("list_roots"),
   scanningRoots: () => invoke<number[]>("scanning_roots"),
   addRoot: (path: string) => invoke<number>("add_root", { path }),

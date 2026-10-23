@@ -5,11 +5,13 @@
 
 pub mod assets;
 pub mod collections;
+pub mod dates;
 pub mod db;
 pub mod hash;
 pub mod library;
 pub mod live;
 pub mod media;
+pub mod memories;
 pub mod os_thumb;
 pub mod scan;
 pub mod schema;

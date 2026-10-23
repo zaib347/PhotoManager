@@ -89,7 +89,16 @@ export default function App() {
   }, [reloadCollections, report]);
 
   const collections = useMemo<Collections>(
-    () => ({ albums, tags, reload: reloadCollections, navigate: setView }),
+    () => ({
+      albums,
+      tags,
+      reload: reloadCollections,
+      navigate: setView,
+      showDay: (day: number) => {
+        setView("all");
+        setFilter({ fromDay: day, toDay: day });
+      },
+    }),
     [albums, tags, reloadCollections],
   );
 

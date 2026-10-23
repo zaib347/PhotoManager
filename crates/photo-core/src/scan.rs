@@ -469,13 +469,33 @@ fn insert_asset(conn: &Connection, kind: MediaKind, m: &Metadata) -> Result<i64>
     Ok(conn.last_insert_rowid())
 }
 
+/// Refreshes metadata after a file's content changed. Two things are kept: a Live
+/// Photo stays live, and a date the user corrected stays corrected (the newly
+/// extracted date becomes the one "restore original" goes back to).
 fn update_asset(conn: &Connection, id: i64, kind: MediaKind, m: &Metadata) -> Result<()> {
-    conn.prepare_cached(
-        "UPDATE assets SET media_kind = ?2, taken_at = ?3, taken_src = ?4, tz_offset_min = ?5,
-             local_day = ?6, width = ?7, height = ?8, orientation = ?9, duration_ms = ?10,
+    let corrected =
+        conn.prepare_cached(
+            "UPDATE user_meta SET original_taken_at = ?2, original_tz_offset_min = ?3,
+                 original_taken_src = ?4
+             WHERE asset_id = ?1 AND corrected_time IS NOT NULL",
+        )?
+        .execute(params![
+            id,
+            m.taken_at,
+            m.tz_offset_min,
+            m.taken_src.map(|s| s as u8)
+        ])? > 0;
+    let dates = if corrected {
+        ""
+    } else {
+        "taken_at = ?3, taken_src = ?4, tz_offset_min = ?5, local_day = ?6,"
+    };
+    conn.prepare_cached(&format!(
+        "UPDATE assets SET media_kind = CASE WHEN media_kind = 2 AND ?2 = 0 THEN 2 ELSE ?2 END,
+             {dates} width = ?7, height = ?8, orientation = ?9, duration_ms = ?10,
              camera_make = ?11, camera_model = ?12, lat = ?13, lon = ?14, phash = NULL, blur = NULL
-         WHERE id = ?1",
-    )?
+         WHERE id = ?1"
+    ))?
     .execute(params![
         id,
         kind as u8,

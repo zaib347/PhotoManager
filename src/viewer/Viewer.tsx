@@ -17,6 +17,8 @@ type Props = {
   onAddTag: (ids: number[], name: string) => Promise<void>;
   onRemoveTag: (ids: number[], tagId: number) => Promise<void>;
   onNavigate: (view: View) => void;
+  /** The timeline must refresh when a date changes (items move between days). */
+  onDatesChanged: () => Promise<void>;
 };
 
 function readShowInfo() {
@@ -28,7 +30,17 @@ function readShowInfo() {
 }
 
 /** Full-window viewer that steps through the same order as the timeline grid. */
-export function Viewer({ store, start, onClose, onFavorite, onHidden, onAddTag, onRemoveTag, onNavigate }: Props) {
+export function Viewer({
+  store,
+  start,
+  onClose,
+  onFavorite,
+  onHidden,
+  onAddTag,
+  onRemoveTag,
+  onNavigate,
+  onDatesChanged,
+}: Props) {
   useSyncExternalStore(store.subscribe, store.getVersion);
   const [pos, setPos] = useState(start);
   const [asset, setAsset] = useState<AssetDetails | null>(null);
@@ -239,6 +251,13 @@ export function Viewer({ store, start, onClose, onFavorite, onHidden, onAddTag, 
             onAddTag={(name) => asset && onAddTag([asset.id], name).then(refreshDetails)}
             onRemoveTag={(tagId) => asset && onRemoveTag([asset.id], tagId).then(refreshDetails)}
             onNavigate={onNavigate}
+            onRestoreDate={() =>
+              asset &&
+              api
+                .restoreDates([asset.id])
+                .then(onDatesChanged)
+                .then(refreshDetails)
+            }
           />
         )}
       </div>
