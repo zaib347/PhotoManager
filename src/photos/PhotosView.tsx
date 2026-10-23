@@ -3,6 +3,7 @@ import { api, isFilterEmpty, type Filter, type Layout, type TimelineView } from 
 import { AlbumHeader } from "../collections/AlbumHeader";
 import { useCollections } from "../collections/context";
 import { EventHeader } from "../events/EventHeader";
+import { TripHeader } from "../trips/TripHeader";
 import { DayStore, type Position } from "../timeline/dayStore";
 import { Timeline } from "../timeline/Timeline";
 import { Viewer } from "../viewer/Viewer";
@@ -27,6 +28,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
   const albumId = typeof view === "object" && "album" in view ? view.album : null;
   const album = albumId === null ? undefined : collections.albums.find((a) => a.id === albumId);
   const eventId = typeof view === "object" && "event" in view ? view.event : null;
+  const tripId = typeof view === "object" && "trip" in view ? view.trip : null;
   // Bumped after edits that change this event's dates or members, to refresh its header.
   const [eventVersion, setEventVersion] = useState(0);
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
@@ -159,6 +161,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
       {view === "all" && isFilterEmpty(filter) && selection.size === 0 && <OnThisDay />}
       {album && <AlbumHeader key={`${album.id}:${album.name}`} album={album} onError={onError} />}
       {eventId !== null && <EventHeader id={eventId} version={eventVersion} onError={onError} />}
+      {tripId !== null && <TripHeader id={tripId} version={eventVersion} onError={onError} />}
       {selection.size > 0 && (
         <SelectionBar
           count={selection.size}

@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use photo_core::db::Db;
 use photo_core::timeline::{Filter, View};
-use photo_core::{assets, events, library, places, schema, synth, thumbs, timeline};
+use photo_core::{assets, events, library, places, schema, synth, thumbs, timeline, trips};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 
 const VOLUME_POLL: Duration = Duration::from_secs(5);
@@ -228,6 +228,7 @@ async fn generate_synthetic(
         }
         places::assign(&s.library)?;
         events::detect(&mut s.library.write())?;
+        trips::detect(&mut s.library.write())?;
         Ok(started.elapsed().as_millis() as u64)
     })
     .await?;
@@ -240,7 +241,8 @@ async fn clear_library(app: AppHandle, state: State<'_, Arc<AppState>>) -> CmdRe
     blocking(&state, |s| {
         thumbs::clear(&s.thumbs.write())?;
         synth::clear(&s.library.write())?;
-        events::detect(&mut s.library.write())
+        events::detect(&mut s.library.write())?;
+        trips::detect(&mut s.library.write())
     })
     .await?;
     let _ = app.emit("events-changed", ());
@@ -316,6 +318,10 @@ pub fn run() {
             event_commands::split_event,
             event_commands::create_event,
             event_commands::remove_event,
+            event_commands::list_trips,
+            event_commands::get_trip,
+            event_commands::rename_trip,
+            event_commands::remove_trip,
             collection_commands::list_albums,
             collection_commands::create_album,
             collection_commands::rename_album,

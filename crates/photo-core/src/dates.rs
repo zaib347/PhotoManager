@@ -77,6 +77,7 @@ pub fn shift(conn: &mut Connection, ids: &[i64], delta_ms: i64) -> Result<usize>
     tx.commit()?;
     timeline::rebuild_day_buckets(conn)?;
     events::detect(conn)?;
+    crate::trips::detect(conn)?;
     Ok(changed)
 }
 
@@ -118,5 +119,6 @@ pub fn restore(conn: &mut Connection, ids: &[i64]) -> Result<usize> {
     tx.commit()?;
     timeline::rebuild_day_buckets(conn)?;
     events::detect(conn)?;
+    crate::trips::detect(conn)?;
     Ok(restored)
 }

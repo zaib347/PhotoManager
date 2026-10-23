@@ -4,6 +4,7 @@ import { useCollections } from "../collections/context";
 import { TagInput } from "../collections/TagInput";
 import { fileName, formatBytes, formatDuration, formatOffset, formatTakenAt, placeLabel } from "../format";
 import { eventTitle } from "../events/format";
+import { tripTitle } from "../trips/format";
 
 const TIME_SOURCES = ["from photo metadata", "from video metadata", "from the file name", "from the file's modified date", "set by you"];
 
@@ -85,13 +86,20 @@ export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate, onRestoreD
         <TagInput tags={tags} exclude={new Set(asset.tags.map((t) => t.id))} onAdd={onAddTag} />
       </section>
 
-      {asset.event && (
+      {(asset.event || asset.trip) && (
         <section>
-          <h3>Event</h3>
+          <h3>{asset.event && asset.trip ? "Event and trip" : asset.event ? "Event" : "Trip"}</h3>
           <div className="chips">
-            <button className="chip link" onClick={() => onNavigate({ event: asset.event!.id })}>
-              {eventTitle(asset.event)}
-            </button>
+            {asset.event && (
+              <button className="chip link" onClick={() => onNavigate({ event: asset.event!.id })}>
+                {eventTitle(asset.event)}
+              </button>
+            )}
+            {asset.trip && (
+              <button className="chip link" onClick={() => onNavigate({ trip: asset.trip!.id })}>
+                {tripTitle(asset.trip)}
+              </button>
+            )}
           </div>
         </section>
       )}

@@ -51,6 +51,7 @@ pub struct AssetDetails {
     /// The clip of a Live Photo.
     pub live_clip_id: Option<i64>,
     pub event: Option<crate::events::EventSummary>,
+    pub trip: Option<crate::trips::TripSummary>,
 }
 
 pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
@@ -89,6 +90,7 @@ pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
                     tags: Vec::new(),
                     live_clip_id: None,
                     event: None,
+                    trip: None,
                 })
             },
         )
@@ -123,6 +125,7 @@ pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
     asset.tags = collections::tags_of(conn, id)?;
     asset.live_clip_id = crate::live::clip_of(conn, id)?;
     asset.event = crate::events::of_asset(conn, id)?;
+    asset.trip = crate::trips::of_day(conn, asset.local_day)?;
     Ok(Some(asset))
 }
 

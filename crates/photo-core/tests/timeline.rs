@@ -1,6 +1,6 @@
 use photo_core::db::Db;
 use photo_core::timeline::{Filter, View};
-use photo_core::{places, schema, synth, thumbs, timeline};
+use photo_core::{places, schema, synth, thumbs, timeline, trips};
 use rusqlite::Connection;
 
 fn library() -> Connection {
@@ -16,7 +16,7 @@ fn migrations_are_idempotent() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 8);
+    assert_eq!(version, 9);
 }
 
 #[test]
@@ -77,6 +77,39 @@ fn place_filters_match_their_options() {
     };
     let london = options.countries.iter().find(|c| c.code == "GB").unwrap();
     assert_eq!(total(&both), home.count + london.count);
+}
+
+#[test]
+fn synthetic_trips_leave_home_and_show_their_days() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::open(&dir.path().join("lib.sqlite"), 1, schema::migrate_library).unwrap();
+    synth::generate(&mut db.write(), 20_000, 7).unwrap();
+    places::assign(&db).unwrap();
+    trips::detect(&mut db.write()).unwrap();
+    let found = trips::list(&db.read()).unwrap();
+    assert!(
+        !found.is_empty(),
+        "synthetic libraries have multi-day trips"
+    );
+    for trip in &found {
+        assert!(trip.last_day > trip.first_day);
+        assert!(
+            trip.places.iter().all(|p| p.name != "Lahore"),
+            "home is never a trip stop"
+        );
+        let layout =
+            timeline::layout(&db.read(), View::Trip(trip.id), &Default::default()).unwrap();
+        assert!(
+            layout
+                .days
+                .iter()
+                .all(|d| (trip.first_day..=trip.last_day).contains(d))
+        );
+        assert_eq!(
+            layout.counts.iter().map(|&c| c as i64).sum::<i64>(),
+            trip.count
+        );
+    }
 }
 
 #[test]
