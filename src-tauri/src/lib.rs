@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use photo_core::db::Db;
 use photo_core::timeline::{Filter, View};
-use photo_core::{assets, library, schema, synth, thumbs, timeline};
+use photo_core::{assets, events, library, places, schema, synth, thumbs, timeline};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 
 const VOLUME_POLL: Duration = Duration::from_secs(5);
@@ -208,29 +208,43 @@ async fn cancel_scan(state: State<'_, Arc<AppState>>, root_id: i64) -> CmdResult
     Ok(())
 }
 
-/// Replaces synthetic test assets with `count` new ones. Returns elapsed milliseconds.
+/// Replaces synthetic test assets with `count` new ones, then gives them places and
+/// events like a scan would. Returns elapsed milliseconds.
 /// Thumbnails are cleared wholesale because asset ids can be reused after deletion;
 /// real thumbnails regenerate on demand.
 #[tauri::command]
-async fn generate_synthetic(state: State<'_, Arc<AppState>>, count: usize) -> CmdResult<u64> {
-    blocking(&state, move |s| {
+async fn generate_synthetic(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    count: usize,
+) -> CmdResult<u64> {
+    let ms = blocking(&state, move |s| {
         let started = Instant::now();
         thumbs::clear(&s.thumbs.write())?;
-        let mut library = s.library.write();
-        synth::clear(&library)?;
-        synth::generate(&mut library, count, 1)?;
+        {
+            let mut library = s.library.write();
+            synth::clear(&library)?;
+            synth::generate(&mut library, count, 1)?;
+        }
+        places::assign(&s.library)?;
+        events::detect(&mut s.library.write())?;
         Ok(started.elapsed().as_millis() as u64)
     })
-    .await
+    .await?;
+    let _ = app.emit("events-changed", ());
+    Ok(ms)
 }
 
 #[tauri::command]
-async fn clear_library(state: State<'_, Arc<AppState>>) -> CmdResult<()> {
+async fn clear_library(app: AppHandle, state: State<'_, Arc<AppState>>) -> CmdResult<()> {
     blocking(&state, |s| {
         thumbs::clear(&s.thumbs.write())?;
-        synth::clear(&s.library.write())
+        synth::clear(&s.library.write())?;
+        events::detect(&mut s.library.write())
     })
-    .await
+    .await?;
+    let _ = app.emit("events-changed", ());
+    Ok(())
 }
 
 /// Watches for drives being plugged in or removed and tells the UI.
