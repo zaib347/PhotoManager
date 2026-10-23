@@ -3,6 +3,7 @@
 //! This crate must stay free of Tauri and UI concerns so it can be tested with
 //! `cargo test`, benchmarked from examples, and reused by other front ends.
 
+pub mod assets;
 pub mod db;
 pub mod hash;
 pub mod library;

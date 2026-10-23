@@ -1,3 +1,4 @@
+use photo_core::timeline::View;
 use photo_core::{schema, synth, thumbs, timeline};
 use rusqlite::Connection;
 
@@ -22,7 +23,7 @@ fn layout_matches_day_assets() {
     let mut conn = library();
     synth::generate(&mut conn, 10_000, 42).unwrap();
 
-    let layout = timeline::layout(&conn).unwrap();
+    let layout = timeline::layout(&conn, View::All).unwrap();
     assert_eq!(
         layout.counts.iter().map(|&c| c as usize).sum::<usize>(),
         10_000
@@ -33,7 +34,7 @@ fn layout_matches_day_assets() {
     );
 
     let sample: Vec<i64> = layout.days.iter().step_by(7).copied().collect();
-    for day in timeline::day_assets(&conn, &sample).unwrap() {
+    for day in timeline::day_assets(&conn, View::All, &sample).unwrap() {
         let i = layout.days.iter().position(|&d| d == day.day).unwrap();
         assert_eq!(day.ids.len() as u32, layout.counts[i]);
         assert_eq!(day.ids.len(), day.kinds.len());

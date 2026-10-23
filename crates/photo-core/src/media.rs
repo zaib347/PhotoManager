@@ -38,6 +38,24 @@ const VIDEO_EXTS: &[&str] = &[
 ];
 const ISO_BMFF_VIDEO_EXTS: &[&str] = &["mp4", "mov", "m4v", "3gp"];
 
+/// MIME type for formats a webview can show natively. `None` means the file has to be
+/// decoded in Rust (photos) or opened in the system player (videos).
+pub fn web_mime(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    Some(match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "avif" => "image/avif",
+        // QuickTime files are usually H.264/HEVC in an MP4-compatible container.
+        "mp4" | "m4v" | "mov" => "video/mp4",
+        "webm" => "video/webm",
+        "3gp" => "video/3gpp",
+        _ => return None,
+    })
+}
+
 pub fn kind_of(path: &Path) -> Option<MediaKind> {
     let ext = path.extension()?.to_str()?.to_ascii_lowercase();
     if PHOTO_EXTS.contains(&ext.as_str()) {

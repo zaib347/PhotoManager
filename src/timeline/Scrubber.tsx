@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { Layout } from "../api";
-import { formatMonth, sectionAt, yearOf, type Grid } from "./grid";
+import { formatMonth, yearOf } from "../format";
+import { sectionAt, type Grid } from "./grid";
 
 const MIN_LABEL_GAP = 16;
 

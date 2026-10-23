@@ -8,7 +8,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use photo_core::db::Db;
-use photo_core::{library, schema, synth, thumbs, timeline};
+use photo_core::timeline::View;
+use photo_core::{assets, library, schema, synth, thumbs, timeline};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 const VOLUME_POLL: Duration = Duration::from_secs(5);
@@ -44,17 +45,64 @@ async fn library_stats(state: State<'_, Arc<AppState>>) -> CmdResult<timeline::S
 }
 
 #[tauri::command]
-async fn get_layout(state: State<'_, Arc<AppState>>) -> CmdResult<timeline::Layout> {
-    blocking(&state, |s| timeline::layout(&s.library.read())).await
+async fn get_layout(
+    state: State<'_, Arc<AppState>>,
+    view: Option<View>,
+) -> CmdResult<timeline::Layout> {
+    blocking(&state, move |s| {
+        timeline::layout(&s.library.read(), view.unwrap_or_default())
+    })
+    .await
 }
 
 #[tauri::command]
 async fn get_day_assets(
     state: State<'_, Arc<AppState>>,
+    view: Option<View>,
     days: Vec<i64>,
 ) -> CmdResult<Vec<timeline::DayAssets>> {
     blocking(&state, move |s| {
-        timeline::day_assets(&s.library.read(), &days)
+        timeline::day_assets(&s.library.read(), view.unwrap_or_default(), &days)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn get_asset(
+    state: State<'_, Arc<AppState>>,
+    id: i64,
+) -> CmdResult<Option<assets::AssetDetails>> {
+    blocking(&state, move |s| assets::details(&s.library.read(), id)).await
+}
+
+#[tauri::command]
+async fn set_favorite(
+    state: State<'_, Arc<AppState>>,
+    ids: Vec<i64>,
+    favorite: bool,
+) -> CmdResult<()> {
+    blocking(&state, move |s| {
+        assets::set_favorite(&mut s.library.write(), &ids, favorite)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_rating(
+    state: State<'_, Arc<AppState>>,
+    ids: Vec<i64>,
+    rating: Option<u8>,
+) -> CmdResult<()> {
+    blocking(&state, move |s| {
+        assets::set_rating(&mut s.library.write(), &ids, rating)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_hidden(state: State<'_, Arc<AppState>>, ids: Vec<i64>, hidden: bool) -> CmdResult<()> {
+    blocking(&state, move |s| {
+        assets::set_hidden(&mut s.library.write(), &ids, hidden)
     })
     .await
 }
@@ -187,11 +235,16 @@ pub fn run() {
             app.manage(state);
             Ok(())
         })
-        .register_asynchronous_uri_scheme_protocol("thumb", protocol::handle)
+        .register_asynchronous_uri_scheme_protocol("thumb", protocol::handle_thumb)
+        .register_asynchronous_uri_scheme_protocol("media", protocol::handle_media)
         .invoke_handler(tauri::generate_handler![
             library_stats,
             get_layout,
             get_day_assets,
+            get_asset,
+            set_favorite,
+            set_rating,
+            set_hidden,
             list_roots,
             scanning_roots,
             add_root,

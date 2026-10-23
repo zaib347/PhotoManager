@@ -126,6 +126,27 @@ Realistic solo estimate: **9–12 months** to paid 1.0.
 - [ ] Not yet: HEIC/RAW decoding (M5), video poster frames (M2), Live Photo pairing (M2),
       non-UTF-8 paths on Linux (counted as errors), filesystem UUIDs on macOS/Linux (M5)
 
+## M2 checklist
+
+Batch 1 (browsing core):
+- [x] Views: Photos, Favorites, Videos, Hidden (`View` filter shared by layout and day queries)
+- [x] Full-screen viewer: fit, wheel zoom at cursor, drag pan, double-click zoom, ←/→ across days,
+      neighbour preloading, blurred thumbnail while the original loads
+- [x] `media://` protocol: originals served directly (byte ranges for video), Rust-decoded preview
+      for formats the webview can't show, clear message + "Open in default app" otherwise
+- [x] Video playback in the viewer (formats the webview supports)
+- [x] Info panel: capture time + its source (warns when it is only the file date), camera,
+      dimensions, duration, GPS, every copy with drive status and "Show in folder"
+- [x] Selection: click/Ctrl/Shift ranges across days, select a whole day, Esc to clear
+- [x] Favorite / rating / hide for one item (viewer keys F, 0–5) or a selection
+
+Batch 2:
+- [ ] Albums (create, add selection, album view) and tags
+- [ ] Filters: media type, camera, folder/drive, date range
+- [ ] Video poster frames (ffmpeg on demand) — grid shows placeholders for videos until then
+- [ ] Live Photo pairing
+- [ ] Incremental day-bucket updates on hide (currently a full rebuild, ~0.5 s at 1M)
+
 ## M0 results
 
 ### `scale_bench`, 1M synthetic assets (release, dev workstation, 2026-10-23)

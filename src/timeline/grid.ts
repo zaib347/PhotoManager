@@ -3,7 +3,6 @@ import type { Layout } from "../api";
 export const HEADER_H = 44;
 export const GAP = 4;
 const TARGET_CELL = 180;
-const DAY_MS = 86_400_000;
 
 /** Pixel geometry of the whole timeline, derived only from day counts. */
 export type Grid = {
@@ -39,21 +38,3 @@ export function sectionAt(tops: Float64Array, y: number): number {
   }
   return Math.max(0, lo);
 }
-
-// `day` is already a local day number, so format it as UTC to avoid a second shift.
-const dayFormat = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-const monthFormat = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-export const formatDay = (day: number) => dayFormat.format(day * DAY_MS);
-export const formatMonth = (day: number) => monthFormat.format(day * DAY_MS);
-export const yearOf = (day: number) => new Date(day * DAY_MS).getUTCFullYear();

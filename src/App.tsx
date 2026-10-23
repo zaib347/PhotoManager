@@ -1,14 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, events, type Layout, type RootInfo, type ScanFinished, type ScanProgress, type Stats } from "./api";
+import {
+  api,
+  events,
+  type Layout,
+  type RootInfo,
+  type ScanFinished,
+  type ScanProgress,
+  type Stats,
+  type View,
+} from "./api";
 import { LibraryPanel } from "./library/LibraryPanel";
-import { Timeline } from "./timeline/Timeline";
+import { PhotosView } from "./photos/PhotosView";
 import "./App.css";
 
 /** How often the timeline refreshes while a scan is adding photos. */
 const LIVE_RELOAD_MS = 3000;
 
+const EMPTY: Record<View, { title: string; hint: string }> = {
+  all: { title: "No photos yet", hint: "Add a folder on the left to start building your timeline." },
+  favorites: { title: "No favorites yet", hint: "Press F in the viewer, or select photos and choose Favorite." },
+  videos: { title: "No videos", hint: "Videos in your folders will appear here." },
+  hidden: { title: "Nothing hidden", hint: "Hidden photos stay in your folders but leave the timeline." },
+};
+
 export default function App() {
-  const [layout, setLayout] = useState<Layout | null>(null);
+  const [view, setView] = useState<View>("all");
+  // The layout is tagged with its view so a view switch never renders a stale layout.
+  const [loaded, setLoaded] = useState<{ view: View; layout: Layout } | null>(null);
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const [stats, setStats] = useState<Stats | null>(null);
   const [roots, setRoots] = useState<RootInfo[]>([]);
   const [progress, setProgress] = useState(new Map<number, ScanProgress>());
@@ -17,17 +37,21 @@ export default function App() {
   const lastLiveReload = useRef(0);
 
   const reloadTimeline = useCallback(async () => {
-    const [s, l] = await Promise.all([api.stats(), api.layout()]);
+    const current = viewRef.current;
+    const [s, layout] = await Promise.all([api.stats(), api.layout(current)]);
     setStats(s);
-    setLayout(l);
+    if (viewRef.current === current) setLoaded({ view: current, layout });
   }, []);
 
   const reloadRoots = useCallback(async () => setRoots(await api.listRoots()), []);
 
-  const report = (e: unknown) => setNotice(`Failed: ${e}`);
+  const report = useCallback((e: unknown) => setNotice(`Failed: ${e}`), []);
 
   useEffect(() => {
     reloadTimeline().catch(report);
+  }, [view, reloadTimeline, report]);
+
+  useEffect(() => {
     reloadRoots().catch(report);
     // Scans resumed by the backend at startup emit progress, but seed the map in case
     // a scan is between events.
@@ -42,7 +66,7 @@ export default function App() {
         return next;
       }),
     );
-  }, [reloadTimeline, reloadRoots]);
+  }, [reloadRoots, report]);
 
   useEffect(() => {
     const unlisten = [
@@ -66,7 +90,7 @@ export default function App() {
       events.volumesChanged(() => reloadRoots().catch(report)),
     ];
     return () => unlisten.forEach((p) => p.then((off) => off()));
-  }, [reloadTimeline, reloadRoots]);
+  }, [reloadTimeline, reloadRoots, report]);
 
   const run = async (label: string, action: () => Promise<string>) => {
     setBusy(label);
@@ -112,6 +136,8 @@ export default function App() {
     }
   };
 
+  const current = loaded && loaded.view === view ? loaded.layout : null;
+
   return (
     <div className="app">
       <header className="toolbar">
@@ -136,6 +162,8 @@ export default function App() {
       )}
       <div className="body">
         <LibraryPanel
+          view={view}
+          onView={setView}
           roots={roots}
           progress={progress}
           onAdd={addRoot}
@@ -146,14 +174,14 @@ export default function App() {
         <main className="content">
           {busy ? (
             <div className="empty">{busy}</div>
-          ) : layout && layout.days.length > 0 ? (
-            <Timeline layout={layout} />
-          ) : (
+          ) : current && current.days.length > 0 ? (
+            <PhotosView key={view} view={view} layout={current} onLibraryChanged={reloadTimeline} onError={report} />
+          ) : current ? (
             <div className="empty">
-              <h2>No photos yet</h2>
-              <p className="muted">Add a folder on the left to start building your timeline.</p>
+              <h2>{EMPTY[view].title}</h2>
+              <p className="muted">{EMPTY[view].hint}</p>
             </div>
-          )}
+          ) : null}
         </main>
       </div>
     </div>

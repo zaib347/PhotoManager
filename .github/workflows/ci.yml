@@ -49,8 +49,8 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Core tests
-        run: cargo test -p photo-core
+      - name: Tests
+        run: cargo test --workspace
 
       - name: Build desktop app
         run: cargo build -p photomanager

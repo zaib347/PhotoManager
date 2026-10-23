@@ -1,28 +1,45 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, MediaKind, thumbUrl, type DayAssets, type Layout } from "../api";
-import { buildGrid, formatDay, GAP, HEADER_H, sectionAt } from "./grid";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
+import { MediaKind, thumbUrl } from "../api";
+import { formatDay, formatDuration } from "../format";
+import type { DayStore, Position } from "./dayStore";
+import { buildGrid, GAP, HEADER_H, sectionAt } from "./grid";
 import { Scrubber } from "./Scrubber";
 import { useFps } from "./useFps";
 
 const OVERSCAN = 600;
-const MAX_CACHED_DAYS = 4000;
 
-/** Asset ids for a day, tagged with the layout generation they were fetched for. */
-type CachedDay = { gen: number; data: DayAssets };
+type Props = {
+  store: DayStore;
+  selection: ReadonlySet<number>;
+  /** False while an overlay (the viewer) owns the keyboard. */
+  keyboard: boolean;
+  onActivate: (e: MouseEvent, pos: Position, id: number) => void;
+  onToggle: (pos: Position, id: number) => void;
+  onToggleDay: (day: number) => void;
+  /** Scroll so this position is visible (e.g. after closing the viewer). */
+  reveal?: Position | null;
+};
 
 /**
  * Virtualized photo timeline. It owns its scroll offset instead of using native
  * scrolling, because a million-photo grid is taller than browsers allow an element to be.
  */
-export function Timeline({ layout }: { layout: Layout }) {
+export function Timeline({ store, selection, keyboard, onActivate, onToggle, onToggleDay, reveal }: Props) {
+  useSyncExternalStore(store.subscribe, store.getVersion);
+  const layout = store.layout;
   const viewportRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [offset, setOffset] = useState(0);
-  const [, setCacheVersion] = useState(0);
-  const cache = useRef(new Map<number, CachedDay>());
-  const pending = useRef(new Set<number>());
-  const generation = useRef(0);
-  const [lastFetchMs, setLastFetchMs] = useState<number | null>(null);
   const fps = useFps();
 
   useLayoutEffect(() => {
@@ -35,15 +52,17 @@ export function Timeline({ layout }: { layout: Layout }) {
   const grid = useMemo(() => buildGrid(layout, size.width), [layout, size.width]);
   const maxOffset = Math.max(0, grid.total - size.height);
   const clamp = useCallback((y: number) => Math.min(maxOffset, Math.max(0, y)), [maxOffset]);
+  const stride = grid.cell + GAP;
 
   useEffect(() => setOffset((o) => clamp(o)), [clamp]);
 
-  // A new layout (e.g. a scan added photos) marks cached days stale but keeps showing
-  // them, and keeps the scroll position, so live updates don't flicker or jump.
   useEffect(() => {
-    generation.current++;
-    pending.current.clear();
-  }, [layout]);
+    if (!reveal) return;
+    const i = store.indexOf(reveal.day);
+    if (i < 0) return;
+    const y = grid.tops[i] + HEADER_H + Math.floor(reveal.index / grid.cols) * stride;
+    setOffset((o) => (y < o || y + stride > o + size.height ? clamp(y - size.height / 3) : o));
+  }, [reveal, store, grid, stride, size.height, clamp]);
 
   useEffect(() => {
     const el = viewportRef.current!;
@@ -57,7 +76,9 @@ export function Timeline({ layout }: { layout: Layout }) {
   }, [clamp]);
 
   useEffect(() => {
+    if (!keyboard) return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
       const page = size.height * 0.9;
       const deltas: Record<string, number> = {
         PageDown: page,
@@ -74,7 +95,7 @@ export function Timeline({ layout }: { layout: Layout }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [clamp, size.height, maxOffset]);
+  }, [keyboard, clamp, size.height, maxOffset]);
 
   const top = offset - OVERSCAN;
   const bottom = offset + size.height + OVERSCAN;
@@ -87,57 +108,70 @@ export function Timeline({ layout }: { layout: Layout }) {
   const visibleKey = visible.join(",");
 
   useEffect(() => {
-    const missing = visible
-      .map((i) => layout.days[i])
-      .filter((d) => cache.current.get(d)?.gen !== generation.current && !pending.current.has(d));
-    if (missing.length === 0) return;
-    missing.forEach((d) => pending.current.add(d));
-    const gen = generation.current;
-    const started = performance.now();
-    api
-      .dayAssets(missing)
-      .then((result) => {
-        if (gen !== generation.current) return;
-        result.forEach((d) => cache.current.set(d.day, { gen, data: d }));
-        evict(cache.current, new Set(visible.map((i) => layout.days[i])));
-        setLastFetchMs(performance.now() - started);
-        setCacheVersion((v) => v + 1);
-      })
-      .catch((e) => console.error("dayAssets failed", e))
-      .finally(() => missing.forEach((d) => pending.current.delete(d)));
+    const days = visible.map((i) => layout.days[i]);
+    store.ensure(days).catch((e) => console.error("dayAssets failed", e));
     // `visibleKey` captures `visible`; listing the array itself would refetch every render.
-  }, [visibleKey, layout]);
+  }, [visibleKey, layout, store]);
 
+  const selecting = selection.size > 0;
   const nodes: ReactNode[] = [];
-  const stride = grid.cell + GAP;
   for (const i of visible) {
     const day = layout.days[i];
     const count = layout.counts[i];
     const sectionTop = grid.tops[i];
+    const data = store.get(day);
+    const daySelected = !!data && data.ids.length > 0 && data.ids.every((id) => selection.has(id));
     nodes.push(
-      <div key={`h${day}`} className="day-header" style={{ transform: `translate3d(0, ${sectionTop - offset}px, 0)` }}>
+      <div
+        key={`h${day}`}
+        className={`day-header${daySelected ? " selected" : ""}`}
+        style={{ transform: `translate3d(0, ${sectionTop - offset}px, 0)` }}
+      >
+        <button
+          className="check day-check"
+          aria-label={daySelected ? "Deselect day" : "Select day"}
+          onClick={() => onToggleDay(day)}
+        />
         <span>{formatDay(day)}</span>
         <span className="muted">{count.toLocaleString()}</span>
       </div>,
     );
-    const data = cache.current.get(day)?.data;
     const rows = Math.ceil(count / grid.cols);
     const firstRow = Math.max(0, Math.floor((top - sectionTop - HEADER_H) / stride));
     const lastRow = Math.min(rows, Math.ceil((bottom - sectionTop - HEADER_H) / stride));
     for (let r = firstRow; r < lastRow; r++) {
       for (let c = 0; c < grid.cols; c++) {
-        const idx = r * grid.cols + c;
-        if (idx >= count) break;
-        const id = data?.ids[idx];
+        const index = r * grid.cols + c;
+        if (index >= count) break;
+        const id = data?.ids[index];
         const y = sectionTop + HEADER_H + r * stride - offset;
+        const style = { width: grid.cell, height: grid.cell, transform: `translate3d(${c * stride}px, ${y}px, 0)` };
+        if (id === undefined) {
+          nodes.push(<div key={`p${day}-${index}`} className="cell" style={style} />);
+          continue;
+        }
+        const selected = selection.has(id);
+        const duration = data?.durations[index];
         nodes.push(
           <div
-            key={id ?? `p${day}-${idx}`}
-            className="cell"
-            style={{ width: grid.cell, height: grid.cell, transform: `translate3d(${c * stride}px, ${y}px, 0)` }}
+            key={id}
+            className={`cell${selected ? " selected" : ""}`}
+            style={style}
+            onClick={(e) => onActivate(e, { day, index }, id)}
           >
-            {id !== undefined && <img src={thumbUrl(id)} alt="" draggable={false} decoding="async" />}
-            {data?.kinds[idx] === MediaKind.Video && <span className="badge">▶</span>}
+            <img src={thumbUrl(id)} alt="" draggable={false} decoding="async" />
+            <button
+              className="check"
+              aria-label={selected ? "Deselect" : "Select"}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle({ day, index }, id);
+              }}
+            />
+            {data?.kinds[index] === MediaKind.Video && (
+              <span className="badge">▶ {duration ? formatDuration(duration) : ""}</span>
+            )}
+            {data?.favorites[index] === 1 && <span className="fav-badge">♥</span>}
           </div>,
         );
       }
@@ -146,23 +180,14 @@ export function Timeline({ layout }: { layout: Layout }) {
 
   return (
     <div className="timeline">
-      <div ref={viewportRef} className="timeline-viewport" tabIndex={0}>
+      <div ref={viewportRef} className={`timeline-viewport${selecting ? " selecting" : ""}`}>
         {nodes}
       </div>
       <Scrubber layout={layout} grid={grid} offset={offset} maxOffset={maxOffset} onSeek={(y) => setOffset(clamp(y))} />
       <div className="perf">
-        {fps} fps · {nodes.length} nodes · {cache.current.size} days cached
-        {lastFetchMs !== null && ` · last fetch ${lastFetchMs.toFixed(1)} ms`}
+        {fps} fps · {nodes.length} nodes
+        {store.lastFetchMs !== null && ` · last fetch ${store.lastFetchMs.toFixed(1)} ms`}
       </div>
     </div>
   );
-}
-
-function evict(cache: Map<number, CachedDay>, keep: Set<number>) {
-  if (cache.size <= MAX_CACHED_DAYS) return;
-  // Map iterates in insertion order, so the oldest fetches go first.
-  for (const day of cache.keys()) {
-    if (cache.size <= MAX_CACHED_DAYS * 0.75) break;
-    if (!keep.has(day)) cache.delete(day);
-  }
 }

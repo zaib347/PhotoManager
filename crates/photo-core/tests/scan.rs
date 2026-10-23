@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicBool;
 use image::{Rgb, RgbImage};
 use photo_core::db::Db;
 use photo_core::scan::{Scanner, Summary};
+use photo_core::timeline::View;
 use photo_core::{library, schema, thumbs, timeline};
 use rusqlite::params;
 
@@ -102,7 +103,7 @@ fn indexes_supported_files_and_skips_excluded() {
         .unwrap();
     assert_eq!((src, kind), (2, 0), "date should come from the filename");
 
-    let layout = timeline::layout(&f.library.read()).unwrap();
+    let layout = timeline::layout(&f.library.read(), View::All).unwrap();
     assert_eq!(layout.counts.iter().sum::<u32>(), 4);
 }
 
@@ -182,7 +183,7 @@ fn deleted_file_leaves_timeline_after_complete_scan() {
     let s = f.scan();
     assert_eq!(s.missing, 1);
     assert_eq!(f.visible_assets(), 3);
-    let layout = timeline::layout(&f.library.read()).unwrap();
+    let layout = timeline::layout(&f.library.read(), View::All).unwrap();
     assert_eq!(layout.counts.iter().sum::<u32>(), 3);
 }
 
@@ -231,4 +232,40 @@ fn clearing_test_data_keeps_real_assets() {
     assert_eq!(f.visible_assets(), 504);
     photo_core::synth::clear(&f.library.write()).unwrap();
     assert_eq!(f.visible_assets(), 4);
+}
+
+#[test]
+fn favorites_and_hidden_views() {
+    use photo_core::assets;
+    let f = fixture();
+    f.scan();
+    let beach = f.asset_of("2019/beach.jpg");
+    let chart = f.asset_of("chart.png");
+
+    assets::set_favorite(&mut f.library.write(), &[beach], true).unwrap();
+    assets::set_rating(&mut f.library.write(), &[beach], Some(4)).unwrap();
+    assert!(assets::set_rating(&mut f.library.write(), &[beach], Some(9)).is_err());
+    assets::set_hidden(&mut f.library.write(), &[chart], true).unwrap();
+
+    let count = |view| -> u32 {
+        timeline::layout(&f.library.read(), view)
+            .unwrap()
+            .counts
+            .iter()
+            .sum()
+    };
+    assert_eq!(count(View::All), 3, "hidden asset leaves the main timeline");
+    assert_eq!(count(View::Favorites), 1);
+    assert_eq!(count(View::Hidden), 1);
+    assert_eq!(count(View::Videos), 1);
+
+    let d = assets::details(&f.library.read(), beach).unwrap().unwrap();
+    assert!(d.favorite && !d.hidden);
+    assert_eq!(d.rating, Some(4));
+    assert_eq!(d.files.len(), 1);
+    assert!(d.files[0].online && d.files[0].path.ends_with("beach.jpg"));
+
+    let day = timeline::day_assets(&f.library.read(), View::All, &[d.local_day]).unwrap();
+    let i = day[0].ids.iter().position(|&id| id == beach).unwrap();
+    assert_eq!(day[0].favorites[i], 1);
 }

@@ -54,6 +54,17 @@ pub fn from_embedded(jpeg: &[u8], orientation: Option<u8>) -> Result<Vec<u8>> {
     encode_jpeg(&img.to_rgb8())
 }
 
+/// Viewer-sized JPEG for originals the webview cannot display (TIFF etc.).
+pub fn preview(path: &Path, orientation: Option<u8>) -> Result<Vec<u8>> {
+    const MAX_EDGE: u32 = 2048;
+    let mut img = image::open(path)?;
+    if img.width().max(img.height()) > MAX_EDGE {
+        img = img.thumbnail(MAX_EDGE, MAX_EDGE);
+    }
+    orient(&mut img, orientation);
+    encode_jpeg(&img.to_rgb8())
+}
+
 /// Full decode of the original, scaled so the short edge is `GRID_SIZE` (the grid
 /// crops to squares) with the long edge capped for panoramas.
 pub fn from_file(path: &Path, orientation: Option<u8>) -> Result<Vec<u8>> {

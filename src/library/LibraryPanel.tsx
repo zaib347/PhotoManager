@@ -1,7 +1,16 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import type { RootInfo, ScanProgress } from "../api";
+import type { RootInfo, ScanProgress, View } from "../api";
+
+const VIEWS: { id: View; label: string }[] = [
+  { id: "all", label: "Photos" },
+  { id: "favorites", label: "Favorites" },
+  { id: "videos", label: "Videos" },
+  { id: "hidden", label: "Hidden" },
+];
 
 type Props = {
+  view: View;
+  onView: (view: View) => void;
   roots: RootInfo[];
   progress: Map<number, ScanProgress>;
   onAdd: (path: string) => void;
@@ -10,7 +19,7 @@ type Props = {
   onRemove: (root: RootInfo) => void;
 };
 
-export function LibraryPanel({ roots, progress, onAdd, onRescan, onCancel, onRemove }: Props) {
+export function LibraryPanel({ view, onView, roots, progress, onAdd, onRescan, onCancel, onRemove }: Props) {
   const pickFolder = async () => {
     const path = await open({ directory: true, multiple: false, title: "Add a folder to your library" });
     if (typeof path === "string") onAdd(path);
@@ -18,6 +27,18 @@ export function LibraryPanel({ roots, progress, onAdd, onRescan, onCancel, onRem
 
   return (
     <aside className="sidebar">
+      <nav className="views" aria-label="Library">
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            className={`view-link${v.id === view ? " active" : ""}`}
+            aria-current={v.id === view ? "page" : undefined}
+            onClick={() => onView(v.id)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </nav>
       <div className="sidebar-title">
         <span>Folders</span>
         <button onClick={pickFolder}>Add folder</button>

@@ -20,7 +20,7 @@ fn main() -> photo_core::Result<()> {
     println!("insert {count} assets + day buckets: {:?}", t.elapsed());
 
     let t = Instant::now();
-    let layout = timeline::layout(&db.read())?;
+    let layout = timeline::layout(&db.read(), timeline::View::All)?;
     println!("layout ({} days): {:?}", layout.days.len(), t.elapsed());
 
     let busiest = layout.counts.iter().copied().max().unwrap_or(0);
@@ -33,7 +33,7 @@ fn main() -> photo_core::Result<()> {
     for i in 0..jumps {
         let at = (i * 7919) % layout.days.len().max(1);
         let days = &layout.days[at..(at + 10).min(layout.days.len())];
-        fetched += timeline::day_assets(&db.read(), days)?
+        fetched += timeline::day_assets(&db.read(), timeline::View::All, days)?
             .iter()
             .map(|d| d.ids.len())
             .sum::<usize>();
