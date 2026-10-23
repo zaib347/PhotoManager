@@ -144,7 +144,9 @@ Batch 2:
 - [x] Albums: create (sidebar + or from a selection), add/remove, rename, delete, cover,
       album grid (hidden items still show), album chips in the info panel
 - [x] Tags: case-insensitive, add from selection or info panel, tag views, unused tags removed
-- [ ] Filters: media type, camera, folder/drive, date range
+- [x] Filters: type, rating, date range, camera, folder; combine with any view; chips to remove.
+      At 1M assets (indexes added in schema v4): type 89 ms, camera 130 ms, one year 45 ms;
+      indexes cost ~37 MB per million assets
 - [ ] Video poster frames (ffmpeg on demand) — grid shows placeholders for videos until then
 - [ ] Live Photo pairing
 - [ ] Incremental day-bucket updates on hide (currently a full rebuild, ~0.5 s at 1M)

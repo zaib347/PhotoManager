@@ -148,6 +148,11 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     CREATE INDEX idx_asset_tags_tag ON asset_tags (tag_id, asset_id);
     CREATE UNIQUE INDEX idx_tags_name_nocase ON tags (name COLLATE NOCASE);
     ",
+    // v4: filters and the Videos view read only matching rows instead of every asset.
+    "
+    CREATE INDEX idx_assets_kind_day ON assets (media_kind, local_day);
+    CREATE INDEX idx_assets_camera_day ON assets (camera_model, local_day);
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

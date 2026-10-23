@@ -1,4 +1,5 @@
-use rusqlite::{Connection, params};
+use rusqlite::types::Value;
+use rusqlite::{Connection, params_from_iter};
 use serde::{Deserialize, Serialize};
 
 use crate::Result;
@@ -46,6 +47,119 @@ impl View {
 
 const FROM: &str = "FROM assets a LEFT JOIN user_meta u ON u.asset_id = a.id";
 
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MediaFilter {
+    Photo,
+    Video,
+}
+
+/// Narrows any view. Empty fields don't filter. Camera names are matched against the
+/// model (an empty string matches photos with no camera recorded).
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Filter {
+    pub media: Option<MediaFilter>,
+    pub cameras: Vec<String>,
+    pub root_ids: Vec<i64>,
+    /// Inclusive range of local days.
+    pub from_day: Option<i64>,
+    pub to_day: Option<i64>,
+    pub min_rating: Option<u8>,
+}
+
+impl Filter {
+    pub fn is_empty(&self) -> bool {
+        *self == Filter::default()
+    }
+
+    /// Extra `AND …` conditions and their bound values, with placeholders numbered
+    /// from `first`. Integers are inlined; strings are always bound.
+    fn sql(&self, first: usize) -> (String, Vec<Value>) {
+        let mut sql = String::new();
+        let mut values = Vec::new();
+        match self.media {
+            Some(MediaFilter::Photo) => sql.push_str(" AND a.media_kind != 1"),
+            Some(MediaFilter::Video) => sql.push_str(" AND a.media_kind = 1"),
+            None => {}
+        }
+        if !self.cameras.is_empty() {
+            // Written so SQLite can use the camera index (COALESCE would defeat it).
+            let named: Vec<&String> = self.cameras.iter().filter(|c| !c.is_empty()).collect();
+            let mut parts = Vec::new();
+            if !named.is_empty() {
+                let slots: Vec<String> = (0..named.len())
+                    .map(|i| format!("?{}", first + i))
+                    .collect();
+                parts.push(format!("a.camera_model IN ({})", slots.join(", ")));
+                values.extend(named.into_iter().cloned().map(Value::Text));
+            }
+            if self.cameras.iter().any(String::is_empty) {
+                parts.push("a.camera_model IS NULL".to_owned());
+            }
+            sql.push_str(&format!(" AND ({})", parts.join(" OR ")));
+        }
+        if !self.root_ids.is_empty() {
+            let ids: Vec<String> = self.root_ids.iter().map(i64::to_string).collect();
+            sql.push_str(&format!(
+                " AND EXISTS (SELECT 1 FROM files f WHERE f.asset_id = a.id AND f.missing_since IS NULL AND f.root_id IN ({}))",
+                ids.join(", ")
+            ));
+        }
+        if let Some(day) = self.from_day {
+            sql.push_str(&format!(" AND a.local_day >= {day}"));
+        }
+        if let Some(day) = self.to_day {
+            sql.push_str(&format!(" AND a.local_day <= {day}"));
+        }
+        if let Some(rating) = self.min_rating {
+            sql.push_str(&format!(" AND u.rating >= {rating}"));
+        }
+        (sql, values)
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CameraOption {
+    /// Empty string for photos without a recorded camera.
+    pub model: String,
+    pub count: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilterOptions {
+    pub cameras: Vec<CameraOption>,
+    pub first_day: Option<i64>,
+    pub last_day: Option<i64>,
+}
+
+/// Choices for the filter panel, most common cameras first.
+pub fn filter_options(conn: &Connection) -> Result<FilterOptions> {
+    let mut stmt = conn.prepare(
+        "SELECT COALESCE(camera_model, ''), count(*) FROM assets WHERE status = 0
+         GROUP BY 1 ORDER BY 2 DESC LIMIT 100",
+    )?;
+    let cameras = stmt
+        .query_map([], |r| {
+            Ok(CameraOption {
+                model: r.get(0)?,
+                count: r.get(1)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let (first_day, last_day) =
+        conn.query_row("SELECT min(day), max(day) FROM day_buckets", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })?;
+    Ok(FilterOptions {
+        cameras,
+        first_day,
+        last_day,
+    })
+}
+
 /// Every day that has assets, newest first. Parallel arrays keep the IPC payload small.
 #[derive(Serialize)]
 pub struct Layout {
@@ -69,20 +183,22 @@ pub struct Stats {
     pub days: i64,
 }
 
-pub fn layout(conn: &Connection, view: View) -> Result<Layout> {
-    let sql = match view {
-        View::All => "SELECT day, count FROM day_buckets ORDER BY day DESC".to_owned(),
-        _ => format!(
-            "SELECT a.local_day, count(*) {FROM} WHERE {} GROUP BY a.local_day ORDER BY a.local_day DESC",
+pub fn layout(conn: &Connection, view: View, filter: &Filter) -> Result<Layout> {
+    let (extra, values) = filter.sql(1);
+    let sql = if view == View::All && filter.is_empty() {
+        "SELECT day, count FROM day_buckets ORDER BY day DESC".to_owned()
+    } else {
+        format!(
+            "SELECT a.local_day, count(*) {FROM} WHERE {}{extra} GROUP BY a.local_day ORDER BY a.local_day DESC",
             view.condition()
-        ),
+        )
     };
     let mut stmt = conn.prepare_cached(&sql)?;
     let mut layout = Layout {
         days: Vec::new(),
         counts: Vec::new(),
     };
-    let mut rows = stmt.query([])?;
+    let mut rows = stmt.query(params_from_iter(values))?;
     while let Some(row) = rows.next()? {
         layout.days.push(row.get(0)?);
         layout.counts.push(row.get(1)?);
@@ -91,10 +207,16 @@ pub fn layout(conn: &Connection, view: View) -> Result<Layout> {
 }
 
 /// Asset ids for each requested day, newest first within the day.
-pub fn day_assets(conn: &Connection, view: View, days: &[i64]) -> Result<Vec<DayAssets>> {
+pub fn day_assets(
+    conn: &Connection,
+    view: View,
+    filter: &Filter,
+    days: &[i64],
+) -> Result<Vec<DayAssets>> {
+    let (extra, values) = filter.sql(2);
     let sql = format!(
         "SELECT a.id, a.media_kind, COALESCE(u.favorite, 0), a.duration_ms {FROM}
-         WHERE a.local_day = ?1 AND {} ORDER BY a.taken_at DESC, a.id DESC",
+         WHERE a.local_day = ?1 AND {}{extra} ORDER BY a.taken_at DESC, a.id DESC",
         view.condition()
     );
     let mut stmt = conn.prepare_cached(&sql)?;
@@ -107,7 +229,8 @@ pub fn day_assets(conn: &Connection, view: View, days: &[i64]) -> Result<Vec<Day
                 favorites: Vec::new(),
                 durations: Vec::new(),
             };
-            let mut rows = stmt.query(params![day])?;
+            let bound = std::iter::once(Value::Integer(day)).chain(values.iter().cloned());
+            let mut rows = stmt.query(params_from_iter(bound))?;
             while let Some(row) = rows.next()? {
                 out.ids.push(row.get(0)?);
                 out.kinds.push(row.get(1)?);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { api, type Layout, type View } from "../api";
+import { api, type Filter, type Layout, type View } from "../api";
 import { AlbumHeader } from "../collections/AlbumHeader";
 import { useCollections } from "../collections/context";
 import { DayStore, type Position } from "../timeline/dayStore";
@@ -9,6 +9,7 @@ import { SelectionBar } from "./SelectionBar";
 
 type Props = {
   view: View;
+  filter: Filter;
   layout: Layout;
   /** Reload layout and counts after changes that move items between views. */
   onLibraryChanged: () => Promise<void>;
@@ -16,9 +17,10 @@ type Props = {
 };
 
 /** One timeline view (All, Favorites, …) with selection and the full-screen viewer. */
-export function PhotosView({ view, layout, onLibraryChanged, onError }: Props) {
+export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: Props) {
   // `layout` only seeds a new store; later layouts arrive through setLayout below.
-  const store = useMemo(() => new DayStore(view, layout), [view]);
+  // The parent remounts this component when the view or filter changes.
+  const store = useMemo(() => new DayStore(view, filter, layout), [view, filter]);
   const collections = useCollections();
   const albumId = typeof view === "object" && "album" in view ? view.album : null;
   const album = albumId === null ? undefined : collections.albums.find((a) => a.id === albumId);

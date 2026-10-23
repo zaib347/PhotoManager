@@ -20,7 +20,7 @@ fn main() -> photo_core::Result<()> {
     println!("insert {count} assets + day buckets: {:?}", t.elapsed());
 
     let t = Instant::now();
-    let layout = timeline::layout(&db.read(), timeline::View::All)?;
+    let layout = timeline::layout(&db.read(), timeline::View::All, &Default::default())?;
     println!("layout ({} days): {:?}", layout.days.len(), t.elapsed());
 
     let busiest = layout.counts.iter().copied().max().unwrap_or(0);
@@ -33,16 +33,54 @@ fn main() -> photo_core::Result<()> {
     for i in 0..jumps {
         let at = (i * 7919) % layout.days.len().max(1);
         let days = &layout.days[at..(at + 10).min(layout.days.len())];
-        fetched += timeline::day_assets(&db.read(), timeline::View::All, days)?
-            .iter()
-            .map(|d| d.ids.len())
-            .sum::<usize>();
+        fetched +=
+            timeline::day_assets(&db.read(), timeline::View::All, &Default::default(), days)?
+                .iter()
+                .map(|d| d.ids.len())
+                .sum::<usize>();
     }
     println!(
         "scrubber jump (10 days): {:?} avg, {} ids avg",
         t.elapsed() / jumps as u32,
         fetched / jumps
     );
+
+    // Filtered layouts are aggregated on demand instead of read from day buckets.
+    let filters = [
+        (
+            "videos only",
+            timeline::Filter {
+                media: Some(timeline::MediaFilter::Video),
+                ..Default::default()
+            },
+        ),
+        (
+            "one camera",
+            timeline::Filter {
+                cameras: vec!["EOS 80D".into()],
+                ..Default::default()
+            },
+        ),
+        (
+            "one year",
+            timeline::Filter {
+                from_day: Some(18_628),
+                to_day: Some(18_992),
+                ..Default::default()
+            },
+        ),
+    ];
+    for (name, filter) in filters {
+        let t = Instant::now();
+        let layout = timeline::layout(&db.read(), timeline::View::All, &filter)?;
+        let days = &layout.days[..layout.days.len().min(10)];
+        let first = t.elapsed();
+        timeline::day_assets(&db.read(), timeline::View::All, &filter, days)?;
+        println!(
+            "filter {name}: layout {first:?}, first 10 days {:?}",
+            t.elapsed() - first
+        );
+    }
 
     let size = std::fs::metadata(&path)?.len();
     println!(

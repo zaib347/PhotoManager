@@ -3,8 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   events,
+  filterKey,
+  isFilterEmpty,
   viewKey,
   type AlbumInfo,
+  type Filter,
   type Layout,
   type RootInfo,
   type ScanFinished,
@@ -15,6 +18,7 @@ import {
 } from "./api";
 import { CollectionsContext, type Collections } from "./collections/context";
 import { LibraryPanel } from "./library/LibraryPanel";
+import { FilterBar } from "./photos/FilterBar";
 import { PhotosView } from "./photos/PhotosView";
 import "./App.css";
 
@@ -39,7 +43,11 @@ export default function App() {
   const [view, setView] = useState<View>("all");
   // The layout is tagged with its view so a view switch never renders a stale layout.
   const [loaded, setLoaded] = useState<{ key: string; layout: Layout } | null>(null);
-  const key = viewKey(view);
+  const [filter, setFilter] = useState<Filter>({});
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
+  // Layout identity: the view plus the filters applied to it.
+  const key = `${viewKey(view)}|${filterKey(filter)}`;
   const keyRef = useRef(key);
   keyRef.current = key;
   const viewRef = useRef(view);
@@ -55,8 +63,9 @@ export default function App() {
 
   const reloadTimeline = useCallback(async () => {
     const current = viewRef.current;
-    const currentKey = viewKey(current);
-    const [s, layout] = await Promise.all([api.stats(), api.layout(current)]);
+    const currentFilter = filterRef.current;
+    const currentKey = `${viewKey(current)}|${filterKey(currentFilter)}`;
+    const [s, layout] = await Promise.all([api.stats(), api.layout(current, currentFilter)]);
     setStats(s);
     if (keyRef.current === currentKey) setLoaded({ key: currentKey, layout });
   }, []);
@@ -209,14 +218,26 @@ export default function App() {
           onRemove={removeRoot}
         />
         <main className="content">
+          {!busy && stats && stats.assets > 0 && <FilterBar filter={filter} roots={roots} onChange={setFilter} />}
           {busy ? (
             <div className="empty">{busy}</div>
           ) : current && current.days.length > 0 ? (
-            <PhotosView key={key} view={view} layout={current} onLibraryChanged={reloadTimeline} onError={report} />
+            <PhotosView
+              key={key}
+              view={view}
+              filter={filter}
+              layout={current}
+              onLibraryChanged={reloadTimeline}
+              onError={report}
+            />
           ) : current ? (
             <div className="empty">
-              <h2>{empty.title}</h2>
-              <p className="muted">{empty.hint}</p>
+              <h2>{isFilterEmpty(filter) ? empty.title : "Nothing matches these filters"}</h2>
+              {isFilterEmpty(filter) ? (
+                <p className="muted">{empty.hint}</p>
+              ) : (
+                <button onClick={() => setFilter({})}>Clear filters</button>
+              )}
             </div>
           ) : null}
         </main>

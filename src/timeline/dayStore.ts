@@ -1,4 +1,4 @@
-import { api, type DayAssets, type Layout, type View } from "../api";
+import { api, type DayAssets, type Filter, type Layout, type View } from "../api";
 
 const MAX_CACHED_DAYS = 4000;
 
@@ -23,6 +23,7 @@ export class DayStore {
 
   constructor(
     readonly view: View,
+    readonly filter: Filter,
     layout: Layout,
   ) {
     this.layout = layout;
@@ -67,7 +68,7 @@ export class DayStore {
     if (missing.length > 0) {
       const gen = this.gen;
       const started = performance.now();
-      const request = api.dayAssets(this.view, missing).then((result) => {
+      const request = api.dayAssets(this.view, this.filter, missing).then((result) => {
         if (gen !== this.gen) return;
         result.forEach((d) => this.cache.set(d.day, { gen, data: d }));
         this.evict(keep);

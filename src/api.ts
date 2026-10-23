@@ -10,6 +10,39 @@ export const viewKey = (view: View) =>
 
 export type Named = { id: number; name: string };
 
+/** Narrows any view. Omitted or empty fields don't filter. */
+export type Filter = {
+  media?: "photo" | "video";
+  /** Camera models; "" means no camera recorded. */
+  cameras?: string[];
+  rootIds?: number[];
+  /** Inclusive local-day range. */
+  fromDay?: number;
+  toDay?: number;
+  minRating?: number;
+};
+
+export type FilterOptions = {
+  cameras: { model: string; count: number }[];
+  firstDay: number | null;
+  lastDay: number | null;
+};
+
+/** Drops empty fields so equal filters always produce the same key. */
+export function normalizeFilter(f: Filter): Filter {
+  const out: Filter = {};
+  if (f.media) out.media = f.media;
+  if (f.cameras?.length) out.cameras = [...f.cameras].sort();
+  if (f.rootIds?.length) out.rootIds = [...f.rootIds].sort((a, b) => a - b);
+  if (f.fromDay !== undefined) out.fromDay = f.fromDay;
+  if (f.toDay !== undefined) out.toDay = f.toDay;
+  if (f.minRating) out.minRating = f.minRating;
+  return out;
+}
+
+export const filterKey = (f: Filter) => JSON.stringify(normalizeFilter(f));
+export const isFilterEmpty = (f: Filter) => filterKey(f) === "{}";
+
 export type AlbumInfo = {
   id: number;
   name: string;
@@ -103,8 +136,10 @@ export const MediaKind = { Photo: 0, Video: 1, LivePhoto: 2 } as const;
 
 export const api = {
   stats: () => invoke<Stats>("library_stats"),
-  layout: (view: View) => invoke<Layout>("get_layout", { view }),
-  dayAssets: (view: View, days: number[]) => invoke<DayAssets[]>("get_day_assets", { view, days }),
+  layout: (view: View, filter: Filter) => invoke<Layout>("get_layout", { view, filter }),
+  dayAssets: (view: View, filter: Filter, days: number[]) =>
+    invoke<DayAssets[]>("get_day_assets", { view, filter, days }),
+  filterOptions: () => invoke<FilterOptions>("filter_options"),
   asset: (id: number) => invoke<AssetDetails | null>("get_asset", { id }),
   setFavorite: (ids: number[], favorite: boolean) => invoke<void>("set_favorite", { ids, favorite }),
   setRating: (ids: number[], rating: number | null) => invoke<void>("set_rating", { ids, rating }),

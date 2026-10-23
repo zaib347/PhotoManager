@@ -875,3 +875,106 @@ button.link {
 .info-panel button.link {
   color: #8fb4ff;
 }
+
+/* ---------- Filters ---------- */
+
+.content {
+  display: flex;
+  flex-direction: column;
+}
+
+.content > .photos-view,
+.content > .empty {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.filter-chip {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.filter-panel {
+  width: 300px;
+}
+
+.popover:has(.filter-panel) {
+  width: auto;
+}
+
+.filter-panel section {
+  margin-bottom: 14px;
+}
+
+.filter-panel h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.segmented button {
+  padding: 3px 9px;
+  font-size: 13px;
+}
+
+.segmented button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.date-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.date-range input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.check-list.scroll {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.check-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  cursor: pointer;
+}

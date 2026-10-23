@@ -103,7 +103,7 @@ fn indexes_supported_files_and_skips_excluded() {
         .unwrap();
     assert_eq!((src, kind), (2, 0), "date should come from the filename");
 
-    let layout = timeline::layout(&f.library.read(), View::All).unwrap();
+    let layout = timeline::layout(&f.library.read(), View::All, &Default::default()).unwrap();
     assert_eq!(layout.counts.iter().sum::<u32>(), 4);
 }
 
@@ -183,7 +183,7 @@ fn deleted_file_leaves_timeline_after_complete_scan() {
     let s = f.scan();
     assert_eq!(s.missing, 1);
     assert_eq!(f.visible_assets(), 3);
-    let layout = timeline::layout(&f.library.read(), View::All).unwrap();
+    let layout = timeline::layout(&f.library.read(), View::All, &Default::default()).unwrap();
     assert_eq!(layout.counts.iter().sum::<u32>(), 3);
 }
 
@@ -248,7 +248,7 @@ fn favorites_and_hidden_views() {
     assets::set_hidden(&mut f.library.write(), &[chart], true).unwrap();
 
     let count = |view| -> u32 {
-        timeline::layout(&f.library.read(), view)
+        timeline::layout(&f.library.read(), view, &Default::default())
             .unwrap()
             .counts
             .iter()
@@ -265,7 +265,13 @@ fn favorites_and_hidden_views() {
     assert_eq!(d.files.len(), 1);
     assert!(d.files[0].online && d.files[0].path.ends_with("beach.jpg"));
 
-    let day = timeline::day_assets(&f.library.read(), View::All, &[d.local_day]).unwrap();
+    let day = timeline::day_assets(
+        &f.library.read(),
+        View::All,
+        &Default::default(),
+        &[d.local_day],
+    )
+    .unwrap();
     let i = day[0].ids.iter().position(|&id| id == beach).unwrap();
     assert_eq!(day[0].favorites[i], 1);
 }
@@ -289,7 +295,7 @@ fn albums_hold_assets_without_touching_files() {
     // Hidden items stay visible inside albums.
     assets::set_hidden(&mut f.library.write(), &[chart], true).unwrap();
     let count = |view| -> u32 {
-        timeline::layout(&f.library.read(), view)
+        timeline::layout(&f.library.read(), view, &Default::default())
             .unwrap()
             .counts
             .iter()
@@ -336,7 +342,7 @@ fn tags_are_case_insensitive_and_cleaned_up() {
 
     let tags = collections::list_tags(&f.library.read()).unwrap();
     assert_eq!((tags.len(), tags[0].count), (1, 2));
-    let count: u32 = timeline::layout(&f.library.read(), View::Tag(t1))
+    let count: u32 = timeline::layout(&f.library.read(), View::Tag(t1), &Default::default())
         .unwrap()
         .counts
         .iter()
@@ -355,4 +361,82 @@ fn tags_are_case_insensitive_and_cleaned_up() {
     assert_eq!(names, ["Beach"], "an unused tag is deleted");
     let details = assets::details(&f.library.read(), beach).unwrap().unwrap();
     assert_eq!(details.tags.len(), 1);
+}
+
+#[test]
+fn filters_narrow_any_view() {
+    use photo_core::assets;
+    use photo_core::timeline::{Filter, MediaFilter};
+    let f = fixture();
+    f.scan();
+    let count = |view, filter: &Filter| -> u32 {
+        timeline::layout(&f.library.read(), view, filter)
+            .unwrap()
+            .counts
+            .iter()
+            .sum()
+    };
+    let total = count(View::All, &Filter::default());
+    assert_eq!(total, 4);
+
+    let videos = Filter {
+        media: Some(MediaFilter::Video),
+        ..Default::default()
+    };
+    let photos = Filter {
+        media: Some(MediaFilter::Photo),
+        ..Default::default()
+    };
+    assert_eq!(count(View::All, &videos), 1);
+    assert_eq!(count(View::All, &photos), 3);
+
+    // Test images carry no camera, so they all match the "unknown camera" entry.
+    let options = timeline::filter_options(&f.library.read()).unwrap();
+    assert_eq!(options.cameras[0].model, "");
+    let unknown = Filter {
+        cameras: vec![String::new()],
+        ..Default::default()
+    };
+    let canon = Filter {
+        cameras: vec!["EOS 80D'; DROP TABLE assets; --".into()],
+        ..Default::default()
+    };
+    assert_eq!(count(View::All, &unknown), 4);
+    assert_eq!(
+        count(View::All, &canon),
+        0,
+        "camera names are bound, never spliced"
+    );
+
+    let beach = f.asset_of("2019/beach.jpg");
+    assets::set_rating(&mut f.library.write(), &[beach], Some(4)).unwrap();
+    let rated = Filter {
+        min_rating: Some(3),
+        ..Default::default()
+    };
+    assert_eq!(count(View::All, &rated), 1);
+
+    let day = assets::details(&f.library.read(), beach)
+        .unwrap()
+        .unwrap()
+        .local_day;
+    let same_day = Filter {
+        from_day: Some(day),
+        to_day: Some(day),
+        ..Default::default()
+    };
+    let days = timeline::day_assets(&f.library.read(), View::All, &same_day, &[day]).unwrap();
+    assert!(days[0].ids.contains(&beach));
+
+    let wrong_root = Filter {
+        root_ids: vec![f.root_id + 100],
+        ..Default::default()
+    };
+    assert_eq!(count(View::All, &wrong_root), 0);
+    let this_root = Filter {
+        root_ids: vec![f.root_id],
+        media: Some(MediaFilter::Photo),
+        ..Default::default()
+    };
+    assert_eq!(count(View::All, &this_root), 3);
 }

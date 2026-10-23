@@ -15,7 +15,7 @@ fn migrations_are_idempotent() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn layout_matches_day_assets() {
     let mut conn = library();
     synth::generate(&mut conn, 10_000, 42).unwrap();
 
-    let layout = timeline::layout(&conn, View::All).unwrap();
+    let layout = timeline::layout(&conn, View::All, &Default::default()).unwrap();
     assert_eq!(
         layout.counts.iter().map(|&c| c as usize).sum::<usize>(),
         10_000
@@ -34,7 +34,7 @@ fn layout_matches_day_assets() {
     );
 
     let sample: Vec<i64> = layout.days.iter().step_by(7).copied().collect();
-    for day in timeline::day_assets(&conn, View::All, &sample).unwrap() {
+    for day in timeline::day_assets(&conn, View::All, &Default::default(), &sample).unwrap() {
         let i = layout.days.iter().position(|&d| d == day.day).unwrap();
         assert_eq!(day.ids.len() as u32, layout.counts[i]);
         assert_eq!(day.ids.len(), day.kinds.len());

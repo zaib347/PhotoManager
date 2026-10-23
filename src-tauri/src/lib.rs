@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use photo_core::db::Db;
-use photo_core::timeline::View;
+use photo_core::timeline::{Filter, View};
 use photo_core::{assets, library, schema, synth, thumbs, timeline};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 
@@ -50,9 +50,14 @@ async fn library_stats(state: State<'_, Arc<AppState>>) -> CmdResult<timeline::S
 async fn get_layout(
     state: State<'_, Arc<AppState>>,
     view: Option<View>,
+    filter: Option<Filter>,
 ) -> CmdResult<timeline::Layout> {
     blocking(&state, move |s| {
-        timeline::layout(&s.library.read(), view.unwrap_or_default())
+        timeline::layout(
+            &s.library.read(),
+            view.unwrap_or_default(),
+            &filter.unwrap_or_default(),
+        )
     })
     .await
 }
@@ -61,12 +66,23 @@ async fn get_layout(
 async fn get_day_assets(
     state: State<'_, Arc<AppState>>,
     view: Option<View>,
+    filter: Option<Filter>,
     days: Vec<i64>,
 ) -> CmdResult<Vec<timeline::DayAssets>> {
     blocking(&state, move |s| {
-        timeline::day_assets(&s.library.read(), view.unwrap_or_default(), &days)
+        timeline::day_assets(
+            &s.library.read(),
+            view.unwrap_or_default(),
+            &filter.unwrap_or_default(),
+            &days,
+        )
     })
     .await
+}
+
+#[tauri::command]
+async fn filter_options(state: State<'_, Arc<AppState>>) -> CmdResult<timeline::FilterOptions> {
+    blocking(&state, |s| timeline::filter_options(&s.library.read())).await
 }
 
 #[tauri::command]
@@ -247,6 +263,7 @@ pub fn run() {
             get_layout,
             get_day_assets,
             get_asset,
+            filter_options,
             set_favorite,
             set_rating,
             set_hidden,
