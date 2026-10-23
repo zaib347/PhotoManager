@@ -1,5 +1,6 @@
 mod collection_commands;
 mod diag;
+mod event_commands;
 mod memory_commands;
 mod protocol;
 mod scans;
@@ -273,6 +274,7 @@ pub fn run() {
             for root_id in library::take_interrupted_scans(&state.library.write())? {
                 scans::start(app.handle(), &state, root_id);
             }
+            event_commands::detect_if_needed(app.handle(), &state);
             poll_volumes(app.handle().clone(), state.clone());
             app.manage(state);
             Ok(())
@@ -293,6 +295,13 @@ pub fn run() {
             memory_commands::shift_dates,
             memory_commands::restore_dates,
             memory_commands::asset_ids,
+            event_commands::list_events,
+            event_commands::get_event,
+            event_commands::rename_event,
+            event_commands::merge_events,
+            event_commands::split_event,
+            event_commands::create_event,
+            event_commands::remove_event,
             collection_commands::list_albums,
             collection_commands::create_album,
             collection_commands::rename_album,

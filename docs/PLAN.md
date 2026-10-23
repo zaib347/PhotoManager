@@ -162,7 +162,9 @@ Batch 2:
       days/hours/minutes; restore original; corrections survive rescans and file edits (schema v6)
 - [x] Select all in the current view + filter (Ctrl+A), e.g. filter one camera → shift its clock
 - [x] On This Day: same calendar day in earlier years, favorites/ratings first, dismissible per day
-- [ ] Events: group photos by time gaps (adaptive per person), rename/merge/split, event view
+- [x] Events: group photos by time gaps (adaptive per person), rename/merge/split, event view
+      (gaps judged against the ~10 gaps on each side; 1M assets: first detection 12 s, re-run 2.7 s,
+      list 30 ms; edited events are never redrawn, removed ones never come back)
 - [ ] Places: offline reverse geocoding (GeoNames cities, bundled), place names in info and filters
 - [ ] Trips: multi-day events far from home
 - [ ] Browse by place

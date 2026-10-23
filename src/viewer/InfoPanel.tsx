@@ -3,6 +3,7 @@ import type { AssetDetails, View } from "../api";
 import { useCollections } from "../collections/context";
 import { TagInput } from "../collections/TagInput";
 import { fileName, formatBytes, formatDuration, formatOffset, formatTakenAt } from "../format";
+import { eventTitle } from "../events/format";
 
 const TIME_SOURCES = ["from photo metadata", "from video metadata", "from the file name", "from the file's modified date", "set by you"];
 
@@ -82,6 +83,17 @@ export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate, onRestoreD
         </div>
         <TagInput tags={tags} exclude={new Set(asset.tags.map((t) => t.id))} onAdd={onAddTag} />
       </section>
+
+      {asset.event && (
+        <section>
+          <h3>Event</h3>
+          <div className="chips">
+            <button className="chip link" onClick={() => onNavigate({ event: asset.event!.id })}>
+              {eventTitle(asset.event)}
+            </button>
+          </div>
+        </section>
+      )}
 
       {asset.albums.length > 0 && (
         <section>

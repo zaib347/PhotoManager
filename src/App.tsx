@@ -17,6 +17,7 @@ import {
   type View,
 } from "./api";
 import { CollectionsContext, type Collections } from "./collections/context";
+import { EventsPage } from "./events/EventsPage";
 import { LibraryPanel } from "./library/LibraryPanel";
 import { FilterBar } from "./photos/FilterBar";
 import { PhotosView } from "./photos/PhotosView";
@@ -27,15 +28,17 @@ const LIVE_RELOAD_MS = 3000;
 
 function emptyState(view: View): { title: string; hint: string } {
   if (typeof view === "object") {
-    return "album" in view
-      ? { title: "This album is empty", hint: "Select photos in the timeline and choose Add to album." }
-      : { title: "No photos with this tag", hint: "Tags appear here as you add them to photos." };
+    if ("album" in view)
+      return { title: "This album is empty", hint: "Select photos in the timeline and choose Add to album." };
+    if ("tag" in view) return { title: "No photos with this tag", hint: "Tags appear here as you add them to photos." };
+    return { title: "This event is empty", hint: "Its photos may be hidden or no longer in your folders." };
   }
   return {
     all: { title: "No photos yet", hint: "Add a folder on the left to start building your timeline." },
     favorites: { title: "No favorites yet", hint: "Press F in the viewer, or select photos and choose Favorite." },
     videos: { title: "No videos", hint: "Videos in your folders will appear here." },
     hidden: { title: "Nothing hidden", hint: "Hidden photos stay in your folders but leave the timeline." },
+    events: { title: "", hint: "" },
   }[view];
 }
 
@@ -60,11 +63,17 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const lastLiveReload = useRef(0);
+  // Bumped when scans or background detection may have changed events.
+  const [eventsVersion, setEventsVersion] = useState(0);
 
   const reloadTimeline = useCallback(async () => {
     const current = viewRef.current;
     const currentFilter = filterRef.current;
     const currentKey = `${viewKey(current)}|${filterKey(currentFilter)}`;
+    if (current === "events") {
+      setStats(await api.stats());
+      return;
+    }
     const [s, layout] = await Promise.all([api.stats(), api.layout(current, currentFilter)]);
     setStats(s);
     if (keyRef.current === currentKey) setLoaded({ key: currentKey, layout });
@@ -138,7 +147,9 @@ export default function App() {
         reloadTimeline().catch(report);
         reloadCollections().catch(report);
         reloadRoots().catch(report);
+        setEventsVersion((v) => v + 1);
       }),
+      events.eventsChanged(() => setEventsVersion((v) => v + 1)),
       events.volumesChanged(() => reloadRoots().catch(report)),
     ];
     return () => unlisten.forEach((p) => p.then((off) => off()));
@@ -227,9 +238,11 @@ export default function App() {
           onRemove={removeRoot}
         />
         <main className="content">
-          {!busy && stats && stats.assets > 0 && <FilterBar filter={filter} roots={roots} onChange={setFilter} />}
+          {!busy && view !== "events" && stats && stats.assets > 0 && <FilterBar filter={filter} roots={roots} onChange={setFilter} />}
           {busy ? (
             <div className="empty">{busy}</div>
+          ) : view === "events" ? (
+            <EventsPage version={eventsVersion} onError={report} />
           ) : current && current.days.length > 0 ? (
             <PhotosView
               key={key}

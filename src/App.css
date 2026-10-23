@@ -1127,3 +1127,106 @@ button.primary:disabled {
   justify-content: space-between;
   align-items: center;
 }
+
+/* Events overview */
+.content > .events-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.events-hint {
+  margin: 0;
+  padding: 10px 16px 0;
+}
+
+.events-page .selection-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.events-year {
+  content-visibility: auto;
+  padding: 0 16px 8px;
+}
+
+.events-year-title {
+  margin: 16px 0 10px;
+  font-size: 20px;
+}
+
+.event-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px 12px;
+}
+
+.event-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.event-cover {
+  aspect-ratio: 4 / 3;
+  margin-bottom: 4px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--placeholder);
+}
+
+.event-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.2s;
+}
+
+.event-card:hover .event-cover img {
+  transform: scale(1.03);
+}
+
+.event-card.selected .event-cover {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.event-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.event-name {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.event-maker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 260px;
+}
+
+.event-maker p {
+  margin: 0;
+}
+
+.event-maker hr {
+  width: 100%;
+  margin: 4px 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}

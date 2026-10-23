@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use photo_core::{db::Db, schema, synth, timeline};
+use photo_core::{db::Db, events, schema, synth, timeline};
 
 fn main() -> photo_core::Result<()> {
     let mut args = std::env::args().skip(1);
@@ -80,6 +80,23 @@ fn main() -> photo_core::Result<()> {
             "filter {name}: layout {first:?}, first 10 days {:?}",
             t.elapsed() - first
         );
+    }
+
+    let t = Instant::now();
+    events::detect(&mut db.write())?;
+    println!("event detection (first run): {:?}", t.elapsed());
+    let t = Instant::now();
+    events::detect(&mut db.write())?;
+    println!("event detection (re-run): {:?}", t.elapsed());
+    let t = Instant::now();
+    let list = events::list(&db.read())?;
+    println!("event list ({} events): {:?}", list.len(), t.elapsed());
+    if let Some(event) = list.get(list.len() / 2) {
+        let t = Instant::now();
+        let view = timeline::View::Event(event.id);
+        let layout = timeline::layout(&db.read(), view, &Default::default())?;
+        timeline::day_assets(&db.read(), view, &Default::default(), &layout.days)?;
+        println!("event view ({} items): {:?}", event.count, t.elapsed());
     }
 
     let size = std::fs::metadata(&path)?.len();

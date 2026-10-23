@@ -1,9 +1,10 @@
-import type { View } from "../api";
+import type { TimelineView } from "../api";
 import { AlbumPicker } from "../collections/AlbumPicker";
 import { useCollections } from "../collections/context";
 import { TagInput } from "../collections/TagInput";
 import { Popover } from "../ui/Popover";
 import { DateFixer } from "./DateFixer";
+import { EventMaker } from "./EventMaker";
 
 type Props = {
   count: number;
@@ -11,7 +12,7 @@ type Props = {
   onSelectAll: () => void;
   onShiftDates: (deltaMs: number) => void;
   onRestoreDates: () => void;
-  view: View;
+  view: TimelineView;
   onClear: () => void;
   onFavorite: (favorite: boolean) => void;
   onRate: (rating: number | null) => void;
@@ -19,6 +20,9 @@ type Props = {
   onAddToAlbum: (albumId: number) => void;
   onCreateAlbum: (name: string) => void;
   onTag: (name: string) => void;
+  onCreateEvent: (name: string) => void;
+  /** Present only inside an event. */
+  onSplitEvent?: () => void;
   /** Present only inside an album. */
   onRemoveFromAlbum?: () => void;
   onSetCover?: () => void;
@@ -64,6 +68,25 @@ export function SelectionBar(props: Props) {
               props.onCreateAlbum(name);
               close();
             }}
+          />
+        )}
+      </Popover>
+      <Popover label="Event">
+        {(close) => (
+          <EventMaker
+            count={count}
+            onCreate={(name) => {
+              props.onCreateEvent(name);
+              close();
+            }}
+            onSplit={
+              props.onSplitEvent && count === 1
+                ? () => {
+                    props.onSplitEvent!();
+                    close();
+                  }
+                : undefined
+            }
           />
         )}
       </Popover>

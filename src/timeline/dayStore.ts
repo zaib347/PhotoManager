@@ -1,4 +1,4 @@
-import { api, type DayAssets, type Filter, type Layout, type View } from "../api";
+import { api, type DayAssets, type Filter, type Layout, type TimelineView } from "../api";
 
 const MAX_CACHED_DAYS = 4000;
 
@@ -22,7 +22,7 @@ export class DayStore {
   private listeners = new Set<() => void>();
 
   constructor(
-    readonly view: View,
+    readonly view: TimelineView,
     readonly filter: Filter,
     layout: Layout,
   ) {

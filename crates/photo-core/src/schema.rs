@@ -164,6 +164,14 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     ALTER TABLE user_meta ADD COLUMN original_tz_offset_min INTEGER;
     ALTER TABLE user_meta ADD COLUMN original_taken_src INTEGER;
     ",
+    // v7: events. Times are wall-clock ms; count and cover are kept by `events::detect`.
+    "
+    ALTER TABLE assets ADD COLUMN event_id INTEGER;
+    CREATE INDEX idx_assets_event ON assets (event_id, local_day) WHERE event_id IS NOT NULL;
+    ALTER TABLE events ADD COLUMN count INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE events ADD COLUMN cover_asset_id INTEGER;
+    CREATE INDEX idx_events_start ON events (start_at);
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

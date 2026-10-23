@@ -1,12 +1,21 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type BuiltinView = "all" | "favorites" | "videos" | "hidden";
-export type View = BuiltinView | { album: number } | { tag: number };
+/** "events" is the Events overview page; the others are timelines. */
+export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | "events";
+export type View = BuiltinView | { album: number } | { tag: number } | { event: number };
+/** Views the backend can lay out as a timeline. */
+export type TimelineView = Exclude<View, "events">;
 
 /** Stable string identity for a view (React keys, comparisons). */
 export const viewKey = (view: View) =>
-  typeof view === "string" ? view : "album" in view ? `album:${view.album}` : `tag:${view.tag}`;
+  typeof view === "string"
+    ? view
+    : "album" in view
+      ? `album:${view.album}`
+      : "tag" in view
+        ? `tag:${view.tag}`
+        : `event:${view.event}`;
 
 export type Named = { id: number; name: string };
 
@@ -53,6 +62,19 @@ export type AlbumInfo = {
 };
 
 export type TagInfo = { id: number; name: string; count: number };
+
+export type EventSummary = {
+  id: number;
+  /** null until named; show the dates instead. */
+  title: string | null;
+  /** Wall-clock ms of the first and last item. */
+  start: number;
+  end: number;
+  count: number;
+  coverId: number | null;
+  /** Renamed, merged, split or made by hand; detection leaves it alone. */
+  edited: boolean;
+};
 
 export type DayMemory = { day: number; yearsAgo: number; count: number; coverIds: number[] };
 
@@ -119,6 +141,7 @@ export type AssetDetails = {
   tags: Named[];
   /** The clip of a Live Photo. */
   liveClipId: number | null;
+  event: EventSummary | null;
 };
 
 export type ScanProgress = {
@@ -147,8 +170,8 @@ export const MediaKind = { Photo: 0, Video: 1, LivePhoto: 2 } as const;
 
 export const api = {
   stats: () => invoke<Stats>("library_stats"),
-  layout: (view: View, filter: Filter) => invoke<Layout>("get_layout", { view, filter }),
-  dayAssets: (view: View, filter: Filter, days: number[]) =>
+  layout: (view: TimelineView, filter: Filter) => invoke<Layout>("get_layout", { view, filter }),
+  dayAssets: (view: TimelineView, filter: Filter, days: number[]) =>
     invoke<DayAssets[]>("get_day_assets", { view, filter, days }),
   filterOptions: () => invoke<FilterOptions>("filter_options"),
   asset: (id: number) => invoke<AssetDetails | null>("get_asset", { id }),
@@ -171,7 +194,14 @@ export const api = {
   dateRange: (ids: number[]) => invoke<WallRange | null>("date_range", { ids }),
   shiftDates: (ids: number[], deltaMs: number) => invoke<number>("shift_dates", { ids, deltaMs }),
   restoreDates: (ids: number[]) => invoke<number>("restore_dates", { ids }),
-  assetIds: (view: View, filter: Filter) => invoke<number[]>("asset_ids", { view, filter }),
+  assetIds: (view: TimelineView, filter: Filter) => invoke<number[]>("asset_ids", { view, filter }),
+  listEvents: () => invoke<EventSummary[]>("list_events"),
+  event: (id: number) => invoke<EventSummary | null>("get_event", { id }),
+  renameEvent: (id: number, title: string) => invoke<void>("rename_event", { id, title }),
+  mergeEvents: (ids: number[]) => invoke<number>("merge_events", { ids }),
+  splitEvent: (id: number, atAsset: number) => invoke<number>("split_event", { id, atAsset }),
+  createEvent: (ids: number[], title: string) => invoke<number>("create_event", { ids, title }),
+  removeEvent: (id: number) => invoke<void>("remove_event", { id }),
   listRoots: () => invoke<RootInfo[]>("list_roots"),
   scanningRoots: () => invoke<number[]>("scanning_roots"),
   addRoot: (path: string) => invoke<number>("add_root", { path }),
@@ -188,6 +218,8 @@ export const events = {
   scanFinished: (cb: (f: ScanFinished) => void): Promise<UnlistenFn> =>
     listen<ScanFinished>("scan-finished", (e) => cb(e.payload)),
   volumesChanged: (cb: () => void): Promise<UnlistenFn> => listen("volumes-changed", () => cb()),
+  /** Events were (re)detected in the background. */
+  eventsChanged: (cb: () => void): Promise<UnlistenFn> => listen("events-changed", () => cb()),
 };
 
 export const thumbUrl = (assetId: number) => convertFileSrc(String(assetId), "thumb");
