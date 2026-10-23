@@ -23,6 +23,25 @@ pub(crate) struct AppState {
     scans: Mutex<HashMap<i64, Arc<AtomicBool>>>,
     /// Full-resolution decodes for thumbnail misses, bounded to the CPU count.
     decode_pool: rayon::ThreadPool,
+    /// Assets no decoder could thumbnail this session, so scrolling past them doesn't
+    /// retry slow OS calls. Cleared on restart (a codec may have been installed).
+    thumb_failures: Mutex<std::collections::HashSet<i64>>,
+}
+
+impl AppState {
+    pub(crate) fn os_thumb_failed(&self, asset_id: i64) -> bool {
+        self.thumb_failures
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(&asset_id)
+    }
+
+    pub(crate) fn remember_os_thumb_failure(&self, asset_id: i64) {
+        self.thumb_failures
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(asset_id);
+    }
 }
 
 pub(crate) type CmdResult<T> = Result<T, String>;
@@ -246,6 +265,7 @@ pub fn run() {
                 thumbs,
                 scans: Mutex::default(),
                 decode_pool,
+                thumb_failures: Mutex::default(),
             });
 
             library::refresh_volumes(&state.library.write())?;

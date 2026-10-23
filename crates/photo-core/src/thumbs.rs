@@ -68,7 +68,25 @@ pub fn preview(path: &Path, orientation: Option<u8>) -> Result<Vec<u8>> {
 /// Full decode of the original, scaled so the short edge is `GRID_SIZE` (the grid
 /// crops to squares) with the long edge capped for panoramas.
 pub fn from_file(path: &Path, orientation: Option<u8>) -> Result<Vec<u8>> {
-    let img = image::open(path)?;
+    let mut thumb = grid_sized(image::open(path)?);
+    orient(&mut thumb, orientation);
+    encode_jpeg(&thumb.to_rgb8())
+}
+
+/// Thumbnail from the OS decoders (video frames, HEIC/RAW with an installed codec).
+/// The OS has already applied any rotation.
+pub fn from_os(path: &Path) -> Result<Vec<u8>> {
+    let img = crate::os_thumb::thumbnail(path, GRID_SIZE * 2)?;
+    encode_jpeg(&grid_sized(DynamicImage::ImageRgb8(img)).to_rgb8())
+}
+
+/// Viewer-sized image from the OS decoders, for formats the webview can't show.
+pub fn preview_from_os(path: &Path) -> Result<Vec<u8>> {
+    encode_jpeg(&crate::os_thumb::thumbnail(path, 2048)?)
+}
+
+/// Scales so the short edge is `GRID_SIZE`, capping the long edge for panoramas.
+fn grid_sized(img: DynamicImage) -> DynamicImage {
     let (w, h) = (img.width().max(1), img.height().max(1));
     let scale = GRID_SIZE as f32 / w.min(h) as f32;
     let (tw, th) = if scale < 1.0 {
@@ -78,11 +96,9 @@ pub fn from_file(path: &Path, orientation: Option<u8>) -> Result<Vec<u8>> {
             ((h as f32 * scale) as u32).clamp(1, cap),
         )
     } else {
-        (w, h)
+        return img;
     };
-    let mut thumb = img.thumbnail(tw, th);
-    orient(&mut thumb, orientation);
-    encode_jpeg(&thumb.to_rgb8())
+    img.thumbnail(tw, th)
 }
 
 pub fn encode_jpeg(img: &RgbImage) -> Result<Vec<u8>> {

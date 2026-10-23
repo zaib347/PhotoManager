@@ -147,7 +147,10 @@ Batch 2:
 - [x] Filters: type, rating, date range, camera, folder; combine with any view; chips to remove.
       At 1M assets (indexes added in schema v4): type 89 ms, camera 130 ms, one year 45 ms;
       indexes cost ~37 MB per million assets
-- [ ] Video poster frames (ffmpeg on demand) — grid shows placeholders for videos until then
+- [x] Video poster frames via the OS instead of downloading ffmpeg: Windows shell thumbnails
+      (what Explorer shows; ~0.3 s per video, cached after), system ffmpeg elsewhere if present.
+      Same path gives HEIC/RAW thumbnails and viewer previews where Windows has the codec.
+      macOS QuickLook in M5.
 - [ ] Live Photo pairing
 - [ ] Incremental day-bucket updates on hide (currently a full rebuild, ~0.5 s at 1M)
 

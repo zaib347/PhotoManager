@@ -9,6 +9,7 @@ pub mod db;
 pub mod hash;
 pub mod library;
 pub mod media;
+pub mod os_thumb;
 pub mod scan;
 pub mod schema;
 pub mod synth;

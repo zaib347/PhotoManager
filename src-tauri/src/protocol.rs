@@ -71,16 +71,31 @@ fn generate_thumb(state: &AppState, asset_id: i64) -> photo_core::Result<Option<
         AssetSource::File {
             path,
             orientation,
-            kind: 0,
-        } => match thumbs::from_file(&path, orientation) {
-            Ok(data) => {
-                thumbs::put(&state.thumbs.write(), asset_id, &data)?;
-                Thumb::Cached(data)
+            kind,
+        } => {
+            // Our own decoders first for photos (fast, exact); the OS for video frames
+            // and for photo formats we can't read (HEIC/RAW with an installed codec).
+            let generated = if state.os_thumb_failed(asset_id) {
+                None
+            } else if kind == 0 {
+                thumbs::from_file(&path, orientation)
+                    .or_else(|_| thumbs::from_os(&path))
+                    .ok()
+            } else {
+                thumbs::from_os(&path).ok()
+            };
+            match generated {
+                Some(data) => {
+                    thumbs::put(&state.thumbs.write(), asset_id, &data)?;
+                    Thumb::Cached(data)
+                }
+                None => {
+                    state.remember_os_thumb_failure(asset_id);
+                    Thumb::Temporary(thumbs::render_placeholder(asset_id, kind == 1)?)
+                }
             }
-            // HEIC/RAW decoders arrive in M5.
-            Err(_) => Thumb::Temporary(thumbs::render_placeholder(asset_id, false)?),
-        },
-        AssetSource::File { kind, .. } | AssetSource::Unavailable { kind } => {
+        }
+        AssetSource::Unavailable { kind } => {
             Thumb::Temporary(thumbs::render_placeholder(asset_id, kind == 1)?)
         }
         AssetSource::NoFiles { kind } => {
@@ -124,7 +139,9 @@ pub fn handle_media<R: Runtime>(
             );
         } else if kind == 0 {
             state.decode_pool.spawn(move || {
-                responder.respond(match thumbs::preview(&path, orientation) {
+                let preview =
+                    thumbs::preview(&path, orientation).or_else(|_| thumbs::preview_from_os(&path));
+                responder.respond(match preview {
                     Ok(data) => Response::builder()
                         .header(header::CONTENT_TYPE, "image/jpeg")
                         .header(header::CACHE_CONTROL, "no-store")
