@@ -2,7 +2,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { api, type EventSummary } from "../api";
 import { useCollections } from "../collections/context";
-import { eventTitle, formatEventDates } from "./format";
+import { defaultEventTitle, eventTitle, formatEventDates, hasName } from "./format";
 
 type Props = {
   id: number;
@@ -58,7 +58,7 @@ export function EventHeader({ id, version, onError }: Props) {
         <input
           className="album-title-input"
           autoFocus
-          placeholder={formatEventDates(event)}
+          placeholder={defaultEventTitle(event)}
           value={editing}
           onChange={(e) => setEditing(e.target.value)}
           onBlur={save}
@@ -73,7 +73,7 @@ export function EventHeader({ id, version, onError }: Props) {
         </h2>
       )}
       <span className="muted">
-        {event.title ? `${formatEventDates(event)} · ` : ""}
+        {hasName(event) ? `${formatEventDates(event)} · ` : ""}
         {event.count.toLocaleString()} items
       </span>
       <div className="spacer" />

@@ -274,7 +274,7 @@ pub fn run() {
             for root_id in library::take_interrupted_scans(&state.library.write())? {
                 scans::start(app.handle(), &state, root_id);
             }
-            event_commands::detect_if_needed(app.handle(), &state);
+            event_commands::catch_up(app.handle(), &state);
             poll_volumes(app.handle().clone(), state.clone());
             app.manage(state);
             Ok(())

@@ -172,6 +172,20 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     ALTER TABLE events ADD COLUMN cover_asset_id INTEGER;
     CREATE INDEX idx_events_start ON events (start_at);
     ",
+    // v8: places. `assets.place_id` is a GeoNames id (0: no town nearby, NULL: not
+    // looked up yet); `places` holds only the ones in use, copied from the bundled list.
+    "
+    CREATE TABLE places (
+        id           INTEGER PRIMARY KEY,
+        name         TEXT NOT NULL,
+        region       TEXT,
+        country      TEXT NOT NULL,
+        country_code TEXT NOT NULL
+    );
+    CREATE INDEX idx_places_country ON places (country_code);
+    -- Covers place filters and per-place counts without reading the asset rows.
+    CREATE INDEX idx_assets_place_day ON assets (place_id, local_day, status, paired_with)
+        WHERE place_id > 0;    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

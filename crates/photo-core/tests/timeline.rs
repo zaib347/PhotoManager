@@ -1,5 +1,6 @@
-use photo_core::timeline::View;
-use photo_core::{schema, synth, thumbs, timeline};
+use photo_core::db::Db;
+use photo_core::timeline::{Filter, View};
+use photo_core::{places, schema, synth, thumbs, timeline};
 use rusqlite::Connection;
 
 fn library() -> Connection {
@@ -15,7 +16,7 @@ fn migrations_are_idempotent() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 7);
+    assert_eq!(version, 8);
 }
 
 #[test]
@@ -39,6 +40,43 @@ fn layout_matches_day_assets() {
         assert_eq!(day.ids.len() as u32, layout.counts[i]);
         assert_eq!(day.ids.len(), day.kinds.len());
     }
+}
+
+#[test]
+fn place_filters_match_their_options() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::open(&dir.path().join("lib.sqlite"), 1, schema::migrate_library).unwrap();
+    synth::generate(&mut db.write(), 10_000, 42).unwrap();
+    assert!(places::assign(&db).unwrap() > 5_000);
+
+    let total = |filter: &Filter| -> i64 {
+        let layout = timeline::layout(&db.read(), View::All, filter).unwrap();
+        layout.counts.iter().map(|&c| c as i64).sum()
+    };
+    let options = timeline::filter_options(&db.read()).unwrap();
+    let home = &options.places[0];
+    assert_eq!(home.place.name, "Lahore", "synthetic home");
+    let by_place = Filter {
+        place_ids: vec![home.place.id],
+        ..Default::default()
+    };
+    assert_eq!(total(&by_place), home.count);
+
+    let pakistan = options.countries.iter().find(|c| c.code == "PK").unwrap();
+    let by_country = Filter {
+        countries: vec!["PK".into()],
+        ..Default::default()
+    };
+    assert_eq!(total(&by_country), pakistan.count);
+    assert!(pakistan.count > home.count, "Islamabad and Gilgit too");
+    // Either one matching is enough.
+    let both = Filter {
+        place_ids: vec![home.place.id],
+        countries: vec!["GB".into()],
+        ..Default::default()
+    };
+    let london = options.countries.iter().find(|c| c.code == "GB").unwrap();
+    assert_eq!(total(&both), home.count + london.count);
 }
 
 #[test]

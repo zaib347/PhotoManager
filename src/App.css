@@ -948,7 +948,8 @@ button.link {
   gap: 6px;
 }
 
-.date-range input {
+.date-range input,
+.filter-search {
   flex: 1;
   min-width: 0;
   font: inherit;
@@ -958,6 +959,13 @@ button.link {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px 6px;
+}
+
+.filter-search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 6px;
 }
 
 .check-list {

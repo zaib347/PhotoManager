@@ -19,6 +19,16 @@ const CAMERAS: &[(&str, &str)] = &[
     ("Canon", "EOS 80D"),
     ("SONY", "ILCE-7M3"),
 ];
+/// Most outings are around home (Lahore); trips go to one of the others.
+const HOME: (f64, f64) = (31.52, 74.36);
+const AWAY: &[(f64, f64)] = &[
+    (33.69, 73.05),  // Islamabad
+    (35.92, 74.31),  // Gilgit
+    (25.20, 55.27),  // Dubai
+    (41.01, 28.98),  // Istanbul
+    (51.51, -0.13),  // London
+    (40.71, -74.01), // New York
+];
 
 /// SplitMix64: tiny, fast and deterministic, which is all a test generator needs.
 struct Rng(u64);
@@ -54,8 +64,9 @@ pub fn generate(conn: &mut Connection, count: usize, seed: u64) -> Result<()> {
         {
             let mut insert = tx.prepare_cached(
                 "INSERT INTO assets (media_kind, taken_at, taken_src, tz_offset_min, local_day,
-                     width, height, orientation, duration_ms, camera_make, camera_model, created_at)
-                 VALUES (?1, ?2, 0, 0, ?3, ?4, ?5, 1, ?6, ?7, ?8, ?9)",
+                     width, height, orientation, duration_ms, camera_make, camera_model, created_at,
+                     lat, lon)
+                 VALUES (?1, ?2, 0, 0, ?3, ?4, ?5, 1, ?6, ?7, ?8, ?9, ?10, ?11)",
             )?;
             let batch_end = (written + BATCH).min(count);
             while written < batch_end {
@@ -69,6 +80,17 @@ pub fn generate(conn: &mut Connection, count: usize, seed: u64) -> Result<()> {
                     (size as i64 * 120_000).min(10 * 3_600_000)
                 };
                 let (make, model) = CAMERAS[rng.below(CAMERAS.len() as u64) as usize];
+                // A quarter of events have no GPS (old cameras, location turned off).
+                let spot = (rng.below(4) != 0).then(|| {
+                    if event_len > DAY_MS || rng.below(10) == 0 {
+                        AWAY[rng.below(AWAY.len() as u64) as usize]
+                    } else {
+                        (
+                            HOME.0 + (rng.unit() - 0.5) * 0.2,
+                            HOME.1 + (rng.unit() - 0.5) * 0.2,
+                        )
+                    }
+                });
 
                 for _ in 0..size {
                     let taken_at = (event_start + (rng.unit() * event_len as f64) as i64).min(now);
@@ -79,6 +101,12 @@ pub fn generate(conn: &mut Connection, count: usize, seed: u64) -> Result<()> {
                         (4032, 3024)
                     };
                     let duration = is_video.then(|| 3_000 + rng.below(87_000) as i64);
+                    let gps = spot.map(|(lat, lon)| {
+                        (
+                            lat + (rng.unit() - 0.5) * 0.02,
+                            lon + (rng.unit() - 0.5) * 0.02,
+                        )
+                    });
                     insert.execute(params![
                         is_video as u8,
                         taken_at,
@@ -89,6 +117,8 @@ pub fn generate(conn: &mut Connection, count: usize, seed: u64) -> Result<()> {
                         make,
                         model,
                         now,
+                        gps.map(|g| g.0),
+                        gps.map(|g| g.1),
                     ])?;
                 }
                 written += size;

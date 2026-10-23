@@ -3,6 +3,7 @@ use rusqlite::{Connection, params_from_iter};
 use serde::{Deserialize, Serialize};
 
 use crate::Result;
+use crate::places::{PLACE_COLUMNS, Place, place_row};
 
 pub const DAY_MS: i64 = 86_400_000;
 
@@ -71,6 +72,9 @@ pub struct Filter {
     pub from_day: Option<i64>,
     pub to_day: Option<i64>,
     pub min_rating: Option<u8>,
+    /// Towns (GeoNames ids) and countries (ISO codes); either matches.
+    pub place_ids: Vec<i64>,
+    pub countries: Vec<String>,
 }
 
 impl Filter {
@@ -120,6 +124,25 @@ impl Filter {
         if let Some(rating) = self.min_rating {
             sql.push_str(&format!(" AND u.rating >= {rating}"));
         }
+        if !self.place_ids.is_empty() || !self.countries.is_empty() {
+            let mut parts = Vec::new();
+            if !self.place_ids.is_empty() {
+                let ids: Vec<String> = self.place_ids.iter().map(i64::to_string).collect();
+                parts.push(format!("a.place_id IN ({})", ids.join(", ")));
+            }
+            if !self.countries.is_empty() {
+                let slots: Vec<String> = (0..self.countries.len())
+                    .map(|i| format!("?{}", first + values.len() + i))
+                    .collect();
+                parts.push(format!(
+                    "a.place_id IN (SELECT id FROM places WHERE country_code IN ({}))",
+                    slots.join(", ")
+                ));
+                values.extend(self.countries.iter().cloned().map(Value::Text));
+            }
+            // `place_id > 0` lets SQLite use the partial place index.
+            sql.push_str(&format!(" AND a.place_id > 0 AND ({})", parts.join(" OR ")));
+        }
         (sql, values)
     }
 }
@@ -134,14 +157,71 @@ pub struct CameraOption {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PlaceOption {
+    #[serde(flatten)]
+    pub place: Place,
+    pub count: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CountryOption {
+    pub code: String,
+    pub name: String,
+    pub count: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FilterOptions {
     pub cameras: Vec<CameraOption>,
+    pub places: Vec<PlaceOption>,
+    pub countries: Vec<CountryOption>,
     pub first_day: Option<i64>,
     pub last_day: Option<i64>,
 }
 
-/// Choices for the filter panel, most common cameras first.
+/// The most common places offered as filter choices.
+const PLACE_OPTIONS: usize = 200;
+
+/// Every place with photos and every country, most photos first.
+fn place_options(conn: &Connection) -> Result<(Vec<PlaceOption>, Vec<CountryOption>)> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {PLACE_COLUMNS}, n FROM
+             (SELECT place_id, count(*) AS n FROM assets
+              WHERE place_id > 0 AND status = 0 AND paired_with IS NULL GROUP BY place_id)
+         JOIN places p ON p.id = place_id ORDER BY n DESC, p.name"
+    ))?;
+    let mut places: Vec<PlaceOption> = stmt
+        .query_map([], |r| {
+            Ok(PlaceOption {
+                place: place_row(r, 0)?.expect("joined place"),
+                count: r.get(5)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut countries: Vec<CountryOption> = Vec::new();
+    for p in &places {
+        match countries
+            .iter_mut()
+            .find(|c| c.code == p.place.country_code)
+        {
+            Some(c) => c.count += p.count,
+            None => countries.push(CountryOption {
+                code: p.place.country_code.clone(),
+                name: p.place.country.clone(),
+                count: p.count,
+            }),
+        }
+    }
+    countries.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
+    places.truncate(PLACE_OPTIONS);
+    Ok((places, countries))
+}
+
+/// Choices for the filter panel, most common first.
 pub fn filter_options(conn: &Connection) -> Result<FilterOptions> {
+    let (places, countries) = place_options(conn)?;
     let mut stmt = conn.prepare(
         "SELECT COALESCE(camera_model, ''), count(*) FROM assets WHERE status = 0
          GROUP BY 1 ORDER BY 2 DESC LIMIT 100",
@@ -160,6 +240,8 @@ pub fn filter_options(conn: &Connection) -> Result<FilterOptions> {
         })?;
     Ok(FilterOptions {
         cameras,
+        places,
+        countries,
         first_day,
         last_day,
     })

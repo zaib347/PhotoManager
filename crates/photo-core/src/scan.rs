@@ -231,6 +231,7 @@ impl Scanner<'_> {
         )?;
         drop(library);
         crate::live::pair(&mut self.library.write(), root_id)?;
+        crate::places::assign(self.library)?;
         crate::events::detect(&mut self.library.write())?;
         timeline::rebuild_day_buckets(&self.library.write())?;
         Ok(summary)
@@ -494,7 +495,8 @@ fn update_asset(conn: &Connection, id: i64, kind: MediaKind, m: &Metadata) -> Re
     conn.prepare_cached(&format!(
         "UPDATE assets SET media_kind = CASE WHEN media_kind = 2 AND ?2 = 0 THEN 2 ELSE ?2 END,
              {dates} width = ?7, height = ?8, orientation = ?9, duration_ms = ?10,
-             camera_make = ?11, camera_model = ?12, lat = ?13, lon = ?14, phash = NULL, blur = NULL
+             camera_make = ?11, camera_model = ?12, lat = ?13, lon = ?14, phash = NULL, blur = NULL,
+             place_id = CASE WHEN lat IS ?13 AND lon IS ?14 THEN place_id END
          WHERE id = ?1"
     ))?
     .execute(params![

@@ -3,17 +3,29 @@
 use std::sync::Arc;
 
 use photo_core::events::{self, EventSummary};
+use photo_core::places;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{AppState, CmdResult, blocking};
 
-/// Groups an existing library once, after upgrading to a version with events.
-/// Later scans keep events up to date themselves.
-pub fn detect_if_needed(app: &AppHandle, state: &Arc<AppState>) {
+/// Looks up places and groups events once for an existing library, after upgrading to
+/// a version with them. Later scans keep both up to date themselves.
+pub fn catch_up(app: &AppHandle, state: &Arc<AppState>) {
     let (app, state) = (app.clone(), state.clone());
     std::thread::spawn(move || {
-        let needed = events::needs_detection(&state.library.read());
-        if !matches!(needed, Ok(true)) {
+        let started = std::time::Instant::now();
+        let mut needed = matches!(events::needs_detection(&state.library.read()), Ok(true));
+        if matches!(places::needs_assign(&state.library.read()), Ok(true)) {
+            match places::assign(&state.library) {
+                Ok(n) => {
+                    crate::diag::log(format!("{n} places looked up in {:?}", started.elapsed()));
+                    // Events take their default names from places.
+                    needed = true;
+                }
+                Err(e) => crate::diag::log(format!("place lookup failed: {e}")),
+            }
+        }
+        if !needed {
             return;
         }
         let started = std::time::Instant::now();

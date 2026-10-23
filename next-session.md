@@ -11,28 +11,38 @@ The full plan and milestone checklists are in [docs/PLAN.md](docs/PLAN.md).
 | M3 Memory features | In progress |
 
 **M3 done so far:**
-- Date fixing (set or shift, restore original), Select all / Ctrl+A, On This Day. Merged to `main`.
-- **Events**. On branch **`m3-events`** (commit `08fd575`), **not merged yet**.
+- Date fixing, Select all / Ctrl+A, On This Day, Events. All merged to `main`.
+- **Places**. On branch **`m3-places`**, **not merged yet**.
 
 ## First thing to do
 
-1. Ask whether Events work in the app:
-   - The **Events** sidebar entry and its cards.
-   - Open an event and rename it.
-   - Merge (Ctrl-click cards, then **Merge into one event**).
-   - Split (select one photo inside an event, then **Event** → **Split event here**).
-   - New event from a selection.
-   - **Remove event**.
-   - The event link in the info panel (**I**).
+1. Ask whether Places work in the app (needs photos with GPS):
+   - On first start the existing library gets places in the background (log line
+     "N places looked up"), then events are re-detected.
+   - The info panel (**I**) shows "Town, Region, Country" above the coordinates.
+   - **Filter** has **Country** (if more than one) and **Place** lists (with search); chips show names.
+   - Untitled events show the place name instead of dates, with the dates underneath.
 2. If they're OK, merge:
-   `git checkout main && git merge --no-ff m3-events`
+   `git checkout main && git merge --no-ff m3-places`
 3. Start a new branch for the next feature.
 
 ## What's next in M3
 
-1. **Places.** Offline reverse geocoding using GeoNames cities (cities15000 is about 25k entries). Bundle it compact and keep the installer small. Show place names in the info panel and in filters. Use the place as the default event title when the event has none (`events.place_id` already exists).
-2. **Trips.** Multi-day events far from home. Work out "home" from where most photos are taken.
-3. **Browse by place.**
+1. **Trips.** Multi-day events far from home. Work out "home" from where most photos are taken
+   (`assets.place_id`; synthetic libraries have a Lahore home and trips elsewhere).
+2. **Browse by place.** Country → town page, like the Events page. The info panel's place could
+   link to it.
+
+## How the places code works
+
+- `crates/photo-core/src/places.rs`: bundled data format (`pack`/`unpack`), 1° grid `Index`,
+  `assign` (batched; runs in scan finalize before event detection, and once at startup via
+  `event_commands::catch_up`).
+- Data: `crates/photo-core/data/places.bin`, rebuilt with `examples/build_places.rs` from GeoNames
+  dumps (see README; CC BY 4.0 credit is in the README).
+- `assets.place_id`: GeoNames id, `0` = nothing within reach, `NULL` = not looked up yet. A rescan
+  that changes GPS resets it.
+- Events store their most common place in `events.place_id`.
 
 After M3 come:
 - **M4:** cleanup and safety, then the beta.
@@ -54,6 +64,10 @@ After M3 come:
   - `src/events/` holds the Events page, the event header and date formatting.
   - `"events"` is a `BuiltinView` that shows a page, not a timeline. `TimelineView` excludes it.
 - **Known cost:** at 1M photos a re-run of detection holds the DB writer for about 2.7 s. If that becomes noticeable, move the read and sort onto a reader connection.
+- Merge, split and create pull in loose or suggested items inside the edited event's new span
+  right away (`settle`), matching what detection would do.
+- **Filter options** take about 1 s at 1M photos (mostly the camera count). They're loaded when the
+  panel opens.
 
 ## Working conventions
 
