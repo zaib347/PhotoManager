@@ -540,3 +540,59 @@ fn hiding_updates_day_counts_like_a_rebuild() {
     assets::set_hidden(&mut f.library.write(), &sample[..100], false).unwrap();
     check("after unhiding some");
 }
+
+#[test]
+fn date_corrections_shift_restore_and_survive_rescans() {
+    use photo_core::{assets, dates};
+    const HOUR: i64 = 3_600_000;
+    let f = fixture();
+    f.scan();
+    let a = f.asset_of("2019/IMG_20190312_101530.jpg");
+    let b = f.asset_of("2019/beach.jpg");
+    let before = |id| assets::details(&f.library.read(), id).unwrap().unwrap();
+    let (a0, b0) = (before(a), before(b));
+
+    let range = dates::wall_range(&f.library.read(), &[a, b])
+        .unwrap()
+        .unwrap();
+    assert_eq!(range.first, a0.taken_at.min(b0.taken_at));
+
+    // Shift both by +2 days 5 hours: order preserved, day moves, source = user.
+    let delta = 53 * HOUR;
+    assert_eq!(
+        dates::shift(&mut f.library.write(), &[a, b], delta).unwrap(),
+        2
+    );
+    let (a1, b1) = (before(a), before(b));
+    assert_eq!(a1.taken_at - a0.taken_at, delta);
+    assert_eq!(b1.taken_at - b0.taken_at, delta);
+    assert_eq!(a1.taken_src, 4);
+    assert_eq!(
+        a1.local_day,
+        timeline::local_day(a1.taken_at, a1.tz_offset_min)
+    );
+
+    // Shifting again keeps the very first original for undo.
+    dates::shift(&mut f.library.write(), &[a], HOUR).unwrap();
+
+    // Editing the file must not undo the user's date.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    write_jpeg(&f.photos.join("2019/IMG_20190312_101530.jpg"), 99);
+    let s = f.scan();
+    assert_eq!(s.updated, 1);
+    assert_eq!(before(a).taken_at, a1.taken_at + HOUR);
+
+    // Restore goes back to the date read from the file.
+    assert_eq!(dates::restore(&mut f.library.write(), &[a, b]).unwrap(), 2);
+    assert_eq!(before(a).taken_at, a0.taken_at);
+    assert_eq!(before(a).taken_src, a0.taken_src);
+    assert_eq!(before(b).taken_at, b0.taken_at);
+    assert_eq!(
+        dates::restore(&mut f.library.write(), &[a]).unwrap(),
+        0,
+        "nothing left to restore"
+    );
+
+    let all = timeline::asset_ids(&f.library.read(), View::All, &Default::default()).unwrap();
+    assert_eq!(all.len(), 4);
+}

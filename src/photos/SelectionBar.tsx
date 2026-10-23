@@ -3,9 +3,14 @@ import { AlbumPicker } from "../collections/AlbumPicker";
 import { useCollections } from "../collections/context";
 import { TagInput } from "../collections/TagInput";
 import { Popover } from "../ui/Popover";
+import { DateFixer } from "./DateFixer";
 
 type Props = {
   count: number;
+  ids: number[];
+  onSelectAll: () => void;
+  onShiftDates: (deltaMs: number) => void;
+  onRestoreDates: () => void;
   view: View;
   onClear: () => void;
   onFavorite: (favorite: boolean) => void;
@@ -28,7 +33,25 @@ export function SelectionBar(props: Props) {
         ✕
       </button>
       <strong>{count.toLocaleString()} selected</strong>
+      <button className="link small" onClick={props.onSelectAll} title="Select all (Ctrl+A)">
+        Select all
+      </button>
       <div className="spacer" />
+      <Popover label="Fix date" align="right">
+        {(close) => (
+          <DateFixer
+            ids={props.ids}
+            onApply={(delta) => {
+              props.onShiftDates(delta);
+              close();
+            }}
+            onRestore={() => {
+              props.onRestoreDates();
+              close();
+            }}
+          />
+        )}
+      </Popover>
       <Popover label="Add to album">
         {(close) => (
           <AlbumPicker

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { api, type Filter, type Layout, type View } from "../api";
+import { api, isFilterEmpty, type Filter, type Layout, type View } from "../api";
 import { AlbumHeader } from "../collections/AlbumHeader";
 import { useCollections } from "../collections/context";
 import { DayStore, type Position } from "../timeline/dayStore";
 import { Timeline } from "../timeline/Timeline";
 import { Viewer } from "../viewer/Viewer";
+import { OnThisDay } from "./OnThisDay";
 import { SelectionBar } from "./SelectionBar";
 
 type Props = {
@@ -25,6 +26,8 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
   const albumId = typeof view === "object" && "album" in view ? view.album : null;
   const album = albumId === null ? undefined : collections.albums.find((a) => a.id === albumId);
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
+  // Stable array identity, so panels keyed on the selection don't reset while open.
+  const selectedIds = useMemo(() => [...selection], [selection]);
   const anchor = useRef<Position | null>(null);
   const [viewing, setViewing] = useState<Position | null>(null);
   const [reveal, setReveal] = useState<Position | null>(null);
@@ -36,14 +39,23 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
     anchor.current = null;
   }, []);
 
+  const selectAll = useCallback(async () => {
+    setSelection(new Set(await api.assetIds(view, filter)));
+  }, [view, filter]);
+
   useEffect(() => {
     if (viewing) return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
       if (e.key === "Escape" && selection.size > 0) clearSelection();
+      if (e.key === "a" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        selectAll().catch(onError);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [viewing, selection.size, clearSelection]);
+  }, [viewing, selection.size, clearSelection, selectAll, onError]);
 
   const toggle = (pos: Position, id: number) => {
     setSelection((s) => {
@@ -134,10 +146,27 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
 
   return (
     <div className="photos-view">
+      {view === "all" && isFilterEmpty(filter) && selection.size === 0 && <OnThisDay />}
       {album && <AlbumHeader key={`${album.id}:${album.name}`} album={album} onError={onError} />}
       {selection.size > 0 && (
         <SelectionBar
           count={selection.size}
+          ids={selectedIds}
+          onSelectAll={() => run(selectAll)}
+          onShiftDates={(delta) =>
+            run(async () => {
+              await api.shiftDates([...selection], delta);
+              clearSelection();
+              await onLibraryChanged();
+            })
+          }
+          onRestoreDates={() =>
+            run(async () => {
+              await api.restoreDates([...selection]);
+              clearSelection();
+              await onLibraryChanged();
+            })
+          }
           view={view}
           onClear={clearSelection}
           onFavorite={(favorite) => run(() => setFavorite([...selection], favorite))}
@@ -211,6 +240,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
           onFavorite={setFavorite}
           onHidden={setHidden}
           onAddTag={addTag}
+          onDatesChanged={onLibraryChanged}
           onRemoveTag={removeTag}
           onNavigate={(target) => {
             setViewing(null);

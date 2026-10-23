@@ -156,6 +156,17 @@ Batch 2:
       clip is released as a normal video if its photo disappears
 - [x] Hide/unhide adjusts only the affected day counts (verified equal to a full rebuild)
 
+## M3 checklist
+
+- [x] Date fixing: set the earliest item to a date (rest keep their spacing) or shift by
+      days/hours/minutes; restore original; corrections survive rescans and file edits (schema v6)
+- [x] Select all in the current view + filter (Ctrl+A), e.g. filter one camera → shift its clock
+- [x] On This Day: same calendar day in earlier years, favorites/ratings first, dismissible per day
+- [ ] Events: group photos by time gaps (adaptive per person), rename/merge/split, event view
+- [ ] Places: offline reverse geocoding (GeoNames cities, bundled), place names in info and filters
+- [ ] Trips: multi-day events far from home
+- [ ] Browse by place
+
 ## M0 results
 
 ### `scale_bench`, 1M synthetic assets (release, dev workstation, 2026-10-23)

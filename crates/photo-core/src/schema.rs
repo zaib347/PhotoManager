@@ -158,6 +158,12 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     ALTER TABLE assets ADD COLUMN paired_with INTEGER;
     CREATE INDEX idx_assets_paired ON assets (paired_with) WHERE paired_with IS NOT NULL;
     ",
+    // v6: date corrections keep the extracted date so they can be undone.
+    "
+    ALTER TABLE user_meta ADD COLUMN original_taken_at INTEGER;
+    ALTER TABLE user_meta ADD COLUMN original_tz_offset_min INTEGER;
+    ALTER TABLE user_meta ADD COLUMN original_taken_src INTEGER;
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

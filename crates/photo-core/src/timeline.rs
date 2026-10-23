@@ -269,3 +269,17 @@ pub fn rebuild_day_buckets(conn: &Connection) -> Result<()> {
     ))?;
     Ok(())
 }
+
+/// Every asset id in a view, newest first (for "select all").
+pub fn asset_ids(conn: &Connection, view: View, filter: &Filter) -> Result<Vec<i64>> {
+    let (extra, values) = filter.sql(1);
+    let sql = format!(
+        "SELECT a.id {FROM} WHERE {}{extra} ORDER BY a.local_day DESC, a.taken_at DESC, a.id DESC",
+        view.condition()
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let ids = stmt
+        .query_map(params_from_iter(values), |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(ids)
+}

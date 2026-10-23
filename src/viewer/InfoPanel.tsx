@@ -11,9 +11,10 @@ type Props = {
   onAddTag: (name: string) => void;
   onRemoveTag: (tagId: number) => void;
   onNavigate: (view: View) => void;
+  onRestoreDate: () => void;
 };
 
-export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate }: Props) {
+export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate, onRestoreDate }: Props) {
   const { tags } = useCollections();
   if (!asset) return <aside className="info-panel" />;
   const camera = [asset.cameraMake, asset.cameraModel].filter(Boolean).join(" ");
@@ -35,6 +36,11 @@ export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate }: Props) {
           {asset.takenSrc === 0 && asset.tzOffsetMin !== 0 && ` · ${formatOffset(asset.tzOffsetMin)}`}
         </p>
         {uncertainTime && <p className="muted small">The real capture date may differ: this file had no date inside it.</p>}
+        {asset.takenSrc === 4 && (
+          <button className="link small" onClick={onRestoreDate}>
+            Restore original date
+          </button>
+        )}
       </section>
 
       {(cameraLabel || asset.width) && (

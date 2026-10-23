@@ -1,5 +1,6 @@
 mod collection_commands;
 mod diag;
+mod memory_commands;
 mod protocol;
 mod scans;
 
@@ -287,6 +288,11 @@ pub fn run() {
             set_favorite,
             set_rating,
             set_hidden,
+            memory_commands::on_this_day,
+            memory_commands::date_range,
+            memory_commands::shift_dates,
+            memory_commands::restore_dates,
+            memory_commands::asset_ids,
             collection_commands::list_albums,
             collection_commands::create_album,
             collection_commands::rename_album,

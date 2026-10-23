@@ -1000,3 +1000,130 @@ button.link {
   object-fit: contain;
   background: #0b0b0c;
 }
+
+/* ---------- Memories and dates ---------- */
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button.primary:disabled {
+  background: var(--placeholder);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+.on-this-day {
+  padding: 12px 16px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.otd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.otd-cards {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.otd-card {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+}
+
+.otd-collage {
+  width: 168px;
+  height: 120px;
+  display: grid;
+  gap: 2px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--placeholder);
+}
+
+.otd-collage.n2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.otd-collage.n3,
+.otd-collage.n4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.otd-collage.n3 img:first-child {
+  grid-row: span 2;
+}
+
+.otd-collage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  min-height: 0;
+}
+
+.otd-card:hover .otd-collage {
+  outline: 2px solid var(--accent);
+}
+
+.otd-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.popover:has(.date-fixer) {
+  width: 300px;
+}
+
+.date-fixer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.field input {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  min-width: 0;
+}
+
+.shift-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.date-preview p {
+  margin: 2px 0;
+}
+
+.date-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}

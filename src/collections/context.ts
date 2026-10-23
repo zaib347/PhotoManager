@@ -7,6 +7,8 @@ export type Collections = {
   /** Refetch album and tag lists (names, counts, covers). */
   reload: () => Promise<void>;
   navigate: (view: View) => void;
+  /** Show every photo from one day. */
+  showDay: (day: number) => void;
 };
 
 export const CollectionsContext = createContext<Collections>({
@@ -14,6 +16,7 @@ export const CollectionsContext = createContext<Collections>({
   tags: [],
   reload: async () => {},
   navigate: () => {},
+  showDay: () => {},
 });
 
 export const useCollections = () => useContext(CollectionsContext);
