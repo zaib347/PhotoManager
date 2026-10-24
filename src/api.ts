@@ -2,7 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** Views that are pages rather than timelines. */
-const PAGES = ["events", "trips", "duplicates", "similar", "removed"] as const;
+const PAGES = ["events", "trips", "duplicates", "similar", "removed", "organize"] as const;
 export type PageView = (typeof PAGES)[number];
 export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | PageView;
 export type View = BuiltinView | { album: number } | { tag: number } | { event: number } | { trip: number };
@@ -174,7 +174,22 @@ export type SimilarGroup = {
   members: SimilarMember[];
 };
 
-export type FileOpReport ={ opId: number; done: number; bytes: number; failed: number; errors: string[] };
+export type FileOpKind = "trash" | "move";
+
+/** 2023/2023-06, 2023/06 or 2023/2023-06-14. */
+export type OrganizeLayout = "yearMonth" | "yearMonthNumber" | "yearDay";
+
+export type OrganizePreview = {
+  moves: number;
+  inPlace: number;
+  /** Left alone: their only date is the file's modified time. */
+  undated: number;
+  /** Need " (2)" because the name is taken there. */
+  renamed: number;
+  sample: { fileId: number; from: string; to: string }[];
+};
+
+export type FileOpReport = { opId: number; done: number; bytes: number; failed: number; errors: string[] };
 
 export type DayMemory = { day: number; yearsAgo: number; count: number; coverIds: number[] };
 
@@ -323,7 +338,12 @@ export const api = {
   keepSimilar: (ids: number[]) => invoke<void>("keep_similar", { ids }),
   /** Moves every file of these photos to the trash folder next to it (undoable). */
   removePhotos: (ids: number[]) => invoke<FileOpReport>("remove_photos", { ids }),
-  listFileOps: () => invoke<FileOp[]>("list_file_ops"),
+  /** Recent removals ("trash") or organizer moves ("move"). */
+  listFileOps: (kind: FileOpKind = "trash") => invoke<FileOp[]>("list_file_ops", { kind }),
+  organizePreview: (rootId: number, layout: OrganizeLayout, includeUndated: boolean) =>
+    invoke<OrganizePreview>("organize_preview", { rootId, layout, includeUndated }),
+  organizeRun: (rootId: number, layout: OrganizeLayout, includeUndated: boolean) =>
+    invoke<FileOpReport>("organize_run", { rootId, layout, includeUndated }),
   undoFileOp: (id: number) => invoke<FileOpReport>("undo_file_op", { id }),
   emptyFileOp: (id: number) => invoke<FileOpReport>("empty_file_op", { id }),
   listRoots: () => invoke<RootInfo[]>("list_roots"),

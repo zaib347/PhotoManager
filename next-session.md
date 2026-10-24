@@ -11,10 +11,17 @@ The full plan and milestone checklists are in [docs/PLAN.md](docs/PLAN.md).
 | M3 Memory features | In progress |
 
 **Done:** M3 except Browse by place (Date fixing, On This Day, Events, Places, Trips), all on `main`.
-**M4 in progress:** exact duplicates + safe file operations are on `main`. Similar photos
-(near-duplicates, bursts) on branch **`m4-similar`**, and better best-shot ranking on
-**`m4-best-shot`** (branched from `m4-similar`, so it contains it). **Neither is merged yet.**
-If both check out, merging `m4-best-shot` alone brings in both.
+**M4 built, not yet tested by the user** (they said "we test later"). On `main`: exact
+duplicates, safe file operations, similar photos, best-shot ranking. On branch **`m4-remove`**
+(not merged): remove photos from the timeline/viewer, Recently removed page, organizer.
+
+**Test list for M4** (needs real photo files, not synthetic):
+- Duplicates: copies in two folders → Duplicates page → remove → Undo.
+- Similar photos: burst shots → groups, Best badge with a reason, Blurry/Too dark notes.
+- Remove: select photos → **Remove** (or Delete) → gone from the timeline → **Recently removed**
+  → Undo brings them back. Delete in the viewer removes the current photo.
+- Organize files: pick a folder → Preview → Move → folders `2023/2023-06/…` → Undo moves back.
+- Send to Recycle Bin from Recently removed frees the space.
 
 Best-shot test: in a burst group the badge should say why ("Sharpest", "Best exposed"…) and
 blurry/dark shots get a warning under them. Assessment of grouped photos runs after hashing
@@ -29,9 +36,10 @@ blurry/dark shots get a warning under them. Assessment of grouped photos runs af
    - **Similar photos** in the sidebar: groups with the best one ticked (Best badge).
    - **Remove N** per group, **Keep all** (group disappears), or remove unticked in all shown.
    - **Recently removed** (shared with Duplicates) → **Undo** brings removed photos back.
-2. If they're OK, merge: `git checkout main && git merge --no-ff m4-best-shot`
-3. Next in M4: better best-shot ranking, other planned/previewed operations. Browse by place
-   (M3) is still open too.
+2. Merge: `git checkout main && git merge --no-ff m4-remove` (the user may ask to merge before
+   testing, as with earlier branches).
+3. Next: the free public beta (see PLAN). Still open: Browse by place (M3), faster assessment
+   (DCT-scaled decode).
 
 ## How the similar-photos code works
 

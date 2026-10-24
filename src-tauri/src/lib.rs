@@ -345,6 +345,8 @@ pub fn run() {
             cleanup_commands::list_file_ops,
             cleanup_commands::undo_file_op,
             cleanup_commands::empty_file_op,
+            cleanup_commands::organize_preview,
+            cleanup_commands::organize_run,
             similar_commands::similar_overview,
             similar_commands::similar_groups,
             similar_commands::remove_similar,

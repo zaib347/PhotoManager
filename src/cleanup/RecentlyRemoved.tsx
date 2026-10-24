@@ -1,12 +1,13 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
-import { api, type FileOp, type FileOpReport } from "../api";
+import { api, type FileOp, type FileOpKind, type FileOpReport } from "../api";
 import { formatBytes } from "../format";
 
 const REASONS: Record<string, string> = {
   duplicates: "Duplicate copies",
   similar: "Similar photos",
   removed: "Removed photos",
+  organize: "Organized by date",
 };
 
 /** "Moved 3 files (12 MB). 1 skipped: …" */
@@ -25,22 +26,25 @@ type Props = {
   onError: (e: unknown) => void;
   /** Shown as its own page (no heading; says so when empty). */
   standalone?: boolean;
+  /** Removals (default) or organizer moves, which can be undone but not emptied. */
+  kind?: FileOpKind;
 };
 
-/** Recent removals, with Undo and Send to Recycle Bin. */
-export function RecentlyRemoved({ version, onChanged, onNotice, onError, standalone }: Props) {
+/** Recent removals (or moves), with Undo and, for removals, Send to Recycle Bin. */
+export function RecentlyRemoved({ version, onChanged, onNotice, onError, standalone, kind = "trash" }: Props) {
+  const moves = kind === "move";
   const [ops, setOps] = useState<FileOp[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api.listFileOps().then(setOps, onError);
-  }, [version, onError]);
+    api.listFileOps(kind).then(setOps, onError);
+  }, [version, kind, onError]);
 
   const act = async (action: () => Promise<string>) => {
     setBusy(true);
     try {
       onNotice(await action());
-      setOps(await api.listFileOps());
+      setOps(await api.listFileOps(kind));
       onChanged();
     } catch (e) {
       onError(e);
@@ -66,7 +70,7 @@ export function RecentlyRemoved({ version, onChanged, onNotice, onError, standal
   }
   return (
     <section className="cleanup-ops">
-      {!standalone && <h3>Recently removed</h3>}
+      {!standalone && <h3>{moves ? "Recent moves" : "Recently removed"}</h3>}
       <ul>
         {ops.map((op) => (
           <li key={op.id}>
@@ -74,12 +78,18 @@ export function RecentlyRemoved({ version, onChanged, onNotice, onError, standal
             <span className="muted">{REASONS[op.reason] ?? op.reason}</span>
             <span className="muted small">
               {op.status === "undone"
-                ? "Put back"
+                ? moves
+                  ? "Moved back"
+                  : "Put back"
                 : op.status === "emptied"
                   ? "Sent to the Recycle Bin"
                   : op.inTrash > 0
-                    ? `${op.inTrash.toLocaleString()} files · ${formatBytes(op.inTrashBytes)} in the trash folder`
-                    : "Nothing left in the trash folder"}
+                    ? moves
+                      ? `${op.inTrash.toLocaleString()} files moved`
+                      : `${op.inTrash.toLocaleString()} files · ${formatBytes(op.inTrashBytes)} in the trash folder`
+                    : moves
+                      ? "Nothing moved"
+                      : "Nothing left in the trash folder"}
               {op.failed > 0 && ` · ${op.failed.toLocaleString()} skipped`}
             </span>
             <div className="spacer" />
@@ -88,9 +98,11 @@ export function RecentlyRemoved({ version, onChanged, onNotice, onError, standal
                 <button disabled={busy} onClick={() => undo(op)}>
                   Undo
                 </button>
-                <button disabled={busy} onClick={() => empty(op)}>
-                  Send to Recycle Bin
-                </button>
+                {!moves && (
+                  <button disabled={busy} onClick={() => empty(op)}>
+                    Send to Recycle Bin
+                  </button>
+                )}
               </>
             )}
           </li>

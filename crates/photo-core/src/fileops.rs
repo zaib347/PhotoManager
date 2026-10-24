@@ -6,6 +6,9 @@
 //! files to the OS trash, and only on drives where that really keeps them (see
 //! `volume::has_recycle_bin`).
 //!
+//! Moving files within a library folder (the organizer) works the same way, with the
+//! destination in place of the trash folder.
+//!
 //! Every operation is journaled: the plan, with each file's `files` row, is written
 //! before anything moves, and each file's state is recorded after it moves. `recover`
 //! finishes the bookkeeping for an operation a crash interrupted.
@@ -27,16 +30,51 @@ const BATCH: usize = 64;
 /// Errors kept in a report; the rest are only counted.
 const MAX_ERRORS: usize = 20;
 
+/// What an operation does with its files.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    /// Into `TRASH_DIR`; the `files` row goes until an undo.
+    Trash,
+    /// To another place in the same library folder; the `files` row follows.
+    Move,
+}
+
+impl Kind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Kind::Trash => "trash",
+            Kind::Move => "move",
+        }
+    }
+}
+
+fn kind_of(conn: &Connection, op_id: i64) -> Result<Kind> {
+    let kind: Option<String> = conn
+        .query_row(
+            "SELECT json_extract(plan_json, '$.kind') FROM file_ops WHERE id = ?1",
+            params![op_id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten();
+    Ok(if kind.as_deref() == Some("move") {
+        Kind::Move
+    } else {
+        Kind::Trash
+    })
+}
+
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct OpSummary {
     pub id: i64,
-    /// Why the files were removed, e.g. "duplicates".
+    /// Why: "duplicates", "similar", "removed", "organize".
     pub reason: String,
     pub created_at: i64,
     /// running | done | undone | emptied
     pub status: String,
-    /// Files currently in the trash folder (can be undone or emptied).
+    /// Files currently moved (in the trash folder, or at their new place): what an
+    /// undo would put back.
     pub in_trash: i64,
     pub in_trash_bytes: i64,
     pub failed: i64,
@@ -67,6 +105,7 @@ struct Item {
     seq: i64,
     root_id: i64,
     rel_path: String,
+    /// Where it goes, relative to the same root: the trash folder or the destination.
     trash_rel: String,
     size: i64,
     mtime: i64,
@@ -136,7 +175,31 @@ impl<'a> Roots<'a> {
 /// Moves files into the trash folder next to them. With `keep_a_copy`, refuses (before
 /// touching anything) if that would leave a photo with no copy at all.
 pub fn trash(db: &Db, file_ids: &[i64], reason: &str, keep_a_copy: bool) -> Result<Report> {
-    let op_id = plan(&mut db.write(), file_ids, reason, keep_a_copy)?;
+    let files: Vec<(i64, Option<String>)> = file_ids.iter().map(|&id| (id, None)).collect();
+    let op_id = plan(&mut db.write(), &files, Kind::Trash, reason, keep_a_copy)?;
+    run(db, op_id, Kind::Trash)
+}
+
+/// Moves files to new paths in their own library folder (`moves`: file id → new path
+/// relative to the root). Folders left empty by the move are removed.
+pub fn relocate(db: &Db, moves: &[(i64, String)], reason: &str) -> Result<Report> {
+    let files: Vec<(i64, Option<String>)> = moves
+        .iter()
+        .map(|(id, to)| (*id, Some(to.clone())))
+        .collect();
+    let op_id = plan(&mut db.write(), &files, Kind::Move, reason, false)?;
+    let report = run(db, op_id, Kind::Move)?;
+    let mut roots = Roots::new(db);
+    for item in items(&db.read(), op_id, "moved")? {
+        if let Some(root) = roots.get(item.root_id)? {
+            prune_up(&root, &item.rel_path);
+        }
+    }
+    Ok(report)
+}
+
+/// Carries out a planned operation.
+fn run(db: &Db, op_id: i64, kind: Kind) -> Result<Report> {
     let mut report = Report {
         op_id,
         ..Default::default()
@@ -158,7 +221,7 @@ pub fn trash(db: &Db, file_ids: &[i64], reason: &str, keep_a_copy: bool) -> Resu
         for (item, outcome) in results {
             match outcome {
                 Ok(()) => {
-                    moved(&tx, op_id, item)?;
+                    moved(&tx, op_id, item, kind)?;
                     report.done += 1;
                     report.bytes += item.size;
                 }
@@ -175,7 +238,14 @@ pub fn trash(db: &Db, file_ids: &[i64], reason: &str, keep_a_copy: bool) -> Resu
 }
 
 /// Writes the journal: an operation row and one item per file, nothing moved yet.
-fn plan(conn: &mut Connection, file_ids: &[i64], reason: &str, keep_a_copy: bool) -> Result<i64> {
+/// `files`: file id and, for moves, its new path.
+fn plan(
+    conn: &mut Connection,
+    files: &[(i64, Option<String>)],
+    kind: Kind,
+    reason: &str,
+    keep_a_copy: bool,
+) -> Result<i64> {
     let tx = conn.transaction()?;
     let mut rows: Vec<Item> = Vec::new();
     {
@@ -184,8 +254,8 @@ fn plan(conn: &mut Connection, file_ids: &[i64], reason: &str, keep_a_copy: bool
              WHERE id = ?1 AND missing_since IS NULL",
         )?;
         let mut seen = HashSet::new();
-        for &id in file_ids {
-            if !seen.insert(id) {
+        for (id, to) in files {
+            if !seen.insert(*id) {
                 continue;
             }
             let row = stmt
@@ -194,7 +264,7 @@ fn plan(conn: &mut Connection, file_ids: &[i64], reason: &str, keep_a_copy: bool
                         seq: rows.len() as i64,
                         root_id: r.get(0)?,
                         rel_path: r.get(1)?,
-                        trash_rel: String::new(),
+                        trash_rel: to.clone().unwrap_or_default(),
                         size: r.get(2)?,
                         mtime: r.get(3)?,
                         quick_hash: r.get(4)?,
@@ -207,7 +277,10 @@ fn plan(conn: &mut Connection, file_ids: &[i64], reason: &str, keep_a_copy: bool
         }
     }
     if rows.is_empty() {
-        return Err(Error::Invalid("Nothing to remove".into()));
+        return Err(Error::Invalid(match kind {
+            Kind::Trash => "Nothing to remove".into(),
+            Kind::Move => "Nothing to move".into(),
+        }));
     }
     if keep_a_copy {
         let mut leaving: HashMap<i64, i64> = HashMap::new();
@@ -226,7 +299,7 @@ fn plan(conn: &mut Connection, file_ids: &[i64], reason: &str, keep_a_copy: bool
         }
     }
 
-    let plan = plan_json(reason);
+    let plan = plan_json(kind, reason);
     tx.execute(
         "INSERT INTO file_ops (plan_json, status, created_at) VALUES (?1, 'running', ?2)",
         params![plan, now_ms()],
@@ -237,7 +310,9 @@ fn plan(conn: &mut Connection, file_ids: &[i64], reason: &str, keep_a_copy: bool
             "INSERT INTO file_op_items (op_id, {ITEM_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"
         ))?;
         for r in &mut rows {
-            r.trash_rel = format!("{TRASH_DIR}/{op_id}/{}", r.rel_path);
+            if kind == Kind::Trash {
+                r.trash_rel = format!("{TRASH_DIR}/{op_id}/{}", r.rel_path);
+            }
             insert.execute(params![
                 op_id,
                 r.seq,
@@ -257,7 +332,7 @@ fn plan(conn: &mut Connection, file_ids: &[i64], reason: &str, keep_a_copy: bool
 }
 
 /// `{"kind":"trash","reason":"…"}` without pulling in a JSON library for one object.
-fn plan_json(reason: &str) -> String {
+fn plan_json(kind: Kind, reason: &str) -> String {
     let escaped: String = reason
         .chars()
         .filter(|c| !c.is_control())
@@ -266,10 +341,13 @@ fn plan_json(reason: &str) -> String {
             c => vec![c],
         })
         .collect();
-    format!("{{\"kind\":\"trash\",\"reason\":\"{escaped}\"}}")
+    format!(
+        "{{\"kind\":\"{}\",\"reason\":\"{escaped}\"}}",
+        kind.as_str()
+    )
 }
 
-/// Moves one file into the trash folder if it is still the file that was scanned.
+/// Moves one file to its new place if it is still the file that was scanned.
 fn move_out(root: &Path, item: &Item) -> std::result::Result<(), String> {
     let src = root.join(&item.rel_path);
     let dst = root.join(&item.trash_rel);
@@ -278,19 +356,25 @@ fn move_out(root: &Path, item: &Item) -> std::result::Result<(), String> {
         return Err("it changed since the last scan; rescan the folder first".into());
     }
     if dst.exists() {
-        return Err("something is already in the trash folder under that name".into());
+        return Err("a file already exists where it would go".into());
     }
     if let Some(parent) = dst.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("can't make the trash folder ({e})"))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("can't make its folder ({e})"))?;
     }
     std::fs::rename(&src, &dst).map_err(|e| format!("can't move it ({e})"))
 }
 
-/// Records a file as moved: its `files` row goes (the journal keeps a copy), and its
-/// asset leaves the timeline if that was its last copy.
-fn moved(tx: &Transaction, op_id: i64, item: &Item) -> Result<()> {
+/// Records a file as moved. Trashed: its `files` row goes (the journal keeps a copy),
+/// and its asset leaves the timeline if that was its last copy. Moved: the row follows.
+fn moved(tx: &Transaction, op_id: i64, item: &Item, kind: Kind) -> Result<()> {
     set_state(tx, op_id, item.seq, "moved", None)?;
+    if kind == Kind::Move {
+        tx.execute(
+            "UPDATE files SET rel_path = ?3 WHERE root_id = ?1 AND rel_path = ?2",
+            params![item.root_id, item.rel_path, item.trash_rel],
+        )?;
+        return Ok(());
+    }
     tx.execute(
         "DELETE FROM files WHERE root_id = ?1 AND rel_path = ?2",
         params![item.root_id, item.rel_path],
@@ -331,6 +415,7 @@ fn finish(conn: &mut Connection, op_id: i64, status: &str) -> Result<()> {
 /// Puts an operation's files back where they were, with their library data.
 pub fn undo(db: &Db, op_id: i64) -> Result<Report> {
     require_status(&db.read(), op_id, &["done"])?;
+    let kind = kind_of(&db.read(), op_id)?;
     db.write().execute(
         "UPDATE file_ops SET status = 'undoing' WHERE id = ?1",
         params![op_id],
@@ -354,7 +439,7 @@ pub fn undo(db: &Db, op_id: i64) -> Result<Report> {
         for (item, outcome) in results {
             match outcome {
                 Ok(()) => {
-                    restored(&tx, op_id, item)?;
+                    restored(&tx, op_id, item, kind)?;
                     report.done += 1;
                     report.bytes += item.size;
                 }
@@ -370,8 +455,20 @@ pub fn undo(db: &Db, op_id: i64) -> Result<Report> {
         op_id,
         if left > 0 { "done" } else { "undone" },
     )?;
-    for folder in trash_folders(db, op_id)? {
-        prune_empty(&folder);
+    match kind {
+        Kind::Trash => {
+            for folder in trash_folders(db, op_id)? {
+                prune_empty(&folder);
+            }
+        }
+        Kind::Move => {
+            let mut roots = Roots::new(db);
+            for item in items(&db.read(), op_id, "restored")? {
+                if let Some(root) = roots.get(item.root_id)? {
+                    prune_up(&root, &item.trash_rel);
+                }
+            }
+        }
     }
     Ok(report)
 }
@@ -380,7 +477,7 @@ fn move_back(root: &Path, item: &Item) -> std::result::Result<(), String> {
     let src = root.join(&item.trash_rel);
     let dst = root.join(&item.rel_path);
     if !src.is_file() {
-        return Err("it's no longer in the trash folder".into());
+        return Err("it's no longer where it was moved to".into());
     }
     if dst.exists() {
         return Err("another file now has its name".into());
@@ -392,8 +489,15 @@ fn move_back(root: &Path, item: &Item) -> std::result::Result<(), String> {
 }
 
 /// Records a file as back: its `files` row returns as it was and its asset is present.
-fn restored(tx: &Transaction, op_id: i64, item: &Item) -> Result<()> {
+fn restored(tx: &Transaction, op_id: i64, item: &Item, kind: Kind) -> Result<()> {
     set_state(tx, op_id, item.seq, "restored", None)?;
+    if kind == Kind::Move {
+        tx.execute(
+            "UPDATE files SET rel_path = ?2 WHERE root_id = ?1 AND rel_path = ?3",
+            params![item.root_id, item.rel_path, item.trash_rel],
+        )?;
+        return Ok(());
+    }
     tx.execute(
         "INSERT INTO files (root_id, rel_path, size, mtime, quick_hash, full_hash, asset_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
@@ -420,6 +524,9 @@ fn restored(tx: &Transaction, op_id: i64, item: &Item) -> Result<()> {
 /// space. Drives without a real Recycle Bin are left alone, with the reason.
 pub fn empty(db: &Db, op_id: i64) -> Result<Report> {
     require_status(&db.read(), op_id, &["done"])?;
+    if kind_of(&db.read(), op_id)? != Kind::Trash {
+        return Err(Error::Invalid("Only removed files can be emptied".into()));
+    }
     let mut report = Report {
         op_id,
         ..Default::default()
@@ -478,6 +585,18 @@ pub fn empty(db: &Db, op_id: i64) -> Result<Report> {
         finish(&mut db.write(), op_id, "emptied")?;
     }
     Ok(report)
+}
+
+/// Removes the folders above a moved file's old place that it left empty, up to (not
+/// including) the library folder. Stops at the first folder that isn't empty.
+fn prune_up(root: &Path, rel_file: &str) {
+    let mut dir = Path::new(rel_file).parent();
+    while let Some(d) = dir {
+        if d.as_os_str().is_empty() || std::fs::remove_dir(root.join(d)).is_err() {
+            break;
+        }
+        dir = d.parent();
+    }
 }
 
 /// The trash folders an operation used (its own, then the shared parent), on drives
@@ -540,19 +659,19 @@ fn require_status(conn: &Connection, op_id: i64, allowed: &[&str]) -> Result<()>
     }
 }
 
-/// Recent operations, newest first.
-pub fn list(conn: &Connection, limit: usize) -> Result<Vec<OpSummary>> {
+/// Recent operations of one kind, newest first.
+pub fn list(conn: &Connection, kind: Kind, limit: usize) -> Result<Vec<OpSummary>> {
     let mut stmt = conn.prepare_cached(
         "SELECT o.id, COALESCE(json_extract(o.plan_json, '$.reason'), ''), o.created_at, o.status,
                 COALESCE(SUM(i.state = 'moved'), 0),
                 COALESCE(SUM(CASE WHEN i.state = 'moved' THEN i.size END), 0),
                 COALESCE(SUM(i.state = 'failed'), 0)
          FROM file_ops o LEFT JOIN file_op_items i ON i.op_id = o.id
-         WHERE json_extract(o.plan_json, '$.kind') = 'trash'
+         WHERE json_extract(o.plan_json, '$.kind') = ?2
          GROUP BY o.id ORDER BY o.id DESC LIMIT ?1",
     )?;
     let rows = stmt
-        .query_map(params![limit as i64], |r| {
+        .query_map(params![limit as i64, kind.as_str()], |r| {
             Ok(OpSummary {
                 id: r.get(0)?,
                 reason: r.get(1)?,
@@ -581,6 +700,7 @@ pub fn recover(db: &Db) -> Result<usize> {
     let mut settled = 0;
     for (op_id, status) in open {
         let mut roots = Roots::new(db);
+        let kind = kind_of(&db.read(), op_id)?;
         let undoing = status == "undoing";
         let pending = items(&db.read(), op_id, if undoing { "moved" } else { "planned" })?;
         let mut waiting = false;
@@ -594,10 +714,10 @@ pub fn recover(db: &Db) -> Result<usize> {
             let at_home = root.join(&item.rel_path).exists();
             let in_trash = root.join(&item.trash_rel).exists();
             match (undoing, at_home, in_trash) {
-                (false, false, true) => moved(&tx, op_id, item)?,
+                (false, false, true) => moved(&tx, op_id, item, kind)?,
                 (false, _, _) => set_state(&tx, op_id, item.seq, "failed", Some("interrupted"))?,
-                (true, true, false) => restored(&tx, op_id, item)?,
-                (true, _, _) => {} // still in the trash folder: stays undoable
+                (true, true, false) => restored(&tx, op_id, item, kind)?,
+                (true, _, _) => {} // still where it was moved to: stays undoable
             }
         }
         tx.commit()?;
@@ -675,7 +795,7 @@ mod tests {
         assert!(in_trash.is_file());
         assert_eq!(file_count(&db), 2);
 
-        let ops = list(&db.read(), 10).unwrap();
+        let ops = list(&db.read(), Kind::Trash, 10).unwrap();
         assert_eq!((ops[0].in_trash, ops[0].status.as_str()), (1, "done"));
 
         let back = undo(&db, report.op_id).unwrap();
@@ -686,8 +806,50 @@ mod tests {
             "empty trash folders are tidied away"
         );
         assert_eq!(file_count(&db), 3);
-        assert_eq!(list(&db.read(), 10).unwrap()[0].status, "undone");
+        assert_eq!(
+            list(&db.read(), Kind::Trash, 10).unwrap()[0].status,
+            "undone"
+        );
         assert!(undo(&db, report.op_id).is_err(), "only once");
+    }
+
+    #[test]
+    fn moves_round_trip_and_tidy_empty_folders() {
+        let (_dir, db, photos, ids) = setup(&["sub/a.jpg", "b.jpg"], 0);
+        let moves = vec![(ids[0], "2023/2023-06/a.jpg".to_owned())];
+        let report = relocate(&db, &moves, "organize").unwrap();
+        assert_eq!((report.done, report.failed), (1, 0));
+        assert!(photos.join("2023/2023-06/a.jpg").is_file());
+        assert!(!photos.join("sub").exists(), "the emptied folder is gone");
+        let path: String = db
+            .read()
+            .query_row(
+                "SELECT rel_path FROM files WHERE id = ?1",
+                params![ids[0]],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            path, "2023/2023-06/a.jpg",
+            "the library row follows the file"
+        );
+        assert_eq!(list(&db.read(), Kind::Move, 10).unwrap()[0].in_trash, 1);
+        assert!(list(&db.read(), Kind::Trash, 10).unwrap().is_empty());
+        assert!(empty(&db, report.op_id).is_err(), "moves can't be emptied");
+
+        undo(&db, report.op_id).unwrap();
+        assert!(photos.join("sub/a.jpg").is_file());
+        assert!(!photos.join("2023").exists());
+        let path: String = db
+            .read()
+            .query_row(
+                "SELECT rel_path FROM files WHERE id = ?1",
+                params![ids[0]],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(path, "sub/a.jpg");
+        assert_eq!(file_count(&db), 2);
     }
 
     #[test]
@@ -696,7 +858,7 @@ mod tests {
         assert!(trash(&db, &ids, "duplicates", true).is_err());
         assert!(photos.join("a.jpg").is_file() && photos.join("a2.jpg").is_file());
         assert!(
-            list(&db.read(), 10).unwrap().is_empty(),
+            list(&db.read(), Kind::Trash, 10).unwrap().is_empty(),
             "nothing journaled"
         );
     }
@@ -714,12 +876,13 @@ mod tests {
     #[test]
     fn recovers_an_interrupted_operation() {
         let (_dir, db, photos, ids) = setup(&["a.jpg", "a2.jpg", "a3.jpg"], 3);
-        let op = plan(&mut db.write(), &ids[1..], "duplicates", true).unwrap();
+        let files: Vec<(i64, Option<String>)> = ids[1..].iter().map(|&id| (id, None)).collect();
+        let op = plan(&mut db.write(), &files, Kind::Trash, "duplicates", true).unwrap();
         // The app died after moving the first file but before recording it.
         let first = &items(&db.read(), op, "planned").unwrap()[0];
         move_out(&photos, first).unwrap();
         assert_eq!(recover(&db).unwrap(), 1);
-        let ops = list(&db.read(), 10).unwrap();
+        let ops = list(&db.read(), Kind::Trash, 10).unwrap();
         assert_eq!(
             (ops[0].status.as_str(), ops[0].in_trash, ops[0].failed),
             ("done", 1, 1)

@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use photo_core::duplicates::{self, Group, Overview};
 use photo_core::fileops::{self, OpSummary, Report};
+use photo_core::organize::{self, Layout, Preview};
 use photo_core::{events, similar, trips};
 use tauri::State;
 
@@ -79,9 +80,49 @@ pub async fn remove_duplicates(
     .await
 }
 
+/// Recent operations: removals (`"trash"`, the default) or organizer moves (`"move"`).
 #[tauri::command]
-pub async fn list_file_ops(state: State<'_, Arc<AppState>>) -> CmdResult<Vec<OpSummary>> {
-    blocking(&state, |s| fileops::list(&s.library.read(), RECENT_OPS)).await
+pub async fn list_file_ops(
+    state: State<'_, Arc<AppState>>,
+    kind: Option<String>,
+) -> CmdResult<Vec<OpSummary>> {
+    let kind = match kind.as_deref() {
+        Some("move") => fileops::Kind::Move,
+        _ => fileops::Kind::Trash,
+    };
+    blocking(&state, move |s| {
+        fileops::list(&s.library.read(), kind, RECENT_OPS)
+    })
+    .await
+}
+
+/// What organizing a library folder would move, without moving anything.
+#[tauri::command]
+pub async fn organize_preview(
+    state: State<'_, Arc<AppState>>,
+    root_id: i64,
+    layout: Layout,
+    include_undated: bool,
+) -> CmdResult<Preview> {
+    blocking(&state, move |s| {
+        organize::preview(&s.library.read(), root_id, layout, include_undated)
+    })
+    .await
+}
+
+/// Moves a library folder's files into folders by date (undoable).
+#[tauri::command]
+pub async fn organize_run(
+    state: State<'_, Arc<AppState>>,
+    root_id: i64,
+    layout: Layout,
+    include_undated: bool,
+) -> CmdResult<Report> {
+    no_scan_running(&state)?;
+    blocking(&state, move |s| {
+        organize::run(&s.library, root_id, layout, include_undated)
+    })
+    .await
 }
 
 #[tauri::command]

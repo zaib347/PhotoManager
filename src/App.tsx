@@ -19,6 +19,7 @@ import {
 } from "./api";
 import { CollectionsContext, type Collections } from "./collections/context";
 import { DuplicatesPage } from "./cleanup/DuplicatesPage";
+import { OrganizePage } from "./cleanup/OrganizePage";
 import { RecentlyRemoved } from "./cleanup/RecentlyRemoved";
 import { SimilarPage } from "./cleanup/SimilarPage";
 import { EventsPage } from "./events/EventsPage";
@@ -49,6 +50,7 @@ function emptyState(view: View): { title: string; hint: string } {
     duplicates: { title: "", hint: "" },
     similar: { title: "", hint: "" },
     removed: { title: "", hint: "" },
+    organize: { title: "", hint: "" },
   }[view];
 }
 
@@ -259,6 +261,13 @@ export default function App() {
             <DuplicatesPage version={eventsVersion} onNotice={setNotice} onError={report} />
           ) : view === "similar" ? (
             <SimilarPage onNotice={setNotice} onError={report} />
+          ) : view === "organize" ? (
+            <OrganizePage
+              roots={roots}
+              onChanged={() => reloadRoots().catch(report)}
+              onNotice={setNotice}
+              onError={report}
+            />
           ) : view === "removed" ? (
             <div className="events-page cleanup-page">
               <section className="cleanup-summary">

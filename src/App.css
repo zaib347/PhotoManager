@@ -1389,3 +1389,58 @@ button.primary:disabled {
   color: #fff;
   font-size: 11px;
 }
+.organize-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 640px;
+}
+
+.organize-form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.organize-form select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.organize-form fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.organize-layout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.organize-sample {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.organize-sample th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.organize-sample td,
+.organize-sample th {
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid var(--border);
+  word-break: break-all;
+}

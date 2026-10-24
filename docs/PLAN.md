@@ -213,7 +213,16 @@ Batch 2:
       copies by pixels then bytes. The page says why ("Sharpest", "Best exposed", "Your
       favorite", …) and flags "Blurry", "Too dark", "Overexposed". Faces and closed eyes need a
       model: AI pack (M7)
-- [ ] Other planned/previewed operations on top of `fileops` (e.g. remove a selection)
+- [x] Remove photos anywhere: selection bar **Remove**, Delete key in the grid and viewer; every
+      copy goes to the trash folder; events, trips and similar groups refresh after removals and
+      undos. **Recently removed** page in the sidebar
+- [x] Organizer (`organize`): moves one library folder's files into `2023/2023-06`, `2023/06`
+      or `2023/2023-06-14`, names kept (clash → " (2)"), Live Photo clips follow their photo,
+      files dated only by their modified time left alone unless asked. Preview (counts + first
+      100 moves) before anything moves; runs through `fileops` as a journaled `move` operation
+      (the `files` row follows the file, emptied folders removed); Undo moves everything back
+- [ ] Follow-up: assessing a 12 MP original takes ~450 ms (full JPEG decode); decode at 1/4 scale
+      (DCT scaling) before large real libraries
 
 ## M0 results
 
