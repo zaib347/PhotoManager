@@ -197,8 +197,22 @@ Batch 2:
       path; changeable), remove per photo or all at once (never the last copy), Recently removed
       with Undo / Send to Recycle Bin. Fixed in the scanner: identical files in the same batch of
       256 were never joined (each only checked rows already committed)
-- [ ] Near-duplicates and bursts (phash within a time window, BK-tree)
-- [ ] Best-shot ranking
+- [x] Near-duplicates and bursts (`similar`, schema v11): 64-bit DCT pHash + sharpness
+      (Laplacian variance) from the grid thumbnail, dark borders trimmed (letterboxed EXIF
+      thumbnails), near-blank images skipped. Similar shots: next 30 photos within 3 min,
+      ≤ 10 bits. Near copies at any time apart: ≤ 3 bits, found via four 16-bit chunk buckets
+      (pigeonhole) instead of a BK-tree. Hashing runs in the background after scans and at
+      startup, pauses while a scan runs (~4 ms per thumbnail on one core, parallel). Similar
+      photos page: tick what to keep, remove the rest through `fileops` (undoable), or
+      "Keep all" (group stays hidden). 1M hashed photos: grouping 3.3 s on a reader
+- [x] Best-shot ranking (schema v12 `focus`, `exposure`, `quality_v`): photos in similar groups
+      are assessed in the background from their originals at 1024 px. Focus = Laplacian
+      variance of the 4 sharpest of 8×8 tiles (a sharp subject on a soft background counts);
+      exposure = clipped highlights/shadows and overall brightness, signed (dark/bright).
+      Choice: favorite, rating, then 75% focus relative to the group's sharpest + 25% exposure;
+      copies by pixels then bytes. The page says why ("Sharpest", "Best exposed", "Your
+      favorite", …) and flags "Blurry", "Too dark", "Overexposed". Faces and closed eyes need a
+      model: AI pack (M7)
 - [ ] Other planned/previewed operations on top of `fileops` (e.g. remove a selection)
 
 ## M0 results

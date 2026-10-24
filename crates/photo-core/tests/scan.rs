@@ -643,3 +643,128 @@ fn duplicate_copies_are_removed_safely_and_come_back_on_undo() {
         2
     );
 }
+
+/// A scene of soft blobs; `seed` moves them, `bright` lifts every pixel.
+fn write_scene(path: &Path, seed: u32, bright: u8) {
+    let blobs: Vec<(f32, f32, f32)> = (0..6)
+        .map(|i| {
+            let k = (seed * 7 + i * 13) as f32;
+            (
+                (k * 0.37).sin().abs(),
+                (k * 0.73).cos().abs(),
+                40.0 + (k % 5.0) * 30.0,
+            )
+        })
+        .collect();
+    let img = RgbImage::from_fn(320, 240, |x, y| {
+        let (fx, fy) = (x as f32 / 320.0, y as f32 / 240.0);
+        let v: f32 = blobs
+            .iter()
+            .map(|&(bx, by, b)| b * (-((fx - bx).powi(2) + (fy - by).powi(2)) * 12.0).exp())
+            .sum();
+        let v = ((60.0 + v).min(235.0) as u8).saturating_add(bright);
+        Rgb([v, v / 2 + 40, 255 - v / 2])
+    });
+    fs::write(path, thumbs::encode_jpeg(&img).unwrap()).unwrap();
+}
+
+#[test]
+fn similar_shots_group_and_extra_ones_can_be_removed_and_restored() {
+    use photo_core::similar;
+    use std::sync::atomic::AtomicBool;
+    let f = fixture();
+    fs::create_dir_all(f.photos.join("burst")).unwrap();
+    // Three takes within a minute (dates from the names), and an unrelated photo.
+    write_scene(&f.photos.join("burst/IMG_20230601_101500.jpg"), 1, 0);
+    write_scene(&f.photos.join("burst/IMG_20230601_101510.jpg"), 1, 12);
+    write_scene(&f.photos.join("burst/IMG_20230601_101530.jpg"), 1, 24);
+    write_scene(&f.photos.join("burst/IMG_20230601_101540.jpg"), 4, 0);
+    f.scan();
+    let hashed = similar::hash_pending(&f.library, &f.thumbs, &AtomicBool::new(false)).unwrap();
+    assert!(hashed >= 4);
+    assert!(!similar::needs_hashing(&f.library.read()).unwrap());
+    similar::detect(&f.library).unwrap();
+
+    let burst: Vec<i64> = (0..3)
+        .map(|i| {
+            f.asset_of(&format!(
+                "burst/IMG_20230601_1015{}.jpg",
+                ["00", "10", "30"][i]
+            ))
+        })
+        .collect();
+    let other = f.asset_of("burst/IMG_20230601_101540.jpg");
+    let groups = similar::groups(&f.library.read(), 0, 50).unwrap();
+    let group = groups
+        .iter()
+        .find(|g| g.members.iter().any(|m| m.asset_id == burst[0]))
+        .expect("the burst forms a group");
+    let mut members: Vec<i64> = group.members.iter().map(|m| m.asset_id).collect();
+    members.sort_unstable();
+    assert_eq!(members, burst);
+    assert_eq!(group.kind, "similar");
+    assert_eq!(group.members.iter().filter(|m| m.best).count(), 1);
+    assert!(
+        group.members.iter().all(|m| m.focus.is_none()),
+        "not assessed yet"
+    );
+
+    // Grouped photos are then assessed from their originals.
+    let assessed = similar::assess_pending(&f.library, &AtomicBool::new(false)).unwrap();
+    assert!(assessed >= 3);
+    let groups = similar::groups(&f.library.read(), 0, 50).unwrap();
+    let group = groups
+        .iter()
+        .find(|g| g.members.iter().any(|m| m.asset_id == burst[0]))
+        .unwrap();
+    assert!(
+        group
+            .members
+            .iter()
+            .all(|m| m.focus.is_some() && m.exposure.is_some())
+    );
+    let best = group.members.iter().find(|m| m.best).unwrap();
+    assert!(best.why.is_some());
+    assert_eq!(
+        similar::assess_pending(&f.library, &AtomicBool::new(false)).unwrap(),
+        0
+    );
+    assert!(
+        groups
+            .iter()
+            .all(|g| g.members.iter().all(|m| m.asset_id != other))
+    );
+
+    // Remove all but the suggested shot, then bring them back.
+    let before = f.visible_assets();
+    let extra: Vec<i64> = group
+        .members
+        .iter()
+        .filter(|m| !m.best)
+        .map(|m| m.asset_id)
+        .collect();
+    let files = similar::files_of_assets(&f.library.read(), &extra).unwrap();
+    let report = fileops::trash(&f.library, &files, "similar", false).unwrap();
+    assert_eq!(report.done, 2);
+    assert_eq!(f.visible_assets(), before - 2);
+    similar::detect(&f.library).unwrap();
+    assert!(
+        similar::groups(&f.library.read(), 0, 50)
+            .unwrap()
+            .iter()
+            .all(|g| g.members.iter().all(|m| !burst.contains(&m.asset_id))),
+        "one shot left is no group"
+    );
+    fileops::undo(&f.library, report.op_id).unwrap();
+    assert_eq!(f.visible_assets(), before);
+
+    // Keeping them all hides the group for good.
+    similar::detect(&f.library).unwrap();
+    similar::dismiss(&f.library, &burst).unwrap();
+    assert!(
+        similar::groups(&f.library.read(), 0, 50)
+            .unwrap()
+            .iter()
+            .all(|g| g.members.iter().all(|m| !burst.contains(&m.asset_id)))
+    );
+}

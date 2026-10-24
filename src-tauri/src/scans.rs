@@ -36,6 +36,8 @@ pub fn start(app: &AppHandle, state: &Arc<AppState>, root_id: i64) -> bool {
         }
         scans.insert(root_id, cancel.clone());
     }
+    // Hashing would compete for the disk; it starts again when the scans finish.
+    state.hash_cancel.store(true, Ordering::SeqCst);
 
     let (app, state) = (app.clone(), state.clone());
     std::thread::Builder::new()
@@ -77,6 +79,7 @@ pub fn start(app: &AppHandle, state: &Arc<AppState>, root_id: i64) -> bool {
                     error,
                 },
             );
+            crate::similar_commands::run_in_background(&app, &state);
         })
         .expect("spawn scan thread");
     true

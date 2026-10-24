@@ -1,13 +1,12 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-/** "events", "trips" and "duplicates" are pages; the others are timelines. */
-export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | "events" | "trips" | "duplicates";
-export type View = BuiltinView | { album: number } | { tag: number } | { event: number } | { trip: number };
 /** Views that are pages rather than timelines. */
-export type PageView = "events" | "trips" | "duplicates";
-export const isPage = (view: View): view is PageView =>
-  view === "events" || view === "trips" || view === "duplicates";
+const PAGES = ["events", "trips", "duplicates", "similar"] as const;
+export type PageView = (typeof PAGES)[number];
+export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | PageView;
+export type View = BuiltinView | { album: number } | { tag: number } | { event: number } | { trip: number };
+export const isPage = (view: View): view is PageView => (PAGES as readonly View[]).includes(view);
 /** Views the backend can lay out as a timeline. */
 export type TimelineView = Exclude<View, PageView>;
 
@@ -143,7 +142,39 @@ export type FileOp = {
   failed: number;
 };
 
-export type FileOpReport = { opId: number; done: number; bytes: number; failed: number; errors: string[] };
+export type SimilarOverview = { groups: number; photos: number; pending: number };
+
+export type SimilarMember = {
+  assetId: number;
+  mediaKind: number;
+  takenAt: number;
+  tzOffsetMin: number;
+  width: number | null;
+  height: number | null;
+  bytes: number;
+  favorite: boolean;
+  rating: number | null;
+  /** From the thumbnail. */
+  sharpness: number | null;
+  /** From the original, once assessed: focus of the sharpest part, and exposure
+   * (0 good, towards -1 too dark, towards +1 too bright). */
+  focus: number | null;
+  exposure: number | null;
+  /** The one suggested to keep. */
+  best: boolean;
+  why: "favorite" | "rated" | "sharpest" | "exposure" | "biggest" | "similar" | null;
+  /** Weak points next to the others in the group. */
+  notes: ("blurry" | "dark" | "bright")[];
+};
+
+export type SimilarGroup = {
+  id: number;
+  /** "similar": taken close together; "copies": the same picture saved again. */
+  kind: "similar" | "copies";
+  members: SimilarMember[];
+};
+
+export type FileOpReport ={ opId: number; done: number; bytes: number; failed: number; errors: string[] };
 
 export type DayMemory = { day: number; yearsAgo: number; count: number; coverIds: number[] };
 
@@ -285,6 +316,11 @@ export const api = {
   /** `keep`: asset id → file id to keep instead of the suggestion; `only`: just these photos. */
   removeDuplicates: (keep: Record<number, number>, only?: number[]) =>
     invoke<FileOpReport>("remove_duplicates", { keep, only: only ?? null }),
+  similarOverview: () => invoke<SimilarOverview>("similar_overview"),
+  similarGroups: (offset: number, limit: number) => invoke<SimilarGroup[]>("similar_groups", { offset, limit }),
+  /** Moves every file of these photos to the trash folder (undoable). */
+  removeSimilar: (ids: number[]) => invoke<FileOpReport>("remove_similar", { ids }),
+  keepSimilar: (ids: number[]) => invoke<void>("keep_similar", { ids }),
   listFileOps: () => invoke<FileOp[]>("list_file_ops"),
   undoFileOp: (id: number) => invoke<FileOpReport>("undo_file_op", { id }),
   emptyFileOp: (id: number) => invoke<FileOpReport>("empty_file_op", { id }),
@@ -306,6 +342,8 @@ export const events = {
   volumesChanged: (cb: () => void): Promise<UnlistenFn> => listen("volumes-changed", () => cb()),
   /** Events were (re)detected in the background. */
   eventsChanged: (cb: () => void): Promise<UnlistenFn> => listen("events-changed", () => cb()),
+  /** Background hashing finished a pass; similar groups may have changed. */
+  similarChanged: (cb: () => void): Promise<UnlistenFn> => listen("similar-changed", () => cb()),
 };
 
 export const thumbUrl = (assetId: number) => convertFileSrc(String(assetId), "thumb");

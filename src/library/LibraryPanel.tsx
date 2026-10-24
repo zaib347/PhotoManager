@@ -11,6 +11,7 @@ const VIEWS: { id: BuiltinView; label: string }[] = [
   { id: "videos", label: "Videos" },
   { id: "hidden", label: "Hidden" },
   { id: "duplicates", label: "Duplicates" },
+  { id: "similar", label: "Similar photos" },
 ];
 
 type Props = {

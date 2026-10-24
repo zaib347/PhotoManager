@@ -1,0 +1,93 @@
+import { confirm } from "@tauri-apps/plugin-dialog";
+import { useEffect, useState } from "react";
+import { api, type FileOp, type FileOpReport } from "../api";
+import { formatBytes } from "../format";
+
+const REASONS: Record<string, string> = { duplicates: "Duplicate copies", similar: "Similar photos" };
+
+/** "Moved 3 files (12 MB). 1 skipped: …" */
+export function describeReport(r: FileOpReport, verb: string) {
+  const parts = [`${verb} ${r.done.toLocaleString()} ${r.done === 1 ? "file" : "files"} (${formatBytes(r.bytes)})`];
+  if (r.failed) parts.push(`${r.failed.toLocaleString()} skipped: ${r.errors[0] ?? "see the list"}`);
+  return parts.join(". ");
+}
+
+type Props = {
+  /** Bumped by the parent after it removed files. */
+  version: number;
+  /** After an undo or empty, so the parent can reload what it shows. */
+  onChanged: () => void;
+  onNotice: (message: string) => void;
+  onError: (e: unknown) => void;
+};
+
+/** Recent removals, with Undo and Send to Recycle Bin. */
+export function RecentlyRemoved({ version, onChanged, onNotice, onError }: Props) {
+  const [ops, setOps] = useState<FileOp[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.listFileOps().then(setOps, onError);
+  }, [version, onError]);
+
+  const act = async (action: () => Promise<string>) => {
+    setBusy(true);
+    try {
+      onNotice(await action());
+      setOps(await api.listFileOps());
+      onChanged();
+    } catch (e) {
+      onError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const undo = (op: FileOp) => act(async () => describeReport(await api.undoFileOp(op.id), "Put back"));
+
+  const empty = async (op: FileOp) => {
+    const ok = await confirm(
+      `Send ${op.inTrash.toLocaleString()} files (${formatBytes(op.inTrashBytes)}) to the Recycle Bin?\n\n` +
+        "This frees the space. You can still restore them from the Recycle Bin, but not from here. " +
+        "Drives without a Recycle Bin (network drives, most USB sticks) are left as they are.",
+      { title: "Send to Recycle Bin", kind: "warning", okLabel: "Send to Recycle Bin" },
+    );
+    if (ok) await act(async () => describeReport(await api.emptyFileOp(op.id), "Sent"));
+  };
+
+  if (ops.length === 0) return null;
+  return (
+    <section className="cleanup-ops">
+      <h3>Recently removed</h3>
+      <ul>
+        {ops.map((op) => (
+          <li key={op.id}>
+            <span>{new Date(op.createdAt).toLocaleString()}</span>
+            <span className="muted">{REASONS[op.reason] ?? op.reason}</span>
+            <span className="muted small">
+              {op.status === "undone"
+                ? "Put back"
+                : op.status === "emptied"
+                  ? "Sent to the Recycle Bin"
+                  : op.inTrash > 0
+                    ? `${op.inTrash.toLocaleString()} files · ${formatBytes(op.inTrashBytes)} in the trash folder`
+                    : "Nothing left in the trash folder"}
+              {op.failed > 0 && ` · ${op.failed.toLocaleString()} skipped`}
+            </span>
+            <div className="spacer" />
+            {op.status === "done" && op.inTrash > 0 && (
+              <>
+                <button disabled={busy} onClick={() => undo(op)}>
+                  Undo
+                </button>
+                <button disabled={busy} onClick={() => empty(op)}>
+                  Send to Recycle Bin
+                </button>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

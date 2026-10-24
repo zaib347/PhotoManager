@@ -19,6 +19,7 @@ import {
 } from "./api";
 import { CollectionsContext, type Collections } from "./collections/context";
 import { DuplicatesPage } from "./cleanup/DuplicatesPage";
+import { SimilarPage } from "./cleanup/SimilarPage";
 import { EventsPage } from "./events/EventsPage";
 import { LibraryPanel } from "./library/LibraryPanel";
 import { FilterBar } from "./photos/FilterBar";
@@ -45,6 +46,7 @@ function emptyState(view: View): { title: string; hint: string } {
     events: { title: "", hint: "" },
     trips: { title: "", hint: "" },
     duplicates: { title: "", hint: "" },
+    similar: { title: "", hint: "" },
   }[view];
 }
 
@@ -253,6 +255,8 @@ export default function App() {
             <TripsPage version={eventsVersion} onError={report} />
           ) : view === "duplicates" ? (
             <DuplicatesPage version={eventsVersion} onNotice={setNotice} onError={report} />
+          ) : view === "similar" ? (
+            <SimilarPage onNotice={setNotice} onError={report} />
           ) : current && current.days.length > 0 ? (
             <PhotosView
               key={key}

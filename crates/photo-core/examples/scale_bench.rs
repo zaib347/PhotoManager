@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use photo_core::{db::Db, events, places, schema, synth, timeline, trips};
+use photo_core::{db::Db, events, places, schema, similar, synth, thumbs, timeline, trips};
 
 fn main() -> photo_core::Result<()> {
     let mut args = std::env::args().skip(1);
@@ -127,6 +127,40 @@ fn main() -> photo_core::Result<()> {
         timeline::day_assets(&db.read(), view, &Default::default(), &layout.days)?;
         println!("trip view ({} items): {:?}", trip.count, t.elapsed());
     }
+
+    // Similar photos: grouping cost with a hash on every photo (random, so few groups),
+    // and the per-photo cost of fingerprinting a grid thumbnail.
+    db.write()
+        .execute("UPDATE assets SET phash = random(), phash_v = 1", [])?;
+    let t = Instant::now();
+    similar::detect(&db)?;
+    println!(
+        "similar detection ({} groups): {:?}",
+        similar::overview(&db.read())?.groups,
+        t.elapsed()
+    );
+    let detailed = image::RgbImage::from_fn(256, 192, |x, y| {
+        let v = ((x * 7 + y * 3) % 251) as u8 ^ ((x / 16 + y / 16) % 2 * 120) as u8;
+        image::Rgb([v, v / 2, 255 - v])
+    });
+    let thumb = thumbs::encode_jpeg(&detailed)?;
+    let t = Instant::now();
+    for _ in 0..200 {
+        let img = image::load_from_memory(&thumb).expect("thumbnail");
+        std::hint::black_box(similar::fingerprint(&img));
+    }
+    println!("fingerprint one thumbnail: {:?}", t.elapsed() / 200);
+    // Assessing a grouped photo decodes its original: a 12 MP JPEG here.
+    let original = thumbs::encode_jpeg(&image::RgbImage::from_fn(4000, 3000, |x, y| {
+        let v = ((x * 7 + y * 3) % 251) as u8 ^ ((x / 64 + y / 64) % 2 * 120) as u8;
+        image::Rgb([v, v / 2, 255 - v])
+    }))?;
+    let t = Instant::now();
+    for _ in 0..5 {
+        let img = image::load_from_memory(&original).expect("original");
+        std::hint::black_box(similar::assess(&img));
+    }
+    println!("assess one 12 MP original: {:?}", t.elapsed() / 5);
 
     let t = Instant::now();
     let list = events::list(&db.read())?;
