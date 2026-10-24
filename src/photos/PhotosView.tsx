@@ -6,6 +6,7 @@ import { AlbumHeader } from "../collections/AlbumHeader";
 import { useCollections } from "../collections/context";
 import { EventHeader } from "../events/EventHeader";
 import { TripHeader } from "../trips/TripHeader";
+import { photoTurns } from "../turns";
 import { DayStore, type Position } from "../timeline/dayStore";
 import { Timeline } from "../timeline/Timeline";
 import { Viewer } from "../viewer/Viewer";
@@ -153,6 +154,10 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
     [onLibraryChanged],
   );
 
+  const rotate = useCallback(async (ids: number[], quarters: number) => {
+    photoTurns.set(await api.rotatePhotos(ids, quarters));
+  }, []);
+
   const run = (action: () => Promise<void>) => action().catch(onError);
 
   /** After edits that change which items are in this view (and its event header). */
@@ -224,6 +229,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
               if (await remove([...selection])) clearSelection();
             })
           }
+          onRotate={(quarters) => run(() => rotate([...selection], quarters))}
           onExport={(options) =>
             run(async () => {
               await api.exportPhotos([...selection], options);
@@ -310,6 +316,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
           onFavorite={setFavorite}
           onHidden={setHidden}
           onRemove={remove}
+          onRotate={rotate}
           onAddTag={addTag}
           onDatesChanged={afterTimelineChange}
           onRemoveTag={removeTag}

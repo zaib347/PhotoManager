@@ -239,7 +239,11 @@ Ground rule: tools write new files; originals are only replaced through `fileops
 - [ ] Better JPEG compression (mozjpeg) and AVIF output
 - [ ] "Shrink originals": replace originals with compressed versions through `fileops`
 - [x] Watermark (text / logo, position incl. tiled, size, opacity) as an export step, with a live preview on the first selected photo. Text uses a system font (Segoe UI on Windows; Arial/Helvetica and DejaVu paths listed for M5).
-- [ ] Lossless rotate (EXIF orientation only)
+- [x] Rotate without touching files: `user_meta.turns` (schema v13) on top of EXIF orientation,
+      applied in thumbnails (cached ones turned in place), viewer (turned photos decoded at full
+      size), hashing and export. Image URLs carry `?t=<turns>` so cached images never show the
+      old way round. Selection bar ⟲ ⟳, viewer buttons and R / Shift+R. Not written into the file
+      (other apps still see the original orientation); "Save rotation to file" could come later
 - [ ] Non-destructive editor (crop, straighten, exposure, contrast, highlights/shadows,
       saturation, white balance, sharpen, auto-enhance, presets; recipe stored, Revert)
 

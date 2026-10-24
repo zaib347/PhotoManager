@@ -1,5 +1,6 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { turnsQuery } from "./turns";
 
 /** Views that are pages rather than timelines. */
 const PAGES = ["events", "trips", "duplicates", "similar", "removed", "organize"] as const;
@@ -381,6 +382,10 @@ export const api = {
   /** Starts a background export; watch `events.exportProgress` / `exportFinished`. */
   exportPhotos: (ids: number[], options: ExportOptions) => invoke<void>("export_photos", { ids, options }),
   cancelExport: () => invoke<void>("cancel_export"),
+  /** Turns photos without touching their files: 1 clockwise, -1 counter-clockwise. */
+  rotatePhotos: (ids: number[], quarters: number) => invoke<[number, number][]>("rotate_photos", { ids, quarters }),
+  /** Every turned photo with its quarter turns. */
+  turnedPhotos: () => invoke<[number, number][]>("turned_photos"),
   /** Photo `id` with the watermark drawn on it, as a JPEG. */
   watermarkPreview: async (id: number, watermark: Watermark) =>
     new Blob([await invoke<ArrayBuffer>("watermark_preview", { id, watermark })], { type: "image/jpeg" }),
@@ -418,7 +423,7 @@ export const events = {
   similarChanged: (cb: () => void): Promise<UnlistenFn> => listen("similar-changed", () => cb()),
 };
 
-export const thumbUrl = (assetId: number) => convertFileSrc(String(assetId), "thumb");
-export const mediaUrl = (assetId: number) => convertFileSrc(String(assetId), "media");
-/** The motion clip of a Live Photo. */
-export const liveUrl = (assetId: number) => `${mediaUrl(assetId)}?live`;
+export const thumbUrl = (assetId: number) => convertFileSrc(String(assetId), "thumb") + turnsQuery(assetId);
+export const mediaUrl = (assetId: number) => convertFileSrc(String(assetId), "media") + turnsQuery(assetId);
+/** The motion clip of a Live Photo (never turned). */
+export const liveUrl = (assetId: number) => `${convertFileSrc(String(assetId), "media")}?live`;

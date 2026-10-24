@@ -261,6 +261,12 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     ALTER TABLE assets ADD COLUMN exposure REAL;
     ALTER TABLE assets ADD COLUMN quality_v INTEGER;
     ",
+    // v13: photos turned by the user, in quarter turns clockwise on top of EXIF
+    // orientation. The file itself is never rewritten.
+    "
+    ALTER TABLE user_meta ADD COLUMN turns INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX idx_user_meta_turned ON user_meta (asset_id) WHERE turns != 0;
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

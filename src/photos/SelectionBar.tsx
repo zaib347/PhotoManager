@@ -20,6 +20,8 @@ type Props = {
   onHide: (hidden: boolean) => void;
   /** Moves the photos' files to the trash folder (asks first). */
   onRemove: () => void;
+  /** Turns the photos: 1 clockwise, -1 counter-clockwise. */
+  onRotate: (quarters: number) => void;
   /** Writes copies, resized/converted, to a folder (in the background). */
   onExport: (options: ExportOptions) => void;
   onAddToAlbum: (albumId: number) => void;
@@ -46,6 +48,12 @@ export function SelectionBar(props: Props) {
         Select all
       </button>
       <div className="spacer" />
+      <button className="ghost" onClick={() => props.onRotate(-1)} title="Rotate left">
+        ⟲
+      </button>
+      <button className="ghost" onClick={() => props.onRotate(1)} title="Rotate right">
+        ⟳
+      </button>
       <Popover label="Fix date" align="right">
         {(close) => (
           <DateFixer

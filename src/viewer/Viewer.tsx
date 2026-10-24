@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { api, liveUrl, MediaKind, mediaUrl, thumbUrl, type AssetDetails, type View } from "../api";
 import { formatTakenAt } from "../format";
 import type { DayStore, Position } from "../timeline/dayStore";
+import { photoTurns } from "../turns";
 import { InfoPanel } from "./InfoPanel";
 import { ZoomableImage } from "./ZoomableImage";
 
@@ -16,6 +17,8 @@ type Props = {
   onHidden: (ids: number[], hidden: boolean) => Promise<void>;
   /** Asks, then moves the photo to the trash folder; resolves true if it was removed. */
   onRemove: (ids: number[]) => Promise<boolean>;
+  /** Turns photos: 1 clockwise, -1 counter-clockwise. */
+  onRotate: (ids: number[], quarters: number) => Promise<void>;
   onAddTag: (ids: number[], name: string) => Promise<void>;
   onRemoveTag: (ids: number[], tagId: number) => Promise<void>;
   onNavigate: (view: View) => void;
@@ -39,12 +42,14 @@ export function Viewer({
   onFavorite,
   onHidden,
   onRemove,
+  onRotate,
   onAddTag,
   onRemoveTag,
   onNavigate,
   onDatesChanged,
 }: Props) {
   useSyncExternalStore(store.subscribe, store.getVersion);
+  useSyncExternalStore(photoTurns.subscribe, photoTurns.getVersion);
   const [pos, setPos] = useState(start);
   const [asset, setAsset] = useState<AssetDetails | null>(null);
   const [failed, setFailed] = useState(false);
@@ -139,6 +144,13 @@ export function Viewer({
     if (asset && (await onRemove([asset.id]))) await afterLeaving();
   }, [asset, onRemove, afterLeaving]);
 
+  const rotateCurrent = useCallback(
+    async (quarters: number) => {
+      if (asset && asset.mediaKind !== MediaKind.Video) await onRotate([asset.id], quarters);
+    },
+    [asset, onRotate],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -152,13 +164,15 @@ export function Viewer({
       else if (e.key === "l") setPlayingLive((p) => !p);
       else if (/^[0-5]$/.test(e.key)) setRating(e.key === "0" ? null : Number(e.key));
       else if (e.key === "Delete") removeCurrent();
+      else if (e.key === "r") rotateCurrent(1);
+      else if (e.key === "R") rotateCurrent(-1);
       else return;
       e.preventDefault();
       e.stopPropagation();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [pos, go, onClose, toggleInfo, toggleFavorite, setRating, removeCurrent]);
+  }, [pos, go, onClose, toggleInfo, toggleFavorite, setRating, removeCurrent, rotateCurrent]);
 
   const isVideo = asset?.mediaKind === MediaKind.Video;
   const onlineFile = asset?.files.find((f) => f.online);
@@ -201,6 +215,16 @@ export function Viewer({
             >
               {asset.favorite ? "♥" : "♡"}
             </button>
+            {!isVideo && (
+              <>
+                <button className="ghost" onClick={() => rotateCurrent(-1)} title="Rotate left (Shift+R)">
+                  ⟲
+                </button>
+                <button className="ghost" onClick={() => rotateCurrent(1)} title="Rotate right (R)">
+                  ⟳
+                </button>
+              </>
+            )}
             <button className="ghost" onClick={toggleHidden}>
               {asset.hidden ? "Unhide" : "Hide"}
             </button>
@@ -242,7 +266,7 @@ export function Viewer({
                 onError={() => setFailed(true)}
               />
             ) : (
-              <ZoomableImage key={id} placeholder={thumbUrl(id)} src={mediaUrl(id)} onError={() => setFailed(true)} />
+              <ZoomableImage key={`${id}:${photoTurns.get(id)}`} placeholder={thumbUrl(id)} src={mediaUrl(id)} onError={() => setFailed(true)} />
             ))}
           {id !== undefined && playingLive && (
             <video

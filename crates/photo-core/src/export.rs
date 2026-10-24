@@ -311,17 +311,20 @@ pub fn prepare_mark(options: &Options) -> Result<Option<Mark>> {
     }
 }
 
-/// Converts one file, drawing `mark` on it. Returns the new file's bytes and extension.
+/// Converts one file, turned `turns` quarter turns clockwise and with `mark` drawn
+/// on it. Returns the new file's bytes and extension.
 pub fn convert(
     source: &Path,
+    turns: u8,
     options: &Options,
     mark: Option<&Mark>,
 ) -> Result<(Vec<u8>, &'static str)> {
     let bytes = std::fs::read(source)?;
     let decoded = decode(source, &bytes)?;
+    let image = crate::rotate::turn(decoded.image, turns);
     let mut image = match options.max_edge {
-        Some(edge) => resize(decoded.image, edge)?,
-        None => decoded.image,
+        Some(edge) => resize(image, edge)?,
+        None => image,
     };
     if let Some(mark) = mark {
         mark.apply(&mut image);
@@ -342,12 +345,10 @@ pub fn convert(
 pub struct PreviewBase(DynamicImage);
 
 /// The photo upright and shrunk to `max_edge`, for previewing a watermark on.
-pub fn preview_base(source: &Path, max_edge: u32) -> Result<PreviewBase> {
+pub fn preview_base(source: &Path, turns: u8, max_edge: u32) -> Result<PreviewBase> {
     let bytes = std::fs::read(source)?;
-    Ok(PreviewBase(resize(
-        decode(source, &bytes)?.image,
-        max_edge,
-    )?))
+    let image = crate::rotate::turn(decode(source, &bytes)?.image, turns);
+    Ok(PreviewBase(resize(image, max_edge)?))
 }
 
 /// `base` with `watermark` drawn on it, as a JPEG.
@@ -420,7 +421,9 @@ pub fn run(
     let mut sources = Vec::new();
     for &id in asset_ids {
         match library::asset_source(&db.read(), id)? {
-            Some(AssetSource::File { path, kind, .. }) if kind != 1 => sources.push(path),
+            Some(AssetSource::File {
+                path, turns, kind, ..
+            }) if kind != 1 => sources.push((path, turns)),
             Some(AssetSource::Unavailable { .. }) => {
                 report.failed += 1;
                 if report.errors.len() < MAX_ERRORS {
@@ -444,11 +447,11 @@ pub fn run(
     let results: Vec<Option<std::result::Result<(u64, u64), String>>> = pool.install(|| {
         sources
             .par_iter()
-            .map(|source| {
+            .map(|(source, turns)| {
                 if cancel.load(Ordering::Relaxed) {
                     return None;
                 }
-                let result = convert(source, options, mark.as_ref())
+                let result = convert(source, *turns, options, mark.as_ref())
                     .and_then(|(data, ext)| {
                         let stem = source
                             .file_stem()
@@ -545,7 +548,7 @@ mod tests {
             max_edge: Some(300),
             ..Default::default()
         };
-        let (data, ext) = convert(&source, &options, None).unwrap();
+        let (data, ext) = convert(&source, 0, &options, None).unwrap();
         assert_eq!(ext, "jpg");
         let img = image::load_from_memory(&data).unwrap();
         // 600×400 turned on its side, then the long edge cut to 300.
@@ -569,7 +572,7 @@ mod tests {
                 remove_location: true,
                 ..Default::default()
             };
-            let (data, got) = convert(&source, &options, None).unwrap();
+            let (data, got) = convert(&source, 0, &options, None).unwrap();
             assert_eq!(got, ext);
             assert_eq!(image::guess_format(&data).unwrap().extensions_str()[0], ext);
             let exif = exif_of(&data);
@@ -593,7 +596,7 @@ mod tests {
                 quality,
                 ..Default::default()
             };
-            convert(&source, &options, None).unwrap().0.len()
+            convert(&source, 0, &options, None).unwrap().0.len()
         };
         assert!(size(40) < size(95));
 

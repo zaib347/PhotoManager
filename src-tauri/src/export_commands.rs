@@ -89,15 +89,17 @@ pub async fn watermark_preview(
         let base = match cached {
             Some((_, base)) => base,
             None => {
-                let path = match library::asset_source(&s.library.read(), id)? {
-                    Some(AssetSource::File { path, kind, .. }) if kind != 1 => path,
+                let (path, turns) = match library::asset_source(&s.library.read(), id)? {
+                    Some(AssetSource::File {
+                        path, turns, kind, ..
+                    }) if kind != 1 => (path, turns),
                     _ => {
                         return Err(photo_core::Error::Invalid(
                             "No photo file to preview on".into(),
                         ));
                     }
                 };
-                let base = Arc::new(export::preview_base(&path, PREVIEW_EDGE)?);
+                let base = Arc::new(export::preview_base(&path, turns, PREVIEW_EDGE)?);
                 *s.watermark_base.lock().unwrap_or_else(|e| e.into_inner()) =
                     Some((id, base.clone()));
                 base
