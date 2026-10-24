@@ -389,6 +389,7 @@ pub fn run() {
             export_commands::export_photos,
             export_commands::cancel_export,
             export_commands::watermark_preview,
+            export_commands::save_collage,
             edit_commands::edit_get,
             edit_commands::edit_preview,
             edit_commands::edit_auto,

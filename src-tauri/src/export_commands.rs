@@ -121,3 +121,17 @@ pub(crate) fn cached_base(
     *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some((id, base.clone()));
     Ok(base)
 }
+
+/// Renders a collage at full size and saves it as a JPEG at `path` (chosen by the
+/// user in a save dialog, which already asked about replacing a file).
+#[tauri::command]
+pub async fn save_collage(
+    state: State<'_, Arc<AppState>>,
+    collage: photo_core::collage::Collage,
+    path: std::path::PathBuf,
+) -> CmdResult<()> {
+    blocking(&state, move |s| {
+        photo_core::collage::save(&s.library, &collage, &path)
+    })
+    .await
+}

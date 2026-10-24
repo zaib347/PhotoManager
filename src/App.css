@@ -1881,3 +1881,53 @@ button.primary:disabled {
   justify-content: space-between;
   align-items: baseline;
 }
+
+/* ---------- Collage ---------- */
+
+.collage-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.collage-canvas {
+  position: relative;
+  flex: none;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.collage-cell {
+  position: absolute;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  background: var(--placeholder);
+}
+
+.collage-cell img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+.collage-cell.selected {
+  outline: 3px solid var(--accent);
+  cursor: move;
+}
+
+.collage-cell.drop {
+  outline: 3px dashed var(--accent);
+}
+
+.collage-hint {
+  margin: 0;
+}
+
+.collage-color {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}

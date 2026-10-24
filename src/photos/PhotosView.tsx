@@ -12,6 +12,7 @@ import { DayStore, type Position } from "../timeline/dayStore";
 import { Timeline } from "../timeline/Timeline";
 import { Viewer } from "../viewer/Viewer";
 import { OnThisDay } from "./OnThisDay";
+import { CollageEditor } from "../collage/CollageEditor";
 import { SelectionBar } from "./SelectionBar";
 
 type Props = {
@@ -44,6 +45,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
   const anchor = useRef<Position | null>(null);
   const [viewing, setViewing] = useState<Position | null>(null);
   const [reveal, setReveal] = useState<Position | null>(null);
+  const [collage, setCollage] = useState<number[] | null>(null);
 
   useEffect(() => store.setLayout(layout), [store, layout]);
 
@@ -241,6 +243,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
             })
           }
           onPlaceOnMap={() => onPlaceOnMap([...selection])}
+          onCollage={() => setCollage([...selection])}
           onPasteEdit={(what) =>
             run(async () => {
               const recipe = copiedEdit.get();
@@ -357,6 +360,9 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
             collections.navigate(target);
           }}
         />
+      )}
+      {collage && (
+        <CollageEditor ids={collage} onClose={() => setCollage(null)} onNotice={onNotice} onError={onError} />
       )}
     </div>
   );

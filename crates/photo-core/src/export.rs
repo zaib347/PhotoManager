@@ -188,6 +188,27 @@ fn resize(image: DynamicImage, max_edge: u32) -> Result<DynamicImage> {
     })
 }
 
+/// Scales to exactly `w`×`h` (Lanczos3), for a collage cell.
+pub(crate) fn resize_exact(image: &RgbImage, w: u32, h: u32) -> Result<RgbImage> {
+    if image.dimensions() == (w, h) {
+        return Ok(image.clone());
+    }
+    let invalid = |e: &dyn std::fmt::Display| Error::Invalid(format!("Resize failed: {e}"));
+    let src = ImageRef::new(
+        image.width(),
+        image.height(),
+        image.as_raw(),
+        PixelType::U8x3,
+    )
+    .map_err(|e| invalid(&e))?;
+    let mut dst = Image::new(w, h, PixelType::U8x3);
+    let options = ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Lanczos3));
+    Resizer::new()
+        .resize(&src, &mut dst, &options)
+        .map_err(|e| invalid(&e))?;
+    Ok(RgbImage::from_raw(w, h, dst.into_vec()).expect("sized buffer"))
+}
+
 /// Transparent pixels over white, for formats without alpha.
 fn flatten(image: &DynamicImage) -> RgbImage {
     if !image.color().has_alpha() {
@@ -308,6 +329,21 @@ fn attach(
         // Metadata is a nicety; the pixels are what was asked for.
         _ => encoded,
     }
+}
+
+/// The EXIF of `source` as it goes into a new file made from it (see `copy_exif`).
+pub(crate) fn exif_for_copy(source: &Path, remove_location: bool) -> Option<Vec<u8>> {
+    let bytes = std::fs::read(source).ok()?;
+    let exif = exif::Reader::new()
+        .read_from_container(&mut Cursor::new(&bytes))
+        .ok()
+        .or_else(|| crate::raw::exif(source).into_iter().next())?;
+    copy_exif(&exif, remove_location)
+}
+
+/// Puts EXIF into an encoded JPEG.
+pub(crate) fn attach_jpeg(encoded: Vec<u8>, exif: Option<Vec<u8>>) -> Vec<u8> {
+    attach(encoded, Format::Jpeg, exif, None)
 }
 
 /// Loads the watermark of `options`, if it has one with something to draw.

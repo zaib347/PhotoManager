@@ -33,6 +33,8 @@ type Props = {
   onSetLocation: (lat: number, lon: number) => void;
   /** Opens the map to place the items with a click. */
   onPlaceOnMap: () => void;
+  /** Opens the collage editor (2–9 photos). */
+  onCollage: () => void;
   /** Renames the photos' files from a pattern (undoable). */
   onRename: (pattern: string) => void;
   /** Writes copies, resized/converted, to a folder (in the background). */
@@ -97,6 +99,11 @@ export function SelectionBar(props: Props) {
           />
         )}
       </Popover>
+      {count >= 2 && count <= 9 && (
+        <button onClick={props.onCollage} title="Arrange these photos on one page">
+          Collage
+        </button>
+      )}
       <Popover label="Location" align="right">
         {(close) => (
           <LocationPanel

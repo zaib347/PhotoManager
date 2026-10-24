@@ -218,6 +218,19 @@ export type ExportOptions = {
   folder: string;
 };
 
+/** A collage to render: cells in fractions of the canvas, each with its photo's framing. */
+export type CollageSpec = {
+  width: number;
+  height: number;
+  /** `#rrggbb`. */
+  background: string;
+  /** Fractions of the canvas's shorter side. */
+  spacing: number;
+  radius: number;
+  dpi: number;
+  cells: { x: number; y: number; w: number; h: number; assetId: number; panX: number; panY: number; zoom: number }[];
+};
+
 /** What an import of Google Takeout or iCloud metadata changed. */
 export type ImportReport = {
   id: number;
@@ -509,6 +522,8 @@ export const api = {
   searchCities: (query: string) => invoke<CityInfo[]>("search_cities", { query }),
   /** Places photos by hand; returns how many. */
   setLocation: (ids: number[], lat: number, lon: number) => invoke<number>("set_location", { ids, lat, lon }),
+  /** Renders a collage at full size and saves it as a JPEG. */
+  saveCollage: (collage: CollageSpec, path: string) => invoke<void>("save_collage", { collage, path }),
   /** Reads a Google Takeout or iCloud export's metadata in a library folder. */
   importMetadata: (rootId: number) => invoke<ImportReport>("import_metadata", { rootId }),
   listImports: (rootId: number) => invoke<ImportInfo[]>("list_imports", { rootId }),

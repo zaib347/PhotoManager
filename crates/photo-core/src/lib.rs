@@ -4,6 +4,7 @@
 //! `cargo test`, benchmarked from examples, and reused by other front ends.
 
 pub mod assets;
+pub mod collage;
 pub mod collections;
 pub mod dates;
 pub mod db;

@@ -22,6 +22,20 @@ pub enum Purpose {
 }
 
 pub fn encode(image: &RgbImage, quality: u8, purpose: Purpose) -> Result<Vec<u8>> {
+    encode_with(image, quality, purpose, None)
+}
+
+/// A file to print: like `Keep`, with its resolution (dots per inch) recorded.
+pub fn encode_print(image: &RgbImage, quality: u8, dpi: u16) -> Result<Vec<u8>> {
+    encode_with(image, quality, Purpose::Keep, Some(dpi))
+}
+
+fn encode_with(
+    image: &RgbImage,
+    quality: u8,
+    purpose: Purpose,
+    dpi: Option<u16>,
+) -> Result<Vec<u8>> {
     let quality = quality.clamp(1, 100);
     let (w, h) = image.dimensions();
     // JPEG sizes are 16-bit; the image crate reports the error for oversized images.
@@ -36,6 +50,9 @@ pub fn encode(image: &RgbImage, quality: u8, purpose: Purpose) -> Result<Vec<u8>
     if purpose == Purpose::Keep {
         encoder.set_sampling_factor(jpeg_encoder::SamplingFactor::R_4_4_4);
         encoder.set_optimized_huffman_tables(true);
+    }
+    if let Some(dpi) = dpi {
+        encoder.set_density(jpeg_encoder::PixelDensity::dpi(dpi));
     }
     encoder
         .encode(

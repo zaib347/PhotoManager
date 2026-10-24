@@ -317,7 +317,7 @@ and needs no downloads.
    - iCloud (privacy.apple.com export): reads its `Photo Details.csv` files for dates,
      favorites and hidden, and its album lists.
    - Shown as an import report (how many dates/places fixed); undoable like date fixes.
-5. - [ ] **Collage and print layouts** (small–medium, ~1 week)
+5. - [x] **Collage and print layouts** (small–medium, ~1 week)
    - Select 2–9 photos → **Collage**: grid and mosaic templates, spacing, corner rounding,
      background colour, drag to swap, click to pan inside a cell.
    - Output sizes: square / story for social, and print sizes (4×6, 5×7, 8×10 in, A4) at
