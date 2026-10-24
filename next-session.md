@@ -147,7 +147,16 @@ After M3 come:
 - **Don't launch app windows** while the user may be using the app. The user runs `npm run tauri dev` themselves.
 - **Speed checks:** run `cargo run --release -p photo-core --example scale_bench -- <db> 1000000` for 1M-photo timings.
 
+## GitHub
+
+`origin` = https://github.com/zaib347/PhotoManager (`main` pushed 2026-10-24). Push `main` after
+each merge. Next: GitHub Actions CI building Windows, macOS and Linux.
+
+## Release order (the user's choice)
+
+Windows code signing later; macOS signing + notarization at the very end, after testing.
+Installer and auto-update also at the end of M5.
+
 ## Waiting on the user
 
-- **GitHub push:** they need to create an empty repo and share its URL.
 - **Not yet confirmed working in the app:** Live Photos (pairing needs a rescan) and faster hide.
