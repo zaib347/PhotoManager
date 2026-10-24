@@ -270,6 +270,18 @@ export type OrganizePreview = {
   sample: { fileId: number; from: string; to: string }[];
 };
 
+export type RenamePreview = {
+  /** Files that would be renamed, sidecars included. */
+  files: number;
+  /** Of those, sidecars (.xmp, .aae). */
+  sidecars: number;
+  /** Photos whose name already fits. */
+  inPlace: number;
+  /** Names that needed " (2)". */
+  numbered: number;
+  sample: { from: string; to: string }[];
+};
+
 export type FileOpReport = { opId: number; done: number; bytes: number; failed: number; errors: string[] };
 
 export type DayMemory = { day: number; yearsAgo: number; count: number; coverIds: number[] };
@@ -441,6 +453,8 @@ export const api = {
     new Blob([await invoke<ArrayBuffer>("watermark_preview", { id, watermark })], { type: "image/jpeg" }),
   /** Recent removals ("trash") or organizer moves ("move"). */
   listFileOps: (kind: FileOpKind = "trash") => invoke<FileOp[]>("list_file_ops", { kind }),
+  renamePreview: (ids: number[], pattern: string) => invoke<RenamePreview>("rename_preview", { ids, pattern }),
+  renameRun: (ids: number[], pattern: string) => invoke<FileOpReport>("rename_run", { ids, pattern }),
   organizePreview: (rootId: number, layout: OrganizeLayout, includeUndated: boolean) =>
     invoke<OrganizePreview>("organize_preview", { rootId, layout, includeUndated }),
   organizeRun: (rootId: number, layout: OrganizeLayout, includeUndated: boolean) =>

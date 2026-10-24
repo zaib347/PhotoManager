@@ -370,17 +370,7 @@ fn gaussian_blur(image: &RgbImage, sigma: f32) -> RgbImage {
 /// `base` with `recipe` applied, as a JPEG for the editor.
 pub fn preview_jpeg(base: &DynamicImage, recipe: &Recipe) -> Result<Vec<u8>> {
     let image = render(base.clone(), recipe).to_rgb8();
-    // jpeg-encoder is several times faster than the image crate here, which keeps the
-    // sliders responsive.
-    let mut out = Vec::new();
-    let (w, h) = (
-        image.width().min(65535) as u16,
-        image.height().min(65535) as u16,
-    );
-    jpeg_encoder::Encoder::new(&mut out, 85)
-        .encode(image.as_raw(), w, h, jpeg_encoder::ColorType::Rgb)
-        .map_err(|e| Error::Invalid(format!("Preview failed: {e}")))?;
-    Ok(out)
+    crate::jpeg::encode(&image, 85, crate::jpeg::Purpose::Show)
 }
 
 /// Light and colour settings that make a typical photo look its best: midtones

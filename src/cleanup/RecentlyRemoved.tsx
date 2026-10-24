@@ -8,6 +8,7 @@ const REASONS: Record<string, string> = {
   similar: "Similar photos",
   removed: "Removed photos",
   organize: "Organized by date",
+  rename: "Renamed",
 };
 
 /** "Moved 3 files (12 MB). 1 skipped: …" */

@@ -258,8 +258,12 @@ Ground rule: tools write new files; originals are only replaced through `fileops
       after turns in thumbnails, viewer (full size), export and the watermark preview. Turning a
       cropped photo turns its crop too. Rendering is CPU (rayon): ~130 ms per 1600 px preview,
       ~0.5 s for a 12 MP photo with every adjustment (release, 8 threads)
-- [ ] Faster JPEG everywhere: the editor preview uses `jpeg-encoder` (3–4× faster than the
-      `image` crate's encoder); thumbnails and export could switch too
+- [x] Faster JPEG everywhere (`jpeg.rs`, `jpeg-encoder`): thumbnails, viewer and previews use
+      `Show` (4:2:0 below q90, ~3× faster); exports use `Keep` (4:4:4, optimized tables:
+      ~37% smaller at the same quality, same speed). 12 MP at q85: `image` 441 ms / 1545 KB,
+      Keep 400 ms / 972 KB, Show 145 ms / 1405 KB. jpeg-encoder 0.7.1 corrupts files when
+      4:2:0 is combined with optimized tables, so that pairing is never used and a test
+      round-trips every mode
 - [ ] Copy an edit and paste it onto other photos; edit several at once
 - [ ] WebGL preview if CPU previews feel slow on low-end laptops
 

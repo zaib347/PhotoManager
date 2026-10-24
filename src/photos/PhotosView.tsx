@@ -230,6 +230,13 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
             })
           }
           onRotate={(quarters) => run(() => rotate([...selection], quarters))}
+          onRename={(pattern) =>
+            run(async () => {
+              const report = await api.renameRun([...selection], pattern);
+              onNotice(`${describeReport(report, "Renamed")}. Undo from Organize files.`);
+              await onLibraryChanged();
+            })
+          }
           onExport={(options) =>
             run(async () => {
               await api.exportPhotos([...selection], options);

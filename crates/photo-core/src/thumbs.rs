@@ -1,9 +1,7 @@
 //! Thumbnail store: JPEG blobs in a dedicated SQLite file, keyed by asset id.
 
-use std::io::Cursor;
 use std::path::Path;
 
-use image::codecs::jpeg::JpegEncoder;
 use image::metadata::Orientation;
 use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -115,9 +113,7 @@ pub fn preview_from_os(path: &Path, look: &Look) -> Result<Vec<u8>> {
 pub fn full_adjusted(path: &Path, orientation: Option<u8>, look: &Look) -> Result<Vec<u8>> {
     let mut img = crate::raw::open(path)?;
     orient(&mut img, orientation);
-    let mut buf = Cursor::new(Vec::new());
-    JpegEncoder::new_with_quality(&mut buf, 92).encode_image(&look.apply(img).to_rgb8())?;
-    Ok(buf.into_inner())
+    crate::jpeg::encode(&look.apply(img).to_rgb8(), 92, crate::jpeg::Purpose::Show)
 }
 
 /// Scales so the short edge is `GRID_SIZE`, capping the long edge for panoramas.
@@ -137,9 +133,7 @@ fn grid_sized(img: DynamicImage) -> DynamicImage {
 }
 
 pub fn encode_jpeg(img: &RgbImage) -> Result<Vec<u8>> {
-    let mut buf = Cursor::new(Vec::with_capacity(16 * 1024));
-    JpegEncoder::new_with_quality(&mut buf, JPEG_QUALITY).encode_image(img)?;
-    Ok(buf.into_inner())
+    crate::jpeg::encode(img, JPEG_QUALITY, crate::jpeg::Purpose::Show)
 }
 
 /// Stand-in for the real thumbnail pipeline during the M0 spike: a deterministic
