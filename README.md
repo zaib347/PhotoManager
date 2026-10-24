@@ -29,6 +29,9 @@ cargo run -p photo-core --example exif_dump -- "D:\Photos\IMG_0001.jpg"
 
 # Rebuild the bundled place list (crates/photo-core/data/places.bin) from GeoNames dumps
 cargo run -p photo-core --example build_places -- ./geonames
+
+# Rebuild the bundled world map (crates/photo-core/data/map.bin) from Natural Earth GeoJSON
+cargo run --release -p photo-core --example build_map -- ./natural-earth
 ```
 
 ## Data credits
@@ -36,6 +39,10 @@ cargo run -p photo-core --example build_places -- ./geonames
 Place names come from [GeoNames](https://www.geonames.org/) (`cities15000`, admin1 codes
 and country info), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 They are repacked into a compact binary file with no other changes.
+
+The world map is made from [Natural Earth](https://www.naturalearthdata.com/) vector data
+(v5.1.2: land, lakes, urban areas, borders, rivers and roads), which is in the public
+domain. It is clipped into tiles and packed into a compact binary file.
 
 ## Layout
 

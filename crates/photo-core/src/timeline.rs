@@ -82,6 +82,8 @@ pub struct Filter {
     /// Towns (GeoNames ids) and countries (ISO codes); either matches.
     pub place_ids: Vec<i64>,
     pub countries: Vec<String>,
+    /// A rectangle of the map (opened from a map cluster).
+    pub area: Option<crate::map::Area>,
 }
 
 impl Filter {
@@ -149,6 +151,9 @@ impl Filter {
             }
             // `place_id > 0` lets SQLite use the partial place index.
             sql.push_str(&format!(" AND a.place_id > 0 AND ({})", parts.join(" OR ")));
+        }
+        if let Some(area) = &self.area {
+            sql.push_str(&area.sql());
         }
         (sql, values)
     }

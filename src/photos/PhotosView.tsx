@@ -22,10 +22,12 @@ type Props = {
   onLibraryChanged: () => Promise<void>;
   onNotice: (message: string) => void;
   onError: (e: unknown) => void;
+  /** Opens the map to place these items with a click. */
+  onPlaceOnMap: (ids: number[]) => void;
 };
 
 /** One timeline view (All, Favorites, …) with selection and the full-screen viewer. */
-export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, onError }: Props) {
+export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, onError, onPlaceOnMap }: Props) {
   // `layout` only seeds a new store; later layouts arrive through setLayout below.
   // The parent remounts this component when the view or filter changes.
   const store = useMemo(() => new DayStore(view, filter, layout), [view, filter]);
@@ -231,6 +233,14 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
             })
           }
           onRotate={(quarters) => run(() => rotate([...selection], quarters))}
+          onSetLocation={(lat, lon) =>
+            run(async () => {
+              const n = await api.setLocation([...selection], lat, lon);
+              onNotice(`Location set for ${n.toLocaleString()} ${n === 1 ? "item" : "items"}.`);
+              await afterTimelineChange();
+            })
+          }
+          onPlaceOnMap={() => onPlaceOnMap([...selection])}
           onPasteEdit={(what) =>
             run(async () => {
               const recipe = copiedEdit.get();

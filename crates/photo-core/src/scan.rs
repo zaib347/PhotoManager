@@ -564,9 +564,10 @@ fn insert_asset(conn: &Connection, kind: MediaKind, m: &Metadata) -> Result<i64>
     Ok(conn.last_insert_rowid())
 }
 
-/// Refreshes metadata after a file's content changed. Two things are kept: a Live
-/// Photo stays live, and a date the user corrected stays corrected (the newly
-/// extracted date becomes the one "restore original" goes back to).
+/// Refreshes metadata after a file's content changed. Three things are kept: a Live
+/// Photo stays live, a date the user corrected stays corrected (the newly extracted
+/// date becomes the one "restore original" goes back to), and so does a location the
+/// user set.
 fn update_asset(conn: &Connection, id: i64, kind: MediaKind, m: &Metadata) -> Result<()> {
     let corrected =
         conn.prepare_cached(
@@ -585,12 +586,22 @@ fn update_asset(conn: &Connection, id: i64, kind: MediaKind, m: &Metadata) -> Re
     } else {
         "taken_at = ?3, taken_src = ?4, tz_offset_min = ?5, local_day = ?6,"
     };
+    let placed: bool = conn
+        .prepare_cached(
+            "SELECT EXISTS (SELECT 1 FROM user_meta WHERE asset_id = ?1 AND location_set = 1)",
+        )?
+        .query_row(params![id], |r| r.get(0))?;
+    let location = if placed {
+        // Still names ?13 and ?14, which SQLite counts parameters by.
+        "lat = COALESCE(lat, ?13), lon = COALESCE(lon, ?14),"
+    } else {
+        "lat = ?13, lon = ?14, place_id = CASE WHEN lat IS ?13 AND lon IS ?14 THEN place_id END,"
+    };
     conn.prepare_cached(&format!(
         "UPDATE assets SET media_kind = CASE WHEN media_kind = 2 AND ?2 = 0 THEN 2 ELSE ?2 END,
              {dates} width = ?7, height = ?8, orientation = ?9, duration_ms = ?10,
-             camera_make = ?11, camera_model = ?12, lat = ?13, lon = ?14, phash = NULL, blur = NULL,
-             phash_v = NULL, focus = NULL, exposure = NULL, quality_v = NULL,
-             place_id = CASE WHEN lat IS ?13 AND lon IS ?14 THEN place_id END
+             camera_make = ?11, camera_model = ?12, {location} phash = NULL, blur = NULL,
+             phash_v = NULL, focus = NULL, exposure = NULL, quality_v = NULL
          WHERE id = ?1"
     ))?
     .execute(params![

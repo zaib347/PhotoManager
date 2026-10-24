@@ -53,6 +53,7 @@ export function FilterBar({ filter, roots, onChange }: Props) {
     const country = options?.countries.find((c) => c.code === code);
     chips.push({ label: country?.name ?? code, clear: () => set({ countries: toggle(filter.countries, code) }) });
   }
+  if (filter.area) chips.push({ label: "Map area", clear: () => set({ area: undefined }) });
   for (const id of filter.placeIds ?? []) {
     const place = options?.places.find((p) => p.id === id);
     chips.push({ label: place?.name ?? "Place", clear: () => set({ placeIds: toggle(filter.placeIds, id) }) });

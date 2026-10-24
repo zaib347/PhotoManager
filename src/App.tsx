@@ -29,6 +29,7 @@ import { LibraryPanel } from "./library/LibraryPanel";
 import { FilterBar } from "./photos/FilterBar";
 import { PhotosView } from "./photos/PhotosView";
 import { PlacesPage } from "./places/PlacesPage";
+import { MapPage } from "./map/MapPage";
 import { TripsPage } from "./trips/TripsPage";
 import "./App.css";
 
@@ -51,6 +52,7 @@ function emptyState(view: View): { title: string; hint: string } {
     events: { title: "", hint: "" },
     trips: { title: "", hint: "" },
     places: { title: "", hint: "" },
+    map: { title: "", hint: "" },
     duplicates: { title: "", hint: "" },
     similar: { title: "", hint: "" },
     removed: { title: "", hint: "" },
@@ -82,6 +84,8 @@ export default function App() {
   // Bumped when scans or background detection may have changed events.
   const [eventsVersion, setEventsVersion] = useState(0);
   const [exporting, setExporting] = useState<{ done: number; total: number } | null>(null);
+  // Items being placed on the map by hand, and the view to go back to.
+  const [placing, setPlacing] = useState<{ ids: number[]; from: View; filter: Filter } | null>(null);
 
   const reloadTimeline = useCallback(async () => {
     const current = viewRef.current;
@@ -282,6 +286,30 @@ export default function App() {
             <TripsPage version={eventsVersion} onError={report} />
           ) : view === "places" ? (
             <PlacesPage version={eventsVersion} onError={report} />
+          ) : view === "map" ? (
+            <MapPage
+              placing={placing?.ids ?? null}
+              onPlace={(lat, lon) => {
+                if (!placing) return;
+                api
+                  .setLocation(placing.ids, lat, lon)
+                  .then((n) => {
+                    setNotice(`Location set for ${n.toLocaleString()} ${n === 1 ? "item" : "items"}.`);
+                    setPlacing(null);
+                    setView(placing.from);
+                    setFilter(placing.filter);
+                    setEventsVersion((v) => v + 1);
+                  })
+                  .catch(report);
+              }}
+              onCancelPlacing={() => {
+                if (!placing) return;
+                setPlacing(null);
+                setView(placing.from);
+                setFilter(placing.filter);
+              }}
+              onError={report}
+            />
           ) : view === "duplicates" ? (
             <DuplicatesPage version={eventsVersion} onNotice={setNotice} onError={report} />
           ) : view === "similar" ? (
@@ -319,6 +347,10 @@ export default function App() {
               onLibraryChanged={reloadTimeline}
               onNotice={setNotice}
               onError={report}
+              onPlaceOnMap={(ids) => {
+                setPlacing({ ids, from: view, filter });
+                setView("map");
+              }}
             />
           ) : current ? (
             <div className="empty">

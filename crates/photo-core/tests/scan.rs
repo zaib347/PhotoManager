@@ -902,3 +902,25 @@ fn scans_read_xmp_sidecars_when_they_change() {
     assert_eq!(rating(beach), Some(2));
     assert_eq!(tags(beach), vec!["holiday", "sea"]);
 }
+
+#[test]
+fn a_location_set_by_hand_survives_rescans_of_a_changed_file() {
+    let f = fixture();
+    f.scan();
+    let beach = f.asset_of("2019/beach.jpg");
+    photo_core::map::set_location(&f.library, &[beach], 48.8566, 2.3522).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    write_jpeg(&f.photos.join("2019/beach.jpg"), 99);
+    let summary = f.scan();
+    assert_eq!(summary.updated, 1);
+    let (lat, lon): (f64, f64) = f
+        .library
+        .read()
+        .query_row(
+            "SELECT lat, lon FROM assets WHERE id = ?1",
+            params![beach],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!((lat, lon), (48.8566, 2.3522));
+}

@@ -9,6 +9,7 @@ const VIEWS: { id: BuiltinView; label: string }[] = [
   { id: "events", label: "Events" },
   { id: "trips", label: "Trips" },
   { id: "places", label: "Places" },
+  { id: "map", label: "Map" },
   { id: "favorites", label: "Favorites" },
   { id: "videos", label: "Videos" },
   { id: "hidden", label: "Hidden" },

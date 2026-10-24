@@ -9,8 +9,8 @@ export type Collections = {
   navigate: (view: View) => void;
   /** Show every photo from one day. */
   showDay: (day: number) => void;
-  /** Show every photo from some towns or countries. */
-  showPlace: (where: Pick<Filter, "placeIds" | "countries">) => void;
+  /** Show every photo from some towns or countries, or an area of the map. */
+  showPlace: (where: Pick<Filter, "placeIds" | "countries" | "area">) => void;
 };
 
 export const CollectionsContext = createContext<Collections>({

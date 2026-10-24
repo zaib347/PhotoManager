@@ -301,7 +301,7 @@ and needs no downloads.
      tags, favorite (as a 5-star or a label, to choose) and description to `<name>.xmp`.
      Merges with what's there; never touches the photo file itself.
    - Rename and the organizer already move sidecars along.
-3. - [ ] **Map view** (medium, ~1–1.5 weeks)
+3. - [x] **Map view** (medium, ~1–1.5 weeks)
    - Sidebar **Map**: photos as clusters by place (counts shrink into pins as you zoom),
      click a cluster to open the timeline filtered there. Uses `assets.lat/lon` and the
      places we already have; fast at 1M photos via a grid per zoom level.

@@ -8,6 +8,7 @@ import { Popover } from "../ui/Popover";
 import { DateFixer } from "./DateFixer";
 import { EventMaker } from "./EventMaker";
 import { ExportPanel } from "./ExportPanel";
+import { LocationPanel } from "./LocationPanel";
 import { PastePanel } from "./PastePanel";
 import { RenamePanel } from "./RenamePanel";
 
@@ -28,6 +29,10 @@ type Props = {
   onRotate: (quarters: number) => void;
   /** Pastes the copied edit: all of it, or light and color only. */
   onPasteEdit: (what: "everything" | "tone") => void;
+  /** Places the items at a spot (set by hand, kept over their files' GPS). */
+  onSetLocation: (lat: number, lon: number) => void;
+  /** Opens the map to place the items with a click. */
+  onPlaceOnMap: () => void;
   /** Renames the photos' files from a pattern (undoable). */
   onRename: (pattern: string) => void;
   /** Writes copies, resized/converted, to a folder (in the background). */
@@ -87,6 +92,21 @@ export function SelectionBar(props: Props) {
             }}
             onRestore={() => {
               props.onRestoreDates();
+              close();
+            }}
+          />
+        )}
+      </Popover>
+      <Popover label="Location" align="right">
+        {(close) => (
+          <LocationPanel
+            count={count}
+            onSet={(lat, lon) => {
+              props.onSetLocation(lat, lon);
+              close();
+            }}
+            onPickOnMap={() => {
+              props.onPlaceOnMap();
               close();
             }}
           />

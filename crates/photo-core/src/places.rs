@@ -266,6 +266,10 @@ impl Index {
         self.cities.len()
     }
 
+    pub fn cities(&self) -> &[City] {
+        &self.cities
+    }
+
     pub fn is_empty(&self) -> bool {
         self.cities.is_empty()
     }

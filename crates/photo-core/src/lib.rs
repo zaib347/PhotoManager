@@ -16,6 +16,7 @@ pub mod hash;
 pub mod jpeg;
 pub mod library;
 pub mod live;
+pub mod map;
 pub mod media;
 pub mod memories;
 pub mod organize;

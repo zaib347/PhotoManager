@@ -4,6 +4,7 @@ mod diag;
 mod edit_commands;
 mod event_commands;
 mod export_commands;
+mod map_commands;
 mod memory_commands;
 mod protocol;
 mod scans;
@@ -45,6 +46,8 @@ pub(crate) struct AppState {
     watermark_base: Mutex<Option<(i64, Arc<photo_core::export::PreviewBase>)>>,
     /// The photo open in the editor, decoded once (turned, without its edit).
     edit_base: Mutex<Option<(i64, Arc<photo_core::export::PreviewBase>)>>,
+    /// Locations of visible photos for the map, loaded when it opens.
+    map_points: Mutex<Option<Arc<photo_core::map::Points>>>,
 }
 
 impl AppState {
@@ -331,6 +334,7 @@ pub fn run() {
                 export_cancel: AtomicBool::new(false),
                 watermark_base: Mutex::default(),
                 edit_base: Mutex::default(),
+                map_points: Mutex::default(),
             });
 
             library::refresh_volumes(&state.library.write())?;
@@ -390,6 +394,12 @@ pub fn run() {
             edit_commands::edit_save,
             edit_commands::edit_paste,
             xmp_commands::xmp_settings,
+            map_commands::map_data,
+            map_commands::map_cities,
+            map_commands::map_load,
+            map_commands::map_clusters,
+            map_commands::search_cities,
+            map_commands::set_location,
             xmp_commands::set_xmp_settings,
             xmp_commands::set_description,
             cleanup_commands::duplicate_overview,

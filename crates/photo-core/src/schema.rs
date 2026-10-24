@@ -328,6 +328,10 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
             SELECT asset_id FROM asset_tags WHERE tag_id = OLD.id;
     END;
     ",
+    // v16: locations set by hand (see `map::set_location`), kept over the file's GPS.
+    "
+    ALTER TABLE user_meta ADD COLUMN location_set INTEGER NOT NULL DEFAULT 0;
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

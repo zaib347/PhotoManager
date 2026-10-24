@@ -3,7 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { lookQuery } from "./looks";
 
 /** Views that are pages rather than timelines. */
-const PAGES = ["events", "trips", "places", "duplicates", "similar", "removed", "organize"] as const;
+const PAGES = ["events", "trips", "places", "map", "duplicates", "similar", "removed", "organize"] as const;
 export type PageView = (typeof PAGES)[number];
 export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | PageView;
 export type View = BuiltinView | { album: number } | { tag: number } | { event: number } | { trip: number };
@@ -38,6 +38,25 @@ export type Filter = {
   /** Towns (GeoNames ids) and countries (ISO codes); matching either is enough. */
   placeIds?: number[];
   countries?: string[];
+  /** A rectangle of the map, from a map cluster. */
+  area?: Area;
+};
+
+/** A rectangle of the map in degrees; west > east crosses the antimeridian. */
+export type Area = { west: number; south: number; east: number; north: number };
+
+/** Photos grouped on the map. */
+export type MapCluster = { lat: number; lon: number; count: number; coverId: number; area: Area };
+export type MapSummary = { count: number; bounds: Area | null };
+/** A town from the bundled list. */
+export type CityInfo = {
+  id: number;
+  name: string;
+  region: string | null;
+  country: string;
+  lat: number;
+  lon: number;
+  population: number;
 };
 
 /** A town from the bundled GeoNames list. */
@@ -77,6 +96,7 @@ export function normalizeFilter(f: Filter): Filter {
   if (f.minRating) out.minRating = f.minRating;
   if (f.placeIds?.length) out.placeIds = [...f.placeIds].sort((a, b) => a - b);
   if (f.countries?.length) out.countries = [...f.countries].sort();
+  if (f.area) out.area = f.area;
   return out;
 }
 
@@ -461,6 +481,17 @@ export const api = {
    */
   editPaste: (ids: number[], recipe: Recipe, what: "everything" | "tone") =>
     invoke<[number, number][]>("edit_paste", { ids, recipe, what }),
+  /** The packed offline world map. */
+  mapData: () => invoke<ArrayBuffer>("map_data"),
+  /** Town labels: (name, lat, lon, population), biggest first. */
+  mapCities: () => invoke<[string, number, number, number][]>("map_cities"),
+  /** Loads photo locations for the clusters; call when the map opens. */
+  mapLoad: () => invoke<MapSummary>("map_load"),
+  mapClusters: (zoom: number, x0: number, y0: number, x1: number, y1: number) =>
+    invoke<MapCluster[]>("map_clusters", { zoom, x0, y0, x1, y1 }),
+  searchCities: (query: string) => invoke<CityInfo[]>("search_cities", { query }),
+  /** Places photos by hand; returns how many. */
+  setLocation: (ids: number[], lat: number, lon: number) => invoke<number>("set_location", { ids, lat, lon }),
   xmpSettings: () => invoke<XmpSettings>("xmp_settings"),
   /** Turning writing on writes sidecars for every photo with ratings, tags or a description. */
   setXmpSettings: (settings: XmpSettings) => invoke<void>("set_xmp_settings", { settings }),
