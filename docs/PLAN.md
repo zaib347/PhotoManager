@@ -225,8 +225,12 @@ Batch 2:
       files dated only by their modified time left alone unless asked. Preview (counts + first
       100 moves) before anything moves; runs through `fileops` as a journaled `move` operation
       (the `files` row follows the file, emptied folders removed); Undo moves everything back
-- [ ] Follow-up: assessing a 12 MP original takes ~450 ms (full JPEG decode); decode at 1/4 scale
-      (DCT scaling) before large real libraries
+- [x] Faster assessment: Windows' decoder (WIC) at a power-of-two reduced size (a 12 MP JPEG at
+      1/4, 1008 px), then focus/exposure on that without enlarging: ~120 ms per photo instead of
+      ~200–250 ms (release, one photo; photos run in parallel). Falls back to a full decode
+      elsewhere. Pure-Rust scaled decoding (`jpeg-decoder`) was tried and isn't faster than
+      zune's full decode: entropy decoding dominates. Assessment v2 re-scores every grouped photo
+      once, in the background
 
 ## Tools checklist
 

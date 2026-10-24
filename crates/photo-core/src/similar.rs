@@ -393,9 +393,13 @@ pub fn overview(conn: &Connection) -> Result<Overview> {
 }
 
 /// Version of the shot assessment; bumping it assesses every grouped photo again.
-pub const QUALITY_VERSION: i64 = 1;
-/// Long edge the original is decoded to for assessing it.
+/// v2: reduced-size decoding, so scores are on a slightly different scale.
+pub const QUALITY_VERSION: i64 = 2;
+/// Longest edge a photo is assessed at; bigger decodes are shrunk to this.
 const ASSESS_EDGE: u32 = 1024;
+/// Smallest long edge asked of a reduced decode: a 12 MP JPEG decodes at a quarter
+/// size (1008 px), far faster than in full.
+const REDUCED_EDGE: u32 = 960;
 /// Tiles per side; focus is judged on the sharpest few, where the subject is.
 const TILES: u32 = 8;
 const SHARPEST_TILES: usize = 4;
@@ -406,7 +410,12 @@ const ASSESS_BATCH: usize = 32;
 /// `exposure` is 0 when good, towards -1 when too dark, towards +1 when too bright or
 /// blown out.
 pub fn assess(img: &DynamicImage) -> (f64, f64) {
-    let luma = img.thumbnail(ASSESS_EDGE, ASSESS_EDGE).to_luma8();
+    // Shrunk only when bigger than the assessing size: enlarging would soften it.
+    let luma = if img.width().max(img.height()) > ASSESS_EDGE {
+        img.thumbnail(ASSESS_EDGE, ASSESS_EDGE).to_luma8()
+    } else {
+        img.to_luma8()
+    };
     (focus(&luma), exposure(&luma))
 }
 
@@ -417,7 +426,9 @@ fn focus(luma: &GrayImage) -> f64 {
     if w < TILES * 3 || h < TILES * 3 {
         return 0.0;
     }
-    let at = |x: u32, y: u32| luma.get_pixel(x, y).0[0] as f64;
+    let px = luma.as_raw();
+    let stride = w as usize;
+    let at = |x: u32, y: u32| px[y as usize * stride + x as usize] as i32;
     let (tw, th) = (w / TILES, h / TILES);
     let mut tiles: Vec<f64> = Vec::with_capacity((TILES * TILES) as usize);
     for ty in 0..TILES {
@@ -425,8 +436,8 @@ fn focus(luma: &GrayImage) -> f64 {
             let (mut sum, mut sq, mut n) = (0.0, 0.0, 0.0);
             for y in (ty * th).max(1)..((ty + 1) * th).min(h - 1) {
                 for x in (tx * tw).max(1)..((tx + 1) * tw).min(w - 1) {
-                    let l =
-                        at(x - 1, y) + at(x + 1, y) + at(x, y - 1) + at(x, y + 1) - 4.0 * at(x, y);
+                    let l = (at(x - 1, y) + at(x + 1, y) + at(x, y - 1) + at(x, y + 1)
+                        - 4 * at(x, y)) as f64;
                     sum += l;
                     sq += l * l;
                     n += 1.0;
@@ -468,11 +479,14 @@ pub fn assess_pending(library: &Db, cancel: &AtomicBool) -> Result<usize> {
             let conn = library.read();
             let mut stmt = conn.prepare_cached(
                 "SELECT a.id FROM similar_members m JOIN assets a ON a.id = m.asset_id
-                 WHERE a.quality_v IS NULL AND a.status = 0 AND a.media_kind != 1 AND a.id > ?1
+                 WHERE (a.quality_v IS NULL OR a.quality_v != ?3) AND a.status = 0
+                   AND a.media_kind != 1 AND a.id > ?1
                  ORDER BY a.id LIMIT ?2",
             )?;
-            stmt.query_map(params![after, ASSESS_BATCH as i64], |r| r.get(0))?
-                .collect::<rusqlite::Result<_>>()?
+            stmt.query_map(params![after, ASSESS_BATCH as i64, QUALITY_VERSION], |r| {
+                r.get(0)
+            })?
+            .collect::<rusqlite::Result<_>>()?
         };
         let Some(&last) = batch.last() else {
             break;
@@ -512,10 +526,14 @@ fn assess_one(library: &Db, id: i64) -> Result<Assessed> {
     let source = library::asset_source(&library.read(), id)?;
     Ok(match source {
         Some(AssetSource::File { path, .. }) => {
-            let img = image::open(&path).ok().or_else(|| {
-                let jpeg = thumbs::preview_from_os(&path, &Default::default()).ok()?;
-                image::load_from_memory(&jpeg).ok()
-            });
+            // The OS decoder at reduced size first (fast), then our own in full.
+            let img = crate::os_thumb::reduced_image(&path, REDUCED_EDGE)
+                .ok()
+                .or_else(|| image::open(&path).ok())
+                .or_else(|| {
+                    let jpeg = thumbs::preview_from_os(&path, &Default::default()).ok()?;
+                    image::load_from_memory(&jpeg).ok()
+                });
             Assessed::Done(img.map(|img| assess(&img)))
         }
         Some(AssetSource::Unavailable { .. }) => Assessed::Later,
