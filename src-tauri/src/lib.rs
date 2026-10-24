@@ -394,6 +394,8 @@ pub fn run() {
             cleanup_commands::empty_file_op,
             cleanup_commands::organize_preview,
             cleanup_commands::organize_run,
+            cleanup_commands::rename_preview,
+            cleanup_commands::rename_run,
             similar_commands::similar_overview,
             similar_commands::similar_groups,
             similar_commands::remove_similar,

@@ -178,18 +178,51 @@ impl<'a> Roots<'a> {
 /// touching anything) if that would leave a photo with no copy at all.
 pub fn trash(db: &Db, file_ids: &[i64], reason: &str, keep_a_copy: bool) -> Result<Report> {
     let files: Vec<(i64, Option<String>)> = file_ids.iter().map(|&id| (id, None)).collect();
-    let op_id = plan(&mut db.write(), &files, Kind::Trash, reason, keep_a_copy)?;
+    let op_id = plan(
+        &mut db.write(),
+        &files,
+        &[],
+        Kind::Trash,
+        reason,
+        keep_a_copy,
+    )?;
     run(db, op_id, Kind::Trash)
+}
+
+/// A file outside the library that moves along with library files, such as a sidecar
+/// (`.xmp`, `.aae`): journaled and undoable like them, with no `files` row to update.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Companion {
+    pub root_id: i64,
+    pub from: String,
+    pub to: String,
 }
 
 /// Moves files to new paths in their own library folder (`moves`: file id → new path
 /// relative to the root). Folders left empty by the move are removed.
 pub fn relocate(db: &Db, moves: &[(i64, String)], reason: &str) -> Result<Report> {
+    relocate_with(db, moves, &[], reason)
+}
+
+/// `relocate`, with companion files moved in the same operation.
+pub fn relocate_with(
+    db: &Db,
+    moves: &[(i64, String)],
+    companions: &[Companion],
+    reason: &str,
+) -> Result<Report> {
     let files: Vec<(i64, Option<String>)> = moves
         .iter()
         .map(|(id, to)| (*id, Some(to.clone())))
         .collect();
-    let op_id = plan(&mut db.write(), &files, Kind::Move, reason, false)?;
+    let op_id = plan(
+        &mut db.write(),
+        &files,
+        companions,
+        Kind::Move,
+        reason,
+        false,
+    )?;
     let report = run(db, op_id, Kind::Move)?;
     let mut roots = Roots::new(db);
     for item in items(&db.read(), op_id, "moved")? {
@@ -240,10 +273,12 @@ fn run(db: &Db, op_id: i64, kind: Kind) -> Result<Report> {
 }
 
 /// Writes the journal: an operation row and one item per file, nothing moved yet.
-/// `files`: file id and, for moves, its new path.
+/// `files`: file id and, for moves, its new path; `companions` (moves only) are read
+/// from disk, since the library doesn't know them.
 fn plan(
     conn: &mut Connection,
     files: &[(i64, Option<String>)],
+    companions: &[Companion],
     kind: Kind,
     reason: &str,
     keep_a_copy: bool,
@@ -277,6 +312,35 @@ fn plan(
                 .optional()?;
             rows.extend(row);
         }
+    }
+    let mut roots: HashMap<i64, Option<PathBuf>> = HashMap::new();
+    for c in companions {
+        let root = match roots.get(&c.root_id) {
+            Some(r) => r.clone(),
+            None => {
+                let r = library::root_path(&tx, c.root_id)?;
+                roots.insert(c.root_id, r.clone());
+                r
+            }
+        };
+        let Some(root) = root else {
+            continue;
+        };
+        // Gone or unreadable: nothing to carry along.
+        let Ok(md) = std::fs::metadata(root.join(&c.from)) else {
+            continue;
+        };
+        rows.push(Item {
+            seq: rows.len() as i64,
+            root_id: c.root_id,
+            rel_path: c.from.clone(),
+            trash_rel: c.to.clone(),
+            size: md.len() as i64,
+            mtime: mtime_ms(&md),
+            quick_hash: None,
+            full_hash: None,
+            asset_id: None,
+        });
     }
     if rows.is_empty() {
         return Err(Error::Invalid(match kind {
@@ -897,7 +961,15 @@ mod tests {
     fn recovers_an_interrupted_operation() {
         let (_dir, db, photos, ids) = setup(&["a.jpg", "a2.jpg", "a3.jpg"], 3);
         let files: Vec<(i64, Option<String>)> = ids[1..].iter().map(|&id| (id, None)).collect();
-        let op = plan(&mut db.write(), &files, Kind::Trash, "duplicates", true).unwrap();
+        let op = plan(
+            &mut db.write(),
+            &files,
+            &[],
+            Kind::Trash,
+            "duplicates",
+            true,
+        )
+        .unwrap();
         // The app died after moving the first file but before recording it.
         let first = &items(&db.read(), op, "planned").unwrap()[0];
         move_out(&photos, first).unwrap();

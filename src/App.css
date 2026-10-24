@@ -1478,6 +1478,35 @@ button.primary:disabled {
   margin-bottom: 6px;
 }
 
+.rename-panel {
+  width: 360px;
+}
+
+.rename-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin-top: 4px;
+}
+
+.rename-sample {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+.rename-sample li {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 1px 0;
+}
+
+.rename-error {
+  color: #d64545;
+}
+
 .watermark-preview img {
   display: block;
   max-width: 100%;

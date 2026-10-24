@@ -6,6 +6,7 @@ import { Popover } from "../ui/Popover";
 import { DateFixer } from "./DateFixer";
 import { EventMaker } from "./EventMaker";
 import { ExportPanel } from "./ExportPanel";
+import { RenamePanel } from "./RenamePanel";
 
 type Props = {
   count: number;
@@ -22,6 +23,8 @@ type Props = {
   onRemove: () => void;
   /** Turns the photos: 1 clockwise, -1 counter-clockwise. */
   onRotate: (quarters: number) => void;
+  /** Renames the photos' files from a pattern (undoable). */
+  onRename: (pattern: string) => void;
   /** Writes copies, resized/converted, to a folder (in the background). */
   onExport: (options: ExportOptions) => void;
   onAddToAlbum: (albumId: number) => void;
@@ -100,6 +103,17 @@ export function SelectionBar(props: Props) {
                   }
                 : undefined
             }
+          />
+        )}
+      </Popover>
+      <Popover label="Rename" align="right">
+        {(close) => (
+          <RenamePanel
+            ids={props.ids}
+            onRename={(pattern) => {
+              props.onRename(pattern);
+              close();
+            }}
           />
         )}
       </Popover>

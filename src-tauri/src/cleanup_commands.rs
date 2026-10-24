@@ -7,7 +7,7 @@ use std::sync::Arc;
 use photo_core::duplicates::{self, Group, Overview};
 use photo_core::fileops::{self, OpSummary, Report};
 use photo_core::organize::{self, Layout, Preview};
-use photo_core::{events, similar, trips};
+use photo_core::{events, rename, similar, trips};
 use tauri::State;
 
 use crate::{AppState, CmdResult, blocking, scans};
@@ -123,6 +123,30 @@ pub async fn organize_run(
         organize::run(&s.library, root_id, layout, include_undated)
     })
     .await
+}
+
+/// What renaming photos from `pattern` would do.
+#[tauri::command]
+pub async fn rename_preview(
+    state: State<'_, Arc<AppState>>,
+    ids: Vec<i64>,
+    pattern: String,
+) -> CmdResult<rename::Preview> {
+    blocking(&state, move |s| {
+        rename::preview(&s.library.read(), &ids, &pattern)
+    })
+    .await
+}
+
+/// Renames photos (with their RAW/JPEG twins, Live Photo clips and sidecars); undoable.
+#[tauri::command]
+pub async fn rename_run(
+    state: State<'_, Arc<AppState>>,
+    ids: Vec<i64>,
+    pattern: String,
+) -> CmdResult<Report> {
+    no_scan_running(&state)?;
+    blocking(&state, move |s| rename::run(&s.library, &ids, &pattern)).await
 }
 
 #[tauri::command]

@@ -22,6 +22,7 @@ pub mod organize;
 pub mod os_thumb;
 pub mod places;
 pub mod raw;
+pub mod rename;
 pub mod rotate;
 pub mod scan;
 pub mod schema;
