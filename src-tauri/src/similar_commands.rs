@@ -75,7 +75,7 @@ pub async fn remove_similar(state: State<'_, Arc<AppState>>, ids: Vec<i64>) -> C
     blocking(&state, move |s| {
         let files = similar::files_of_assets(&s.library.read(), &ids)?;
         let report = fileops::trash(&s.library, &files, "similar", false)?;
-        similar::detect(&s.library)?;
+        crate::cleanup_commands::refresh_groupings(s)?;
         Ok(report)
     })
     .await

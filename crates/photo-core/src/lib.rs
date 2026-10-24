@@ -15,6 +15,7 @@ pub mod library;
 pub mod live;
 pub mod media;
 pub mod memories;
+pub mod organize;
 pub mod os_thumb;
 pub mod places;
 pub mod scan;

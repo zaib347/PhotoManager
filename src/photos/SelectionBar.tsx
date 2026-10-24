@@ -17,6 +17,8 @@ type Props = {
   onFavorite: (favorite: boolean) => void;
   onRate: (rating: number | null) => void;
   onHide: (hidden: boolean) => void;
+  /** Moves the photos' files to the trash folder (asks first). */
+  onRemove: () => void;
   onAddToAlbum: (albumId: number) => void;
   onCreateAlbum: (name: string) => void;
   onTag: (name: string) => void;
@@ -117,6 +119,9 @@ export function SelectionBar(props: Props) {
         </button>
       </div>
       <button onClick={() => onHide(view !== "hidden")}>{view === "hidden" ? "Unhide" : "Hide"}</button>
+      <button onClick={props.onRemove} title="Move to the trash folder (Delete)">
+        Remove
+      </button>
     </div>
   );
 }

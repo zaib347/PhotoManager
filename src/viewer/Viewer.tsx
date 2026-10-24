@@ -14,6 +14,8 @@ type Props = {
   onClose: (last: Position) => void;
   onFavorite: (ids: number[], favorite: boolean) => Promise<void>;
   onHidden: (ids: number[], hidden: boolean) => Promise<void>;
+  /** Asks, then moves the photo to the trash folder; resolves true if it was removed. */
+  onRemove: (ids: number[]) => Promise<boolean>;
   onAddTag: (ids: number[], name: string) => Promise<void>;
   onRemoveTag: (ids: number[], tagId: number) => Promise<void>;
   onNavigate: (view: View) => void;
@@ -36,6 +38,7 @@ export function Viewer({
   onClose,
   onFavorite,
   onHidden,
+  onRemove,
   onAddTag,
   onRemoveTag,
   onNavigate,
@@ -113,10 +116,8 @@ export function Viewer({
     [asset],
   );
 
-  const toggleHidden = useCallback(async () => {
-    if (!asset) return;
-    await onHidden([asset.id], !asset.hidden);
-    // The item leaves this view, so the same index now holds the next one.
+  /** After the current item left this view: the same index now holds the next one. */
+  const afterLeaving = useCallback(async () => {
     await store.ensure([pos.day]);
     const ids = store.get(pos.day)?.ids ?? [];
     if (pos.index < ids.length) setPos({ ...pos });
@@ -126,7 +127,17 @@ export function Viewer({
       if (next) setPos(next);
       else onClose(pos);
     }
-  }, [asset, onHidden, store, pos, onClose]);
+  }, [store, pos, onClose]);
+
+  const toggleHidden = useCallback(async () => {
+    if (!asset) return;
+    await onHidden([asset.id], !asset.hidden);
+    await afterLeaving();
+  }, [asset, onHidden, afterLeaving]);
+
+  const removeCurrent = useCallback(async () => {
+    if (asset && (await onRemove([asset.id]))) await afterLeaving();
+  }, [asset, onRemove, afterLeaving]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -140,13 +151,14 @@ export function Viewer({
       else if (e.key === "f") toggleFavorite();
       else if (e.key === "l") setPlayingLive((p) => !p);
       else if (/^[0-5]$/.test(e.key)) setRating(e.key === "0" ? null : Number(e.key));
+      else if (e.key === "Delete") removeCurrent();
       else return;
       e.preventDefault();
       e.stopPropagation();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [pos, go, onClose, toggleInfo, toggleFavorite, setRating]);
+  }, [pos, go, onClose, toggleInfo, toggleFavorite, setRating, removeCurrent]);
 
   const isVideo = asset?.mediaKind === MediaKind.Video;
   const onlineFile = asset?.files.find((f) => f.online);
@@ -191,6 +203,9 @@ export function Viewer({
             </button>
             <button className="ghost" onClick={toggleHidden}>
               {asset.hidden ? "Unhide" : "Hide"}
+            </button>
+            <button className="ghost" onClick={removeCurrent} title="Move to the trash folder (Delete)">
+              Remove
             </button>
           </>
         )}
