@@ -1444,3 +1444,13 @@ button.primary:disabled {
   border-bottom: 1px solid var(--border);
   word-break: break-all;
 }
+.export-panel input[type="range"] {
+  width: 100%;
+}
+
+.export-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}

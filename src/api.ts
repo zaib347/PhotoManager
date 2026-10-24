@@ -174,6 +174,30 @@ export type SimilarGroup = {
   members: SimilarMember[];
 };
 
+export type ExportFormat = "original" | "jpeg" | "webp" | "png";
+
+export type ExportOptions = {
+  /** "original" keeps JPEG/PNG/WebP and turns everything else (HEIC…) into JPEG. */
+  format: ExportFormat;
+  /** 1–100, for JPEG and WebP. */
+  quality: number;
+  /** Longer edge at most this many pixels; null keeps the full size. */
+  maxEdge: number | null;
+  removeLocation: boolean;
+  folder: string;
+};
+
+export type ExportReport = {
+  exported: number;
+  failed: number;
+  /** Videos, items without files, cancelled ones. */
+  skipped: number;
+  bytesIn: number;
+  bytesOut: number;
+  folder: string;
+  errors: string[];
+};
+
 export type FileOpKind = "trash" | "move";
 
 /** 2023/2023-06, 2023/06 or 2023/2023-06-14. */
@@ -338,6 +362,9 @@ export const api = {
   keepSimilar: (ids: number[]) => invoke<void>("keep_similar", { ids }),
   /** Moves every file of these photos to the trash folder next to it (undoable). */
   removePhotos: (ids: number[]) => invoke<FileOpReport>("remove_photos", { ids }),
+  /** Starts a background export; watch `events.exportProgress` / `exportFinished`. */
+  exportPhotos: (ids: number[], options: ExportOptions) => invoke<void>("export_photos", { ids, options }),
+  cancelExport: () => invoke<void>("cancel_export"),
   /** Recent removals ("trash") or organizer moves ("move"). */
   listFileOps: (kind: FileOpKind = "trash") => invoke<FileOp[]>("list_file_ops", { kind }),
   organizePreview: (rootId: number, layout: OrganizeLayout, includeUndated: boolean) =>
@@ -364,6 +391,10 @@ export const events = {
   volumesChanged: (cb: () => void): Promise<UnlistenFn> => listen("volumes-changed", () => cb()),
   /** Events were (re)detected in the background. */
   eventsChanged: (cb: () => void): Promise<UnlistenFn> => listen("events-changed", () => cb()),
+  exportProgress: (cb: (p: { done: number; total: number }) => void): Promise<UnlistenFn> =>
+    listen<{ done: number; total: number }>("export-progress", (e) => cb(e.payload)),
+  exportFinished: (cb: (f: { report: ExportReport | null; error: string | null }) => void): Promise<UnlistenFn> =>
+    listen<{ report: ExportReport | null; error: string | null }>("export-finished", (e) => cb(e.payload)),
   /** Background hashing finished a pass; similar groups may have changed. */
   similarChanged: (cb: () => void): Promise<UnlistenFn> => listen("similar-changed", () => cb()),
 };

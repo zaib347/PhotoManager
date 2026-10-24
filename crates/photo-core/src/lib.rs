@@ -9,6 +9,7 @@ pub mod dates;
 pub mod db;
 pub mod duplicates;
 pub mod events;
+pub mod export;
 pub mod fileops;
 pub mod hash;
 pub mod library;

@@ -2,6 +2,7 @@ mod cleanup_commands;
 mod collection_commands;
 mod diag;
 mod event_commands;
+mod export_commands;
 mod memory_commands;
 mod protocol;
 mod scans;
@@ -35,6 +36,9 @@ pub(crate) struct AppState {
     /// The similar-photos hashing pass is running / should stop (a scan started).
     hashing: AtomicBool,
     hash_cancel: AtomicBool,
+    /// An export is running / should stop.
+    exporting: AtomicBool,
+    export_cancel: AtomicBool,
 }
 
 impl AppState {
@@ -293,6 +297,8 @@ pub fn run() {
                 thumb_failures: Mutex::default(),
                 hashing: AtomicBool::new(false),
                 hash_cancel: AtomicBool::new(false),
+                exporting: AtomicBool::new(false),
+                export_cancel: AtomicBool::new(false),
             });
 
             library::refresh_volumes(&state.library.write())?;
@@ -339,6 +345,8 @@ pub fn run() {
             event_commands::rename_trip,
             event_commands::remove_trip,
             cleanup_commands::remove_photos,
+            export_commands::export_photos,
+            export_commands::cancel_export,
             cleanup_commands::duplicate_overview,
             cleanup_commands::duplicate_groups,
             cleanup_commands::remove_duplicates,

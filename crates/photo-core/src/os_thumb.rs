@@ -25,6 +25,83 @@ pub fn thumbnail(path: &Path, size: u32) -> Result<RgbImage> {
     ffmpeg_frame(path, size)
 }
 
+/// Decodes a whole image at full resolution with the OS's codecs (HEIC and other
+/// formats this crate can't read). Windows only for now (WIC).
+pub fn full_image(path: &Path) -> Result<image::DynamicImage> {
+    #[cfg(windows)]
+    {
+        windows_wic::decode(path).map(image::DynamicImage::ImageRgb8)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Err(Error::Invalid(
+            "This format can't be decoded on this system yet".into(),
+        ))
+    }
+}
+
+#[cfg(windows)]
+mod windows_wic {
+    use std::path::Path;
+
+    use image::RgbImage;
+    use windows::Win32::Foundation::GENERIC_READ;
+    use windows::Win32::Graphics::Imaging::{
+        CLSID_WICImagingFactory, GUID_WICPixelFormat24bppRGB, IWICImagingFactory, IWICPalette,
+        WICBitmapDitherTypeNone, WICBitmapPaletteTypeCustom, WICDecodeMetadataCacheOnDemand,
+    };
+    use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
+    use windows::core::HSTRING;
+
+    use crate::{Error, Result};
+
+    fn os_error(e: windows::core::Error) -> Error {
+        Error::Invalid(format!("Windows couldn't decode this image: {e}"))
+    }
+
+    /// First frame as 24-bit RGB.
+    pub fn decode(path: &Path) -> Result<RgbImage> {
+        super::windows_shell::ensure_com();
+        let path = HSTRING::from(std::path::absolute(path)?.as_os_str());
+        // SAFETY: plain COM calls on interfaces we own; the buffer is sized from the
+        // frame's own dimensions and stride.
+        unsafe {
+            let factory: IWICImagingFactory =
+                CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)
+                    .map_err(os_error)?;
+            let decoder = factory
+                .CreateDecoderFromFilename(
+                    &path,
+                    None,
+                    GENERIC_READ,
+                    WICDecodeMetadataCacheOnDemand,
+                )
+                .map_err(os_error)?;
+            let frame = decoder.GetFrame(0).map_err(os_error)?;
+            let converter = factory.CreateFormatConverter().map_err(os_error)?;
+            converter
+                .Initialize(
+                    &frame,
+                    &GUID_WICPixelFormat24bppRGB,
+                    WICBitmapDitherTypeNone,
+                    None::<&IWICPalette>,
+                    0.0,
+                    WICBitmapPaletteTypeCustom,
+                )
+                .map_err(os_error)?;
+            let (mut w, mut h) = (0u32, 0u32);
+            converter.GetSize(&mut w, &mut h).map_err(os_error)?;
+            let stride = w * 3;
+            let mut buf = vec![0u8; stride as usize * h as usize];
+            converter
+                .CopyPixels(std::ptr::null(), stride, &mut buf)
+                .map_err(os_error)?;
+            RgbImage::from_raw(w, h, buf).ok_or_else(|| Error::Invalid("Bad image size".into()))
+        }
+    }
+}
+
 fn ffmpeg_available() -> bool {
     use std::sync::OnceLock;
     static AVAILABLE: OnceLock<bool> = OnceLock::new();
@@ -89,8 +166,8 @@ mod windows_shell {
         static COM_READY: Cell<bool> = const { Cell::new(false) };
     }
 
-    /// Shell thumbnail providers expect COM on the calling thread.
-    fn ensure_com() {
+    /// Shell thumbnail providers (and WIC) expect COM on the calling thread.
+    pub(super) fn ensure_com() {
         COM_READY.with(|ready| {
             if !ready.get() {
                 // SAFETY: initializes COM for this thread; never uninitialized because the
@@ -203,6 +280,18 @@ mod tests {
         );
         let px = thumb.get_pixel(thumb.width() / 2, thumb.height() / 2);
         assert!(px[0] > 150 && px[1] < 60, "should be red, got {px:?}");
+    }
+
+    #[test]
+    fn windows_codecs_decode_at_full_size() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wide.png");
+        RgbImage::from_pixel(1500, 900, Rgb([10, 200, 10]))
+            .save(&path)
+            .unwrap();
+        let img = super::full_image(&path).unwrap().to_rgb8();
+        assert_eq!(img.dimensions(), (1500, 900));
+        assert_eq!(img.get_pixel(700, 400).0, [10, 200, 10]);
     }
 
     #[test]

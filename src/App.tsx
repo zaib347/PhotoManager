@@ -8,6 +8,7 @@ import {
   isPage,
   viewKey,
   type AlbumInfo,
+  type ExportReport,
   type Filter,
   type Layout,
   type RootInfo,
@@ -23,6 +24,7 @@ import { OrganizePage } from "./cleanup/OrganizePage";
 import { RecentlyRemoved } from "./cleanup/RecentlyRemoved";
 import { SimilarPage } from "./cleanup/SimilarPage";
 import { EventsPage } from "./events/EventsPage";
+import { formatBytes } from "./format";
 import { LibraryPanel } from "./library/LibraryPanel";
 import { FilterBar } from "./photos/FilterBar";
 import { PhotosView } from "./photos/PhotosView";
@@ -77,6 +79,7 @@ export default function App() {
   const lastLiveReload = useRef(0);
   // Bumped when scans or background detection may have changed events.
   const [eventsVersion, setEventsVersion] = useState(0);
+  const [exporting, setExporting] = useState<{ done: number; total: number } | null>(null);
 
   const reloadTimeline = useCallback(async () => {
     const current = viewRef.current;
@@ -162,6 +165,11 @@ export default function App() {
         setEventsVersion((v) => v + 1);
       }),
       events.eventsChanged(() => setEventsVersion((v) => v + 1)),
+      events.exportProgress((p) => setExporting(p)),
+      events.exportFinished(({ report: r, error }) => {
+        setExporting(null);
+        setNotice(error ? `Export failed: ${error}` : r ? describeExport(r) : "Export finished");
+      }),
       events.volumesChanged(() => reloadRoots().catch(report)),
     ];
     return () => unlisten.forEach((p) => p.then((off) => off()));
@@ -224,6 +232,14 @@ export default function App() {
           {stats ? `${stats.assets.toLocaleString()} items · ${stats.days.toLocaleString()} days` : "Loading…"}
         </span>
         <div className="spacer" />
+        {exporting && (
+          <span className="export-status muted">
+            Exporting {exporting.done.toLocaleString()} of {exporting.total.toLocaleString()}
+            <button className="link small" onClick={() => api.cancelExport().catch(report)}>
+              Stop
+            </button>
+          </span>
+        )}
         <details className="dev-menu">
           <summary className="muted">Test data</summary>
           <div className="dev-menu-items">
@@ -310,6 +326,16 @@ export default function App() {
     </div>
     </CollectionsContext.Provider>
   );
+}
+
+function describeExport(r: ExportReport) {
+  const parts = [`Exported ${r.exported.toLocaleString()} photos to ${r.folder}`];
+  if (r.bytesIn > 0 && r.exported > 0) {
+    parts.push(`${formatBytes(r.bytesIn)} → ${formatBytes(r.bytesOut)}`);
+  }
+  if (r.skipped) parts.push(`${r.skipped.toLocaleString()} skipped (videos and stopped ones aren't exported)`);
+  if (r.failed) parts.push(`${r.failed.toLocaleString()} failed: ${r.errors[0] ?? ""}`);
+  return parts.join(". ");
 }
 
 function describeFinished({ summary: s, error }: ScanFinished) {
