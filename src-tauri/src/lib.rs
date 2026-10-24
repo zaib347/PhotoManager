@@ -368,6 +368,7 @@ pub fn run() {
         })
         .register_asynchronous_uri_scheme_protocol("thumb", protocol::handle_thumb)
         .register_asynchronous_uri_scheme_protocol("media", protocol::handle_media)
+        .register_asynchronous_uri_scheme_protocol("face", protocol::handle_face)
         .invoke_handler(tauri::generate_handler![
             library_stats,
             get_layout,
@@ -418,6 +419,15 @@ pub fn run() {
             ai_commands::ai_remove,
             ai_commands::ai_search,
             ai_commands::ai_smart_albums,
+            ai_commands::ai_photo_text,
+            ai_commands::ai_people,
+            ai_commands::ai_person,
+            ai_commands::ai_rename_person,
+            ai_commands::ai_merge_people,
+            ai_commands::ai_hide_person,
+            ai_commands::ai_remove_from_person,
+            ai_commands::ai_person_cover,
+            ai_commands::ai_photo_people,
             import_commands::list_imports,
             import_commands::undo_import,
             map_commands::map_data,

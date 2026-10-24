@@ -20,7 +20,7 @@ zip = { version = "9.1.0", default-features = false, features = ["deflate"] }
 
 [target."cfg(windows)".dependencies]
 libloading = "0.9"
-windows = { version = "0.62.2", features = ["Win32_System_Power", "Win32_Foundation"] }
+windows = { version = "0.62.2", features = ["Win32_System_Power", "Win32_System_Com", "Win32_Foundation", "Foundation", "Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr", "Security_Cryptography", "Storage_Streams"] }
 
 [dev-dependencies]
 tempfile = "3.27.0"

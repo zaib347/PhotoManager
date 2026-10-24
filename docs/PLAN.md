@@ -356,17 +356,45 @@ Decisions made while building search (2026-10-24, measured on this PC):
 - Embeddings come from the 256 px grid thumbnails (no full decodes) and are stored as
   512 bytes each in the library; results are what stands out (z-score ≥ 2.2) for each search.
 
+Decisions made while building People, Upscale and Text (2026-10-24):
+- **Threads:** background indexing uses a quarter of the logical processors (2 on a
+  4-core/8-thread laptop); enlarging, which the user waits for, the physical cores. On
+  this i5-8365U the small face models ran 3× *slower* with all 8 threads (101 vs 36 ms to
+  find faces), and CLIP gained only 58 vs 71 ms a photo from 8 threads over 2.
+- **People:** YuNet (MIT) finds faces on the photo scaled to 640 px (JPEGs read at reduced
+  size by the OS decoder, then turned upright); SFace (Apache 2.0, fp32: the 8-bit one
+  saves 29 MB but risks the batch problem CLIP had) describes each face aligned on its
+  eyes, nose and mouth, as OpenCV does. Faces under 40 px are skipped, at most 20 a photo.
+  A face joins the person whose average face is ≥ 0.45 alike, else starts a new person;
+  after each pass, people ≥ 0.45 alike merge. Never: two faces of one photo in one
+  person, two named people merged, or a "not this person" face grouped again. People
+  show once in 3 photos or named. Measured on LFW (867 photos of 16 people): a face found
+  in every photo, 16 groups with no face in the wrong one; between single faces, 0.45
+  keeps 99.6% of same-person pairs and lets 0.003% of different-person pairs through.
+  ~36 ms to find faces and ~30 ms per face on 2 threads. Portraits (160 px) live in the
+  thumbnail cache, made again from the photo if lost.
+- **Upscale:** Real-ESRGAN *General* x4v3 (BSD, 4.5 MB) rather than x4plus (67 MB, ~15×
+  slower on a CPU). 128 px tiles with 12 px overlap cut away (no seams; tested). About
+  0.3 s a tile: ~25 s for a 1024×768 photo; photos over 2048 px aren't enlarged. 2× is the
+  4× result scaled down (Lanczos). Offered as Export → Enlarge (AI) once installed.
+- **Text:** `Windows.Media.Ocr` on its own MTA thread, photos read at ~2000 px; every photo
+  is read (Windows OCR is fast enough, and signs and whiteboards matter as much as
+  screenshots), not only those search scores as documents. Text goes in an FTS5 index
+  (`unicode61`, diacritics folded); typed words must all match, each as a prefix. The
+  search box puts text matches first, then description matches; the info panel shows a
+  photo's text with Copy.
+
 1. - [x] **Search by description** (~165 MB download: model 154 MB + runtime 12 MB): "beach sunset", "birthday cake" find
    photos without tags. CLIP-style image + text embeddings; ~20–50 ms per photo to index on
    CPU, instant search. Then automatic smart albums (Food, Pets, Documents…) from the same
    model.
-2. - [ ] **People (face grouping)** (~30 MB models): finds faces, groups the same person,
+2. - [x] **People (face grouping)** (~39 MB models): finds faces, groups the same person,
    the user names a group once. Opt-in again on its own (face data is sensitive), stored
    only in the library, removable with one click. First pass over a big library takes
    hours, then new photos only.
-3. - [ ] **Upscale** (~20–70 MB model): enlarge small or old photos 2–4×, as an Export size
+3. - [x] **Upscale** (~4.5 MB model): enlarge small or old photos 2–4×, as an Export size
    option. Seconds to a minute per photo on CPU, so it's a deliberate action.
-4. - [ ] **Text in photos (OCR)** (no download): reads the words in screenshots, receipts,
+4. - [x] **Text in photos (OCR)** (no download): reads the words in screenshots, receipts,
    documents, signs and whiteboards, so "wifi password" or "invoice 4521" finds them from
    the same search box (CLIP knows a photo *is* a receipt but can't read it). Added by the
    user on 2026-10-24.
@@ -377,8 +405,8 @@ Decisions made while building search (2026-10-24, measured on this PC):
      a pack).
    - Opt-in like the others (Install button, but nothing to download), removable; text
      stored only in the library, in a full-text index.
-   - Runs only on photos likely to hold text (screenshots, and what search scores as
-     documents/receipts), in the background with the same pauses as indexing.
+   - Runs on every photo (see the decisions above), in the background with the same
+     pauses as indexing.
 
 ## M5 checklist
 

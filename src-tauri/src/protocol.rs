@@ -1,5 +1,6 @@
 //! Custom URI schemes that serve image bytes straight from Rust, bypassing IPC:
 //! - `thumb://<asset_id>`: grid thumbnails
+//! - `face://<face_id>`: a face's portrait (the AI pack's People)
 //! - `media://<asset_id>`: the original for the viewer (byte ranges for video seeking),
 //!   or a decoded preview when the webview can't display the format itself
 
@@ -60,6 +61,37 @@ pub fn handle_thumb<R: Runtime>(
             }
             Err(_) => responder.respond(status(StatusCode::INTERNAL_SERVER_ERROR)),
         }
+    });
+}
+
+pub fn handle_face<R: Runtime>(
+    ctx: UriSchemeContext<'_, R>,
+    request: Request<Vec<u8>>,
+    responder: UriSchemeResponder,
+) {
+    let (state, Some(face_id)) = parse_request(&ctx, &request) else {
+        responder.respond(status(StatusCode::BAD_REQUEST));
+        return;
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let found = match thumbs::get_face(&state.thumbs.read(), face_id) {
+            Ok(Some(data)) => Ok(Some(data)),
+            // Lost from the cache: made again from the photo.
+            Ok(None) => {
+                photo_ai::people::portrait_from_photo(&state.library, face_id).and_then(|made| {
+                    if let Some(data) = &made {
+                        thumbs::put_face(&state.thumbs.write(), face_id, data)?;
+                    }
+                    Ok(made)
+                })
+            }
+            Err(e) => Err(e),
+        };
+        responder.respond(match found {
+            Ok(Some(data)) => jpeg(Thumb::Cached(data)),
+            Ok(None) => status(StatusCode::NOT_FOUND),
+            Err(_) => status(StatusCode::INTERNAL_SERVER_ERROR),
+        });
     });
 }
 

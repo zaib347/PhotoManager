@@ -368,6 +368,55 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
         vec      BLOB NOT NULL
     );
     ",
+    // v19: People, from the AI pack. `ai_faces`: each face found, its box in fractions
+    // of the upright photo, `quality` (for picking a person's picture) and its
+    // description (8-bit values times `scale`); `rejected` once the user took it out of
+    // a person (never grouped again). `ai_people`: the groups, named or not.
+    // `ai_face_scans`: photos looked at, with how many faces (-1 unreadable).
+    "
+    CREATE TABLE ai_people (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT,
+        hidden     INTEGER NOT NULL DEFAULT 0,
+        cover_face INTEGER,
+        created_at INTEGER NOT NULL
+    );
+    CREATE TABLE ai_faces (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        asset_id  INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+        x         REAL NOT NULL,
+        y         REAL NOT NULL,
+        w         REAL NOT NULL,
+        h         REAL NOT NULL,
+        quality   REAL NOT NULL,
+        scale     REAL NOT NULL,
+        vec       BLOB NOT NULL,
+        person_id INTEGER REFERENCES ai_people(id) ON DELETE SET NULL,
+        rejected  INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX ai_faces_asset ON ai_faces(asset_id);
+    CREATE INDEX ai_faces_person ON ai_faces(person_id);
+    CREATE TABLE ai_face_scans (
+        asset_id INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+        model    TEXT NOT NULL,
+        faces    INTEGER NOT NULL
+    );
+    ",
+    // v20: text in photos, from the AI pack (the OS's own OCR). `ai_text`: a full-text
+    // index of what was read, by asset id (cleared with the asset by a trigger, since a
+    // virtual table has no foreign keys). `ai_text_scans`: photos read, with how many
+    // characters (-1 unreadable).
+    "
+    CREATE VIRTUAL TABLE ai_text USING fts5(text, tokenize = 'unicode61 remove_diacritics 2');
+    CREATE TABLE ai_text_scans (
+        asset_id INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+        engine   TEXT NOT NULL,
+        chars    INTEGER NOT NULL
+    );
+    CREATE TRIGGER ai_text_asset_gone AFTER DELETE ON assets BEGIN
+        DELETE FROM ai_text WHERE rowid = old.id;
+    END;
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[
@@ -376,6 +425,13 @@ const THUMBS_MIGRATIONS: &[&str] = &[
     CREATE TABLE thumbs_256 (
         asset_id INTEGER PRIMARY KEY,
         data     BLOB NOT NULL
+    );
+    ",
+    // v2: portraits of faces found by the AI pack, by face id (never reused).
+    "
+    CREATE TABLE face_thumbs (
+        face_id INTEGER PRIMARY KEY,
+        data    BLOB NOT NULL
     );
     ",
 ];

@@ -50,6 +50,9 @@ type Props = {
   /** Present only inside an album. */
   onRemoveFromAlbum?: () => void;
   onSetCover?: () => void;
+  /** Present only in a person's photos. */
+  onNotThisPerson?: () => void;
+  onPersonCover?: () => void;
 };
 
 export function SelectionBar(props: Props) {
@@ -197,6 +200,8 @@ export function SelectionBar(props: Props) {
       </Popover>
       {props.onRemoveFromAlbum && <button onClick={props.onRemoveFromAlbum}>Remove from album</button>}
       {props.onSetCover && count === 1 && <button onClick={props.onSetCover}>Set as cover</button>}
+      {props.onNotThisPerson && <button onClick={props.onNotThisPerson}>Not this person</button>}
+      {props.onPersonCover && count === 1 && <button onClick={props.onPersonCover}>Use as their picture</button>}
       <button onClick={() => onFavorite(true)}>♥ Favorite</button>
       <button onClick={() => onFavorite(false)}>♡ Unfavorite</button>
       <div className="stars" role="group" aria-label="Rate selection">

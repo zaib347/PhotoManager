@@ -12,6 +12,7 @@ const VIEWS: { id: BuiltinView; label: string }[] = [
   { id: "trips", label: "Trips" },
   { id: "places", label: "Places" },
   { id: "map", label: "Map" },
+  { id: "people", label: "People" },
   { id: "favorites", label: "Favorites" },
   { id: "videos", label: "Videos" },
   { id: "hidden", label: "Hidden" },
@@ -38,6 +39,8 @@ type Props = {
   /** Ready-made searches (name, description), once search by description is ready. */
   things: [string, string][];
   onThing: (name: string, description: string) => void;
+  /** People (face grouping) is installed. */
+  people: boolean;
 };
 
 export function LibraryPanel({
@@ -54,6 +57,7 @@ export function LibraryPanel({
   onImported,
   things,
   onThing,
+  people,
 }: Props) {
   const { albums, tags, reload } = useCollections();
   const [newAlbum, setNewAlbum] = useState<string | null>(null);
@@ -76,7 +80,7 @@ export function LibraryPanel({
   return (
     <aside className="sidebar">
       <nav className="views" aria-label="Library">
-        {VIEWS.map((v) => (
+        {VIEWS.filter((v) => v.id !== "people" || people).map((v) => (
           <button
             key={v.id}
             className={`view-link${v.id === current ? " active" : ""}`}

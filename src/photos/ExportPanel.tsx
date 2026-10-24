@@ -34,6 +34,7 @@ const DEFAULTS: ExportOptions = {
   maxEdge: null,
   removeLocation: false,
   watermark: null,
+  enlarge: null,
   folder: "",
 };
 
@@ -122,6 +123,15 @@ export function ExportPanel({ count, previewId, onExport }: Props) {
   const { mark } = marking;
   const hasMark = marking.on && (mark.logo !== null || mark.text.trim() !== "");
   const preview = useWatermarkPreview(previewId, hasMark ? mark : null);
+  // Enlarging is offered once the AI pack's Upscale is installed.
+  const [canEnlarge, setCanEnlarge] = useState(false);
+  useEffect(() => {
+    api
+      .aiStatus()
+      .then((s) => setCanEnlarge(s.features.some((f) => f.id === "upscale" && f.installed)))
+      .catch(() => setCanEnlarge(false));
+  }, []);
+  const enlarge = canEnlarge ? options.enlarge : null;
 
   const chooseFolder = async () => {
     const folder = await open({ directory: true, multiple: false, title: "Export to folder" });
@@ -180,6 +190,25 @@ export function ExportPanel({ count, previewId, onExport }: Props) {
             ))}
           </ul>
         </section>
+
+        {canEnlarge && (
+          <section>
+            <h4>Enlarge (AI)</h4>
+            <div className="segmented">
+              {([null, 2, 4] as const).map((f) => (
+                <button key={f ?? 0} className={enlarge === f ? "on" : ""} onClick={() => set({ enlarge: f })}>
+                  {f === null ? "Off" : `${f}×`}
+                </button>
+              ))}
+            </div>
+            {enlarge !== null && (
+              <p className="muted small">
+                Photos up to 2048 px are enlarged with added detail, each taking from a few seconds to a minute or two.
+                Bigger ones are exported as they are.
+              </p>
+            )}
+          </section>
+        )}
 
         <section>
           <h4>Privacy</h4>
@@ -301,7 +330,7 @@ export function ExportPanel({ count, previewId, onExport }: Props) {
         disabled={!options.folder}
         onClick={() => {
           saveSettings(options, marking);
-          onExport({ ...options, watermark: hasMark ? mark : null });
+          onExport({ ...options, enlarge, watermark: hasMark ? mark : null });
         }}
       >
         Export {count.toLocaleString()} {count === 1 ? "photo" : "photos"}

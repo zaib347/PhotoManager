@@ -57,8 +57,14 @@ pub struct Options {
     pub remove_location: bool,
     /// Drawn on every copy when set.
     pub watermark: Option<Watermark>,
+    /// Enlarges small photos 2× or 4× with the AI pack's upscaler (see `Enlarge`).
+    pub enlarge: Option<u32>,
     pub folder: PathBuf,
 }
+
+/// Enlarges a photo by a factor (2 or 4) to exactly that size, or gives None when it
+/// won't (too big already). Supplied by the AI pack.
+pub type Enlarge<'a> = dyn Fn(&RgbImage, u32) -> Result<Option<RgbImage>> + Sync + 'a;
 
 impl Default for Options {
     fn default() -> Self {
@@ -68,6 +74,7 @@ impl Default for Options {
             max_edge: None,
             remove_location: false,
             watermark: None,
+            enlarge: None,
             folder: PathBuf::new(),
         }
     }
@@ -362,9 +369,48 @@ pub fn convert(
     options: &Options,
     mark: Option<&Mark>,
 ) -> Result<(Vec<u8>, &'static str)> {
+    convert_with(source, look, options, mark, None)
+}
+
+/// `image` enlarged by `factor`, its transparency (if any) scaled alongside; as it
+/// was when `enlarge` declines.
+fn enlarged(image: DynamicImage, factor: u32, enlarge: &Enlarge<'_>) -> Result<DynamicImage> {
+    let Some(rgb) = enlarge(&image.to_rgb8(), factor)? else {
+        return Ok(image);
+    };
+    if !image.color().has_alpha() {
+        return Ok(DynamicImage::ImageRgb8(rgb));
+    }
+    let alpha = image::imageops::resize(
+        &image.to_rgba8(),
+        rgb.width(),
+        rgb.height(),
+        image::imageops::FilterType::CatmullRom,
+    );
+    Ok(DynamicImage::ImageRgba8(RgbaImage::from_fn(
+        rgb.width(),
+        rgb.height(),
+        |x, y| {
+            let p = rgb.get_pixel(x, y).0;
+            image::Rgba([p[0], p[1], p[2], alpha.get_pixel(x, y)[3]])
+        },
+    )))
+}
+
+/// `convert`, enlarging first when the options ask and `enlarge` is given.
+pub fn convert_with(
+    source: &Path,
+    look: &Look,
+    options: &Options,
+    mark: Option<&Mark>,
+    enlarge: Option<&Enlarge<'_>>,
+) -> Result<(Vec<u8>, &'static str)> {
     let bytes = std::fs::read(source)?;
     let decoded = decode(source, &bytes)?;
-    let image = look.apply(decoded.image);
+    let mut image = look.apply(decoded.image);
+    if let (Some(factor), Some(enlarge)) = (options.enlarge, enlarge) {
+        image = enlarged(image, factor, enlarge)?;
+    }
     let mut image = match options.max_edge {
         Some(edge) => resize(image, edge)?,
         None => image,
@@ -450,11 +496,13 @@ fn write_new(
 }
 
 /// Exports the photos of `asset_ids` into `options.folder`. Calls `progress(done,
-/// total)` as it goes; stops early when `cancel` is set.
+/// total)` as it goes; stops early when `cancel` is set. `enlarge` is used when the
+/// options ask for enlarging.
 pub fn run(
     db: &Db,
     asset_ids: &[i64],
     options: &Options,
+    enlarge: Option<&Enlarge<'_>>,
     cancel: &AtomicBool,
     progress: &(dyn Fn(usize, usize) + Sync),
 ) -> Result<Report> {
@@ -500,7 +548,7 @@ pub fn run(
                 if cancel.load(Ordering::Relaxed) {
                     return None;
                 }
-                let result = convert(source, look, options, mark.as_ref())
+                let result = convert_with(source, look, options, mark.as_ref(), enlarge)
                     .and_then(|(data, ext)| {
                         let stem = source
                             .file_stem()
@@ -523,6 +571,8 @@ pub fn run(
                 report.bytes_in += size_in;
                 report.bytes_out += size_out;
             }
+            // Cut short by Stop (enlarging stops mid-photo).
+            Some(Err(_)) if cancel.load(Ordering::Relaxed) => report.skipped += 1,
             Some(Err(why)) => {
                 report.failed += 1;
                 if report.errors.len() < MAX_ERRORS {
@@ -635,6 +685,49 @@ mod tests {
                 "{ext}"
             );
         }
+    }
+
+    #[test]
+    fn enlarges_when_asked_and_keeps_transparency() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("logo.png");
+        RgbaImage::from_fn(40, 30, |x, _| {
+            image::Rgba([200, 10, 10, if x < 20 { 255 } else { 0 }])
+        })
+        .save(&path)
+        .unwrap();
+        // A stand-in for the AI upscaler: plain resizing, declining past 100 px.
+        let enlarge = |img: &RgbImage, f: u32| -> Result<Option<RgbImage>> {
+            Ok((img.width() <= 100).then(|| {
+                image::imageops::resize(
+                    img,
+                    img.width() * f,
+                    img.height() * f,
+                    image::imageops::FilterType::Nearest,
+                )
+            }))
+        };
+        let options = Options {
+            enlarge: Some(2),
+            ..Default::default()
+        };
+        let (data, ext) =
+            convert_with(&path, &Look::default(), &options, None, Some(&enlarge)).unwrap();
+        assert_eq!(ext, "png");
+        let img = image::load_from_memory(&data).unwrap().to_rgba8();
+        assert_eq!(img.dimensions(), (80, 60));
+        assert_eq!(img.get_pixel(10, 10)[3], 255);
+        assert_eq!(img.get_pixel(70, 10)[3], 0);
+        // Not asked: as it was.
+        let (data, _) = convert_with(
+            &path,
+            &Look::default(),
+            &Options::default(),
+            None,
+            Some(&enlarge),
+        )
+        .unwrap();
+        assert_eq!(image::load_from_memory(&data).unwrap().width(), 40);
     }
 
     #[test]

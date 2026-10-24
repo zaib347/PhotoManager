@@ -35,6 +35,7 @@ import { PlacesPage } from "./places/PlacesPage";
 import { MapPage } from "./map/MapPage";
 import { AiPage } from "./ai/AiPage";
 import { SearchBox } from "./ai/SearchBox";
+import { PeoplePage } from "./people/PeoplePage";
 import { TripsPage } from "./trips/TripsPage";
 import "./App.css";
 
@@ -47,6 +48,8 @@ function emptyState(view: View): { title: string; hint: string } {
       return { title: "This album is empty", hint: "Select photos in the timeline and choose Add to album." };
     if ("tag" in view) return { title: "No photos with this tag", hint: "Tags appear here as you add them to photos." };
     if ("trip" in view) return { title: "This trip is empty", hint: "Its photos may be hidden or no longer in your folders." };
+    if ("person" in view)
+      return { title: "No photos of this person", hint: "Their photos may be hidden or no longer in your folders." };
     return { title: "This event is empty", hint: "Its photos may be hidden or no longer in your folders." };
   }
   return {
@@ -58,6 +61,7 @@ function emptyState(view: View): { title: string; hint: string } {
     trips: { title: "", hint: "" },
     places: { title: "", hint: "" },
     map: { title: "", hint: "" },
+    people: { title: "", hint: "" },
     ai: { title: "", hint: "" },
     duplicates: { title: "", hint: "" },
     similar: { title: "", hint: "" },
@@ -120,10 +124,13 @@ export default function App() {
   const [ai, setAi] = useState<AiStatus | null>(null);
   const [aiInstalling, setAiInstalling] = useState<{ pack: AiPack; done: number; total: number } | null>(null);
   const [things, setThings] = useState<[string, string][]>([]);
+  // Bumped when faces were found or grouped.
+  const [peopleVersion, setPeopleVersion] = useState(0);
   const reloadAi = useCallback(() => {
     api.aiStatus().then(setAi).catch(() => {});
   }, []);
-  const searchReady = !!ai?.search && ai.search.indexed > 0;
+  const installed = (pack: AiPack) => !!ai?.features.some((f) => f.id === pack && f.installed);
+  const searchReady = !!ai?.progress.search && ai.progress.search.indexed > 0;
 
   useEffect(() => {
     reloadAi();
@@ -132,20 +139,27 @@ export default function App() {
       events.aiInstallProgress((p) => setAiInstalling(p)),
       events.aiInstallFinished(({ pack, error }) => {
         setAiInstalling(null);
-        setNotice(error ? (error === "Stopped" ? "Install stopped; it resumes where it left off." : `Install failed: ${error}`) : pack === "search" ? "Search by description is installed. Your photos are being indexed in the background." : "Installed.");
+        setNotice(
+          error
+            ? error === "Stopped"
+              ? "Install stopped; it resumes where it left off."
+              : `Install failed: ${error}`
+            : INSTALLED[pack],
+        );
         reloadAi();
       }),
-      events.aiIndexProgress((p) => setAi((s) => (s ? { ...s, search: p, indexing: true } : s))),
+      events.aiIndexProgress((p) => setAi((s) => (s ? { ...s, progress: p, indexing: true } : s))),
       events.aiIndexFinished(reloadAi),
+      events.aiPeopleChanged(() => setPeopleVersion((v) => v + 1)),
     ];
     return () => unlisten.forEach((p) => p.then((off) => off()));
   }, [reloadAi]);
 
-  /** Shows photos matching a description, labelled `label`. */
+  /** Shows photos matching a description (and, when `text`, the words in them), labelled `label`. */
   const searchPhotos = useCallback(
-    async (query: string, label: string) => {
+    async (query: string, label: string, text: boolean) => {
       try {
-        const ids = await api.aiSearch(query);
+        const ids = await api.aiSearch(query, text);
         if (ids.length === 0) {
           setNotice(`Nothing matched “${label}”.`);
           return;
@@ -303,8 +317,17 @@ export default function App() {
           {stats ? `${stats.assets.toLocaleString()} items · ${stats.days.toLocaleString()} days` : "Loading…"}
         </span>
         <div className="spacer" />
-        {ai?.features.some((f) => f.id === "search" && f.installed) && (
-          <SearchBox onSearch={(q) => searchPhotos(q, q)} />
+        {(installed("search") || installed("text")) && (
+          <SearchBox
+            placeholder={
+              installed("search") && installed("text")
+                ? "Search: what's in a photo, or words in it"
+                : installed("text")
+                  ? "Search words in photos"
+                  : undefined
+            }
+            onSearch={(q) => searchPhotos(q, q, true)}
+          />
         )}
         {exporting && (
           <span className="export-status muted">
@@ -349,7 +372,8 @@ export default function App() {
           onError={report}
           onNotice={setNotice}
           things={searchReady ? things : []}
-          onThing={(name, description) => searchPhotos(description, name)}
+          onThing={(name, description) => searchPhotos(description, name, false)}
+          people={installed("people")}
           onImported={() => {
             Promise.all([reloadTimeline(), reloadCollections()]).catch(report);
             setEventsVersion((v) => v + 1);
@@ -365,6 +389,8 @@ export default function App() {
             <TripsPage version={eventsVersion} onError={report} />
           ) : view === "places" ? (
             <PlacesPage version={eventsVersion} onError={report} />
+          ) : view === "people" ? (
+            <PeoplePage version={peopleVersion} progress={ai?.progress.people ?? null} onError={report} />
           ) : view === "ai" ? (
             <AiPage status={ai} installing={aiInstalling} onChanged={reloadAi} onNotice={setNotice} onError={report} />
           ) : view === "map" ? (
@@ -449,6 +475,14 @@ export default function App() {
     </CollectionsContext.Provider>
   );
 }
+
+/** Said when a feature finishes installing. */
+const INSTALLED: Record<AiPack, string> = {
+  search: "Search by description is installed. Your photos are being indexed in the background.",
+  people: "People is installed. Faces are being found in the background; people appear under People as they're grouped.",
+  upscale: "Upscale is installed. Choose Enlarge when exporting photos.",
+  text: "Text in photos is on. Your photos are being read in the background; search for words in them from the search box.",
+};
 
 function describeExport(r: ExportReport) {
   const parts = [`Exported ${r.exported.toLocaleString()} photos to ${r.folder}`];

@@ -1,6 +1,6 @@
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
-import type { AssetDetails, View } from "../api";
+import { api, type AssetDetails, type View } from "../api";
 import { useCollections } from "../collections/context";
 import { TagInput } from "../collections/TagInput";
 import { fileName, formatBytes, formatDuration, formatOffset, formatTakenAt, placeLabel } from "../format";
@@ -31,6 +31,62 @@ function Description({ value, onSave }: { value: string; onSave: (text: string) 
       onChange={(e) => setText(e.target.value)}
       onBlur={() => text.trim() !== value && onSave(text)}
     />
+  );
+}
+
+/** What the AI pack found in a photo: the named people in it and the text it reads. */
+function AiInfo({ id, onNavigate }: { id: number; onNavigate: (view: View) => void }) {
+  const [people, setPeople] = useState<[number, string][]>([]);
+  const [text, setText] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let stale = false;
+    setCopied(false);
+    Promise.all([api.aiPhotoPeople(id), api.aiPhotoText(id)])
+      .then(([p, t]) => {
+        if (stale) return;
+        setPeople(p);
+        setText(t);
+      })
+      .catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, [id]);
+
+  return (
+    <>
+      {people.length > 0 && (
+        <section>
+          <h3>People</h3>
+          <div className="chips">
+            {people.map(([pid, name]) => (
+              <button key={pid} className="chip link" onClick={() => onNavigate({ person: pid })}>
+                {name}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {text && (
+        <section>
+          <h3>Text in photo</h3>
+          <p className="photo-text">{text}</p>
+          <button
+            className="link small"
+            onClick={() =>
+              navigator.clipboard
+                .writeText(text)
+                .then(() => setCopied(true))
+                .catch(() => {})
+            }
+          >
+            {copied ? "Copied" : "Copy text"}
+          </button>
+        </section>
+      )}
+    </>
   );
 }
 
@@ -90,6 +146,8 @@ export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate, onRestoreD
           </p>
         </section>
       )}
+
+      <AiInfo id={asset.id} onNavigate={onNavigate} />
 
       <section>
         <h3>Tags</h3>

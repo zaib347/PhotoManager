@@ -6,6 +6,7 @@ import { AlbumHeader } from "../collections/AlbumHeader";
 import { useCollections } from "../collections/context";
 import { EventHeader } from "../events/EventHeader";
 import { TripHeader } from "../trips/TripHeader";
+import { PersonHeader } from "../people/PersonHeader";
 import { copiedEdit } from "../editor/copied";
 import { photoLooks } from "../looks";
 import { DayStore, type Position } from "../timeline/dayStore";
@@ -38,6 +39,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
   const album = albumId === null ? undefined : collections.albums.find((a) => a.id === albumId);
   const eventId = typeof view === "object" && "event" in view ? view.event : null;
   const tripId = typeof view === "object" && "trip" in view ? view.trip : null;
+  const personId = typeof view === "object" && "person" in view ? view.person : null;
   // Bumped after edits that change this event's dates or members, to refresh its header.
   const [eventVersion, setEventVersion] = useState(0);
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
@@ -238,6 +240,14 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
           onPlay={() => api.assetIds(view, filter).then((ids) => play(ids, "Trip"), onError)}
         />
       )}
+      {personId !== null && (
+        <PersonHeader
+          id={personId}
+          version={eventVersion}
+          onError={onError}
+          onPlay={() => api.assetIds(view, filter).then((ids) => play(ids, "Person"), onError)}
+        />
+      )}
       {selection.size > 0 && (
         <SelectionBar
           count={selection.size}
@@ -355,6 +365,31 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
                     await api.removeFromAlbum(albumId, [...selection]);
                     clearSelection();
                     await afterCollectionChange(true);
+                  })
+          }
+          onNotThisPerson={
+            personId === null
+              ? undefined
+              : () =>
+                  run(async () => {
+                    const n = await api.aiRemoveFromPerson(personId, [...selection]);
+                    clearSelection();
+                    onNotice(
+                      n === 0
+                        ? "Those photos weren't grouped with this person."
+                        : `Taken out: ${n.toLocaleString()} ${n === 1 ? "photo" : "photos"} won't be grouped with this person again.`,
+                    );
+                    await afterTimelineChange();
+                  })
+          }
+          onPersonCover={
+            personId === null
+              ? undefined
+              : () =>
+                  run(async () => {
+                    await api.aiPersonCover(personId, [...selection][0]);
+                    clearSelection();
+                    setEventVersion((v) => v + 1);
                   })
           }
           onSetCover={

@@ -5,10 +5,15 @@
 //! Kept out of `photo-core` so the core stays small and testable without models.
 
 pub mod clip;
+pub mod faces;
 pub mod models;
+pub mod people;
+pub mod picture;
 pub mod runtime;
 pub mod search;
+pub mod text;
 pub mod tokenizer;
+pub mod upscale;
 
 /// True while the computer runs on battery (indexing waits for mains power).
 pub fn on_battery() -> bool {

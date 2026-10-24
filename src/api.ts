@@ -3,10 +3,16 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { lookQuery } from "./looks";
 
 /** Views that are pages rather than timelines. */
-const PAGES = ["events", "trips", "places", "map", "ai", "duplicates", "similar", "removed", "organize"] as const;
+const PAGES = ["events", "trips", "places", "map", "people", "ai", "duplicates", "similar", "removed", "organize"] as const;
 export type PageView = (typeof PAGES)[number];
 export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | PageView;
-export type View = BuiltinView | { album: number } | { tag: number } | { event: number } | { trip: number };
+export type View =
+  | BuiltinView
+  | { album: number }
+  | { tag: number }
+  | { event: number }
+  | { trip: number }
+  | { person: number };
 export const isPage = (view: View): view is PageView => (PAGES as readonly View[]).includes(view);
 /** Views the backend can lay out as a timeline. */
 export type TimelineView = Exclude<View, PageView>;
@@ -21,7 +27,9 @@ export const viewKey = (view: View) =>
         ? `tag:${view.tag}`
         : "trip" in view
           ? `trip:${view.trip}`
-          : `event:${view.event}`;
+          : "person" in view
+            ? `person:${view.person}`
+            : `event:${view.event}`;
 
 export type Named = { id: number; name: string };
 
@@ -47,15 +55,29 @@ export type Filter = {
 };
 
 /** An optional AI feature. */
-export type AiPack = "search";
-export type AiFeature = { id: AiPack; installed: boolean; downloadBytes: number; diskBytes: number };
+export type AiPack = "search" | "people" | "upscale" | "text";
+export type AiFeature = {
+  id: AiPack;
+  installed: boolean;
+  downloadBytes: number;
+  diskBytes: number;
+  /** Why it can't be installed on this computer. */
+  unavailable: string | null;
+};
+export type IndexCount = { indexed: number; total: number };
+/** Background indexing of each installed feature that needs it. */
+export type AiProgress = { search: IndexCount | null; people: IndexCount | null; text: IndexCount | null };
 export type AiStatus = {
   features: AiFeature[];
   installing: AiPack | null;
-  /** Search indexing progress, when search is installed. */
-  search: { indexed: number; total: number } | null;
+  progress: AiProgress;
   indexing: boolean;
+  /** Languages Windows can read text in. */
+  textLanguages: string[];
 };
+
+/** A group of faces of one person (named or not). */
+export type Person = { id: number; name: string | null; hidden: boolean; photos: number; faceId: number };
 
 /** A rectangle of the map in degrees; west > east crosses the antimeridian. */
 export type Area = { west: number; south: number; east: number; north: number };
@@ -232,6 +254,8 @@ export type ExportOptions = {
   removeLocation: boolean;
   /** Drawn on every copy when set. */
   watermark: Watermark | null;
+  /** Enlarges photos up to 2048 px 2× or 4× with the AI upscaler. */
+  enlarge: 2 | 4 | null;
   folder: string;
 };
 
@@ -548,8 +572,19 @@ export const api = {
   aiCancelInstall: () => invoke<void>("ai_cancel_install"),
   /** Removes a feature and what it made; false if some files go at the next restart. */
   aiRemove: (pack: AiPack) => invoke<boolean>("ai_remove", { pack }),
-  /** Photos matching a description, best first. */
-  aiSearch: (query: string) => invoke<number[]>("ai_search", { query }),
+  /** Photos matching what was typed, best first: by the text in them (when `text`), then by description. */
+  aiSearch: (query: string, text: boolean) => invoke<number[]>("ai_search", { query, text }),
+  aiPhotoText: (id: number) => invoke<string | null>("ai_photo_text", { id }),
+  aiPeople: (hidden: boolean) => invoke<Person[]>("ai_people", { hidden }),
+  aiPerson: (id: number) => invoke<Person | null>("ai_person", { id }),
+  aiRenamePerson: (id: number, name: string) => invoke<void>("ai_rename_person", { id, name }),
+  aiMergePeople: (into: number, others: number[]) => invoke<void>("ai_merge_people", { into, others }),
+  aiHidePerson: (id: number, hidden: boolean) => invoke<void>("ai_hide_person", { id, hidden }),
+  /** "Not this person": returns how many faces were taken out. */
+  aiRemoveFromPerson: (id: number, ids: number[]) => invoke<number>("ai_remove_from_person", { id, ids }),
+  aiPersonCover: (id: number, assetId: number) => invoke<void>("ai_person_cover", { id, assetId }),
+  /** Named people in a photo: (id, name). */
+  aiPhotoPeople: (id: number) => invoke<[number, string][]>("ai_photo_people", { id }),
   /** Ready-made searches: (name, description). */
   aiSmartAlbums: () => invoke<[string, string][]>("ai_smart_albums"),
   /** The photos a slideshow plays, in order: no near-duplicates, the best if there are many. */
@@ -613,9 +648,11 @@ export const events = {
     listen<{ pack: AiPack; done: number; total: number }>("ai-install-progress", (e) => cb(e.payload)),
   aiInstallFinished: (cb: (f: { pack: AiPack; error: string | null }) => void): Promise<UnlistenFn> =>
     listen<{ pack: AiPack; error: string | null }>("ai-install-finished", (e) => cb(e.payload)),
-  aiIndexProgress: (cb: (p: { indexed: number; total: number }) => void): Promise<UnlistenFn> =>
-    listen<{ indexed: number; total: number }>("ai-index-progress", (e) => cb(e.payload)),
+  aiIndexProgress: (cb: (p: AiProgress) => void): Promise<UnlistenFn> =>
+    listen<AiProgress>("ai-index-progress", (e) => cb(e.payload)),
   aiIndexFinished: (cb: () => void): Promise<UnlistenFn> => listen("ai-index-finished", () => cb()),
+  /** Faces were found and grouped; the People page may have changed. */
+  aiPeopleChanged: (cb: () => void): Promise<UnlistenFn> => listen("ai-people-changed", () => cb()),
   videoProgress: (cb: (p: { done: number; total: number }) => void): Promise<UnlistenFn> =>
     listen<{ done: number; total: number }>("video-progress", (e) => cb(e.payload)),
   videoFinished: (cb: (f: { report: VideoReport | null; error: string | null }) => void): Promise<UnlistenFn> =>
@@ -626,5 +663,7 @@ export const events = {
 
 export const thumbUrl = (assetId: number) => convertFileSrc(String(assetId), "thumb") + lookQuery(assetId);
 export const mediaUrl = (assetId: number) => convertFileSrc(String(assetId), "media") + lookQuery(assetId);
+/** A face's portrait (People). */
+export const faceUrl = (faceId: number) => convertFileSrc(String(faceId), "face");
 /** The motion clip of a Live Photo (never turned). */
 export const liveUrl = (assetId: number) => `${convertFileSrc(String(assetId), "media")}?live`;

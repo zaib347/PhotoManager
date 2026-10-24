@@ -361,8 +361,22 @@ impl Scanner<'_> {
                     // Same path, changed content: update its asset unless copies share it.
                     (Some((file_id, Some(asset_id))), _) if !shared(&tx, asset_id, file_id)? => {
                         update_asset(&tx, asset_id, p.work.kind, &p.meta)?;
+                        // What the AI pack made from the old content.
                         tx.execute(
                             "DELETE FROM ai_embeddings WHERE asset_id = ?1",
+                            params![asset_id],
+                        )?;
+                        tx.execute(
+                            "DELETE FROM ai_faces WHERE asset_id = ?1",
+                            params![asset_id],
+                        )?;
+                        tx.execute(
+                            "DELETE FROM ai_face_scans WHERE asset_id = ?1",
+                            params![asset_id],
+                        )?;
+                        tx.execute("DELETE FROM ai_text WHERE rowid = ?1", params![asset_id])?;
+                        tx.execute(
+                            "DELETE FROM ai_text_scans WHERE asset_id = ?1",
                             params![asset_id],
                         )?;
                         summary.updated += 1;

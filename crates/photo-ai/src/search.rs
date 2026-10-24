@@ -100,20 +100,22 @@ fn thumbnail(library: &Db, thumbs_db: &Db, id: i64) -> Image {
     }
 }
 
-/// Embeds photos that have no embedding yet, in batches. `pause()` is checked between
-/// batches (scans, battery) and stops the pass when true, as does `cancel`. Calls
-/// `report` after each batch. Returns how many were embedded.
+/// Embeds up to `limit` photos that have no embedding yet, in batches. `pause()` is
+/// checked between batches (scans, battery) and stops the pass when true, as does
+/// `cancel`. Calls `report` after each batch. Returns how many photos were done
+/// (unreadable ones included: they're recorded as such).
 pub fn index_pending(
     library: &Db,
     thumbs_db: &Db,
     clip: &Clip,
+    limit: usize,
     cancel: &AtomicBool,
     pause: &dyn Fn() -> bool,
     report: &dyn Fn(),
 ) -> Result<usize> {
     let mut after = i64::MIN;
     let mut done = 0;
-    while !cancel.load(Ordering::Relaxed) && !pause() {
+    while done < limit && !cancel.load(Ordering::Relaxed) && !pause() {
         let batch: Vec<i64> = {
             let conn = library.read();
             let mut stmt = conn.prepare_cached(
@@ -162,6 +164,7 @@ pub fn index_pending(
             for (id, image) in &images {
                 if matches!(image, Image::Failed) {
                     put.execute(params![id, MODEL, 0.0, Vec::<u8>::new()])?;
+                    done += 1;
                 }
             }
         }

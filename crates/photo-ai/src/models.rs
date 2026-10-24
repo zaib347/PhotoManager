@@ -22,48 +22,72 @@ use sha2::{Digest, Sha256};
 
 /// A file to download.
 pub struct Remote {
-    /// The name it's kept under.
+    /// The name it's kept under (a package's name while it downloads).
     pub name: &'static str,
     pub url: &'static str,
     pub size: u64,
     pub sha256: &'static str,
-    /// For a package (zip): the one file kept from it, with its own size and hash.
-    pub extract: Option<Extract>,
+    /// For a package (zip): the files kept from it, each with its own size and hash.
+    /// Empty for a plain file.
+    pub extract: &'static [Extract],
 }
 
 pub struct Extract {
     pub entry: &'static str,
+    /// The name it's kept under.
+    pub name: &'static str,
     pub size: u64,
     pub sha256: &'static str,
 }
 
+/// A file as installed: (name, size, SHA-256).
+type Installed = (&'static str, u64, &'static str);
+
 impl Remote {
-    /// Bytes on disk once installed.
-    pub fn installed_size(&self) -> u64 {
-        self.extract.as_ref().map_or(self.size, |e| e.size)
+    /// The files it leaves on disk.
+    pub fn installed(&self) -> Vec<Installed> {
+        if self.extract.is_empty() {
+            vec![(self.name, self.size, self.sha256)]
+        } else {
+            self.extract
+                .iter()
+                .map(|e| (e.name, e.size, e.sha256))
+                .collect()
+        }
     }
 
-    fn installed_sha(&self) -> &'static str {
-        self.extract.as_ref().map_or(self.sha256, |e| e.sha256)
+    /// Bytes on disk once installed.
+    pub fn installed_size(&self) -> u64 {
+        self.installed().iter().map(|f| f.1).sum()
     }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum Pack {
-    /// ONNX Runtime, installed with the first feature.
+    /// ONNX Runtime, installed with the first feature that runs a model.
     Runtime,
     /// Search by description (CLIP).
     Search,
+    /// Faces found and grouped into people (YuNet and SFace).
+    People,
+    /// Enlarging photos on export (Real-ESRGAN).
+    Upscale,
+    /// Reading the text in photos, with the operating system's own OCR: nothing to
+    /// download.
+    Text,
 }
 
 impl Pack {
-    pub const FEATURES: [Pack; 1] = [Pack::Search];
+    pub const FEATURES: [Pack; 4] = [Pack::Search, Pack::People, Pack::Upscale, Pack::Text];
 
     fn dir_name(self) -> &'static str {
         match self {
             Pack::Runtime => "runtime",
             Pack::Search => "search",
+            Pack::People => "people",
+            Pack::Upscale => "upscale",
+            Pack::Text => "text",
         }
     }
 
@@ -71,10 +95,18 @@ impl Pack {
         match self {
             Pack::Runtime => RUNTIME,
             Pack::Search => SEARCH,
+            Pack::People => PEOPLE,
+            Pack::Upscale => UPSCALE,
+            Pack::Text => &[],
         }
     }
 
-    /// Bytes downloaded to install it (the runtime's packages count in full).
+    /// Runs a model, so it needs the runtime.
+    pub fn needs_runtime(self) -> bool {
+        !matches!(self, Pack::Runtime | Pack::Text)
+    }
+
+    /// Bytes downloaded to install it (packages count in full).
     pub fn download_size(self) -> u64 {
         self.files().iter().map(|f| f.size).sum()
     }
@@ -87,15 +119,16 @@ impl Pack {
 /// Microsoft's DirectML build of ONNX Runtime, used on the CPU only: its package is a
 /// tenth of the size of Microsoft's plain CPU package (12 MB against 125 MB).
 const RUNTIME: &[Remote] = &[Remote {
-    name: "onnxruntime.dll",
+    name: "onnxruntime.nupkg",
     url: "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime.directml/1.24.4/microsoft.ml.onnxruntime.directml.1.24.4.nupkg",
     size: 12_458_649,
     sha256: "57e9f11b73437bef7a309496135d4c1f96b1a8e9ddba60013fa27bfc1d788681",
-    extract: Some(Extract {
+    extract: &[Extract {
         entry: "runtimes/win-x64/native/onnxruntime.dll",
+        name: "onnxruntime.dll",
         size: 17_328_152,
         sha256: "e7eedec6a6f26dc39dc948276a75ef6d2bee3fff944d874ceed0bbd3b97bff40",
-    }),
+    }],
 }];
 
 /// OpenAI CLIP ViT-B/32 (MIT), as exported to ONNX (8-bit) by Xenova, pinned to one
@@ -115,30 +148,72 @@ const SEARCH: &[Remote] = &[
         url: clip!("onnx/vision_model_quantized.onnx"),
         size: 89_117_001,
         sha256: "583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299",
-        extract: None,
+        extract: &[],
     },
     Remote {
         name: "text.onnx",
         url: clip!("onnx/text_model_quantized.onnx"),
         size: 64_504_507,
         sha256: "73baab855d406190da9faa498cfedf65f15cf309f4cc7385b7b032e6d08e5c3a",
-        extract: None,
+        extract: &[],
     },
     Remote {
         name: "vocab.json",
         url: clip!("vocab.json"),
         size: 862_328,
         sha256: "5047b556ce86ccaf6aa22b3ffccfc52d391ea4accdab9c2f2407da5b742d4363",
-        extract: None,
+        extract: &[],
     },
     Remote {
         name: "merges.txt",
         url: clip!("merges.txt"),
         size: 524_619,
         sha256: "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a",
-        extract: None,
+        extract: &[],
     },
 ];
+
+/// OpenCV's YuNet face detector (MIT, Shiqi Yu) and SFace face recogniser (Apache 2.0,
+/// Yaoyao Zhong and Weihong Deng), from the OpenCV model zoo, pinned to one revision each.
+const PEOPLE: &[Remote] = &[
+    Remote {
+        name: "detector.onnx",
+        url: "https://huggingface.co/opencv/face_detection_yunet/resolve/3cc26e7f1014a5ee5d74a42acee58bafc9d0a310/face_detection_yunet_2023mar.onnx",
+        size: 232_589,
+        sha256: "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+        extract: &[],
+    },
+    Remote {
+        name: "recognizer.onnx",
+        url: "https://huggingface.co/opencv/face_recognition_sface/resolve/3d7082438a6e4551e840c9b2bb60b71e8da4b524/face_recognition_sface_2021dec.onnx",
+        size: 38_696_353,
+        sha256: "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+        extract: &[],
+    },
+];
+
+/// Real-ESRGAN General x4v3 (BSD 3-Clause, Xintao Wang et al.), as exported to ONNX by
+/// Qualcomm AI Hub (release 0.65.0): the model and its weights file.
+const UPSCALE: &[Remote] = &[Remote {
+    name: "upscale.zip",
+    url: "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/real_esrgan_general_x4v3/releases/v0.65.0/real_esrgan_general_x4v3-onnx-float.zip",
+    size: 4_540_895,
+    sha256: "fc094329b24a00c936ebc1cc4c51bc59633e7dc36f4a553344342171cbd3c7cf",
+    extract: &[
+        Extract {
+            entry: "real_esrgan_general_x4v3-onnx-float/real_esrgan_general_x4v3.onnx",
+            name: "real_esrgan_general_x4v3.onnx",
+            size: 161_087,
+            sha256: "09e6b675a0a18a97e1057c8dd7e984ef878a0a02ce104430da525b6241c858e7",
+        },
+        Extract {
+            entry: "real_esrgan_general_x4v3-onnx-float/real_esrgan_general_x4v3.data",
+            name: "real_esrgan_general_x4v3.data",
+            size: 4_836_096,
+            sha256: "512d0ec9940c2e9d85d27f2952f12a0b77b7841dc22df4ce9f3ea458bc98f37f",
+        },
+    ],
+}];
 
 /// Where everything AI lives: `<app data>/ai/<pack>/`.
 pub struct Store {
@@ -175,9 +250,9 @@ impl Store {
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok());
         manifest.is_some_and(|m| m.version == MANIFEST_VERSION)
-            && pack.files().iter().all(|f| {
-                fs::metadata(dir.join(f.name)).is_ok_and(|m| m.len() == f.installed_size())
-            })
+            && installed_files(pack)
+                .iter()
+                .all(|&(name, size, _)| fs::metadata(dir.join(name)).is_ok_and(|m| m.len() == size))
     }
 
     /// Checks every file of an installed pack against its SHA-256.
@@ -185,12 +260,10 @@ impl Store {
         if !self.is_installed(pack) {
             return Err(Error::Invalid("This AI feature isn't installed".into()));
         }
-        for f in pack.files() {
-            let path = self.path(pack, f.name);
-            if sha256_file(&path)? != f.installed_sha() {
+        for (name, _, sha) in installed_files(pack) {
+            if sha256_file(&self.path(pack, name))? != sha {
                 return Err(Error::Invalid(format!(
-                    "{} is damaged; remove the feature and install it again",
-                    f.name
+                    "{name} is damaged; remove the feature and install it again"
                 )));
             }
         }
@@ -216,27 +289,40 @@ impl Store {
         let total = pack.download_size();
         let mut before = 0;
         for f in pack.files() {
-            let target = dir.join(f.name);
-            let done_already = fs::metadata(&target).is_ok_and(|m| m.len() == f.installed_size())
-                && sha256_file(&target)? == f.installed_sha();
+            let mut done_already = true;
+            for (name, size, sha) in f.installed() {
+                let target = dir.join(name);
+                done_already &= fs::metadata(&target).is_ok_and(|m| m.len() == size)
+                    && sha256_file(&target)? == sha;
+            }
             if !done_already {
                 let download = dir.join(format!("{}.download", f.name));
                 fetch(f, &download, cancel, &|n| progress(before + n, total))?;
-                match &f.extract {
-                    None => fs::rename(&download, &target)?,
-                    Some(e) => {
-                        extract(&download, e, &target)?;
-                        fs::remove_file(&download)?;
+                if f.extract.is_empty() {
+                    fs::rename(&download, dir.join(f.name))?;
+                } else {
+                    for e in f.extract {
+                        extract(&download, e, &dir.join(e.name))?;
                     }
+                    fs::remove_file(&download)?;
                 }
             }
             before += f.size;
             progress(before, total);
         }
+        self.write_manifest(pack)
+    }
+
+    fn write_manifest(&self, pack: Pack) -> Result<()> {
         let manifest = Manifest {
             version: MANIFEST_VERSION,
-            files: pack.files().iter().map(|f| f.name.to_owned()).collect(),
+            files: installed_files(pack)
+                .iter()
+                .map(|f| f.0.to_owned())
+                .collect(),
         };
+        let dir = self.dir(pack);
+        fs::create_dir_all(&dir)?;
         fs::write(
             dir.join(MANIFEST),
             serde_json::to_vec(&manifest).expect("plain data"),
@@ -247,32 +333,24 @@ impl Store {
     /// Installs a pack from files already on this computer (copied from another one, say):
     /// `folder` holds them under their installed names. Each is checked like a download.
     pub fn install_from(&self, pack: Pack, folder: &Path) -> Result<()> {
+        let _ = fs::remove_file(self.removal_marker(pack));
         let dir = self.dir(pack);
         fs::create_dir_all(&dir)?;
         let _ = fs::remove_file(dir.join(MANIFEST));
-        for f in pack.files() {
-            let source = folder.join(f.name);
-            if fs::metadata(&source).map(|m| m.len()).ok() != Some(f.installed_size())
-                || sha256_file(&source)? != f.installed_sha()
+        for (name, size, sha) in installed_files(pack) {
+            let source = folder.join(name);
+            if fs::metadata(&source).map(|m| m.len()).ok() != Some(size)
+                || sha256_file(&source)? != sha
             {
                 return Err(Error::Invalid(format!(
-                    "{} in that folder isn't the right file",
-                    f.name
+                    "{name} in that folder isn't the right file"
                 )));
             }
-            let part = dir.join(format!("{}.part", f.name));
+            let part = dir.join(format!("{name}.part"));
             fs::copy(&source, &part)?;
-            fs::rename(&part, dir.join(f.name))?;
+            fs::rename(&part, dir.join(name))?;
         }
-        let manifest = Manifest {
-            version: MANIFEST_VERSION,
-            files: pack.files().iter().map(|f| f.name.to_owned()).collect(),
-        };
-        fs::write(
-            dir.join(MANIFEST),
-            serde_json::to_vec(&manifest).expect("plain data"),
-        )?;
-        Ok(())
+        self.write_manifest(pack)
     }
 
     /// Removes a pack's files. Files in use (the runtime, while loaded) are removed at
@@ -315,6 +393,11 @@ impl Store {
             }
         }
     }
+}
+
+/// Every file a pack leaves on disk.
+fn installed_files(pack: Pack) -> Vec<Installed> {
+    pack.files().iter().flat_map(Remote::installed).collect()
 }
 
 fn sha256_file(path: &Path) -> Result<String> {
@@ -416,7 +499,7 @@ fn extract(package: &Path, e: &Extract, target: &Path) -> Result<()> {
     };
     let mut zip = zip::ZipArchive::new(File::open(package)?).map_err(|err| bad(err.to_string()))?;
     let mut entry = zip.by_name(e.entry).map_err(|err| bad(err.to_string()))?;
-    let part = target.with_extension("part");
+    let part = target.with_file_name(format!("{}.part", e.name));
     {
         let mut out = File::create(&part)?;
         io::copy(&mut entry, &mut out)?;
@@ -460,9 +543,9 @@ mod tests {
             for f in pack.files() {
                 assert_eq!(f.sha256.len(), 64, "{}", f.name);
                 assert!(f.size > 0 && f.url.starts_with("https://"), "{}", f.name);
-                if let Some(e) = &f.extract {
+                for e in f.extract {
                     assert_eq!(e.sha256.len(), 64);
-                    assert!(e.size > 0);
+                    assert!(e.size > 0 && !e.name.is_empty());
                 }
             }
         }

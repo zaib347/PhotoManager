@@ -44,10 +44,34 @@ pub async fn export_photos(
     std::thread::Builder::new()
         .name("export".into())
         .spawn(move || {
+            let upscaler = match options.enlarge {
+                Some(_) => match state.ai.upscaler() {
+                    Ok(u) => Some(u),
+                    Err(e) => {
+                        state.exporting.store(false, Ordering::SeqCst);
+                        let _ = app.emit(
+                            "export-finished",
+                            FinishedEvent {
+                                report: None,
+                                error: Some(e.to_string()),
+                            },
+                        );
+                        return;
+                    }
+                },
+                None => None,
+            };
+            let enlarge: &export::Enlarge<'_> = &|img, factor| {
+                upscaler
+                    .as_ref()
+                    .expect("loaded when enlarging")
+                    .enlarge_by(img, factor, &state.export_cancel)
+            };
             let result = export::run(
                 &state.library,
                 &ids,
                 &options,
+                upscaler.is_some().then_some(enlarge),
                 &state.export_cancel,
                 &|done, total| {
                     let _ = app.emit("export-progress", ProgressEvent { done, total });

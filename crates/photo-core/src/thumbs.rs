@@ -30,6 +30,23 @@ pub fn delete(conn: &Connection, asset_id: i64) -> Result<()> {
     Ok(())
 }
 
+/// A face's portrait (see the AI pack's People).
+pub fn get_face(conn: &Connection, face_id: i64) -> Result<Option<Vec<u8>>> {
+    let mut stmt = conn.prepare_cached("SELECT data FROM face_thumbs WHERE face_id = ?1")?;
+    Ok(stmt.query_row(params![face_id], |r| r.get(0)).optional()?)
+}
+
+pub fn put_face(conn: &Connection, face_id: i64, data: &[u8]) -> Result<()> {
+    conn.prepare_cached("INSERT OR REPLACE INTO face_thumbs (face_id, data) VALUES (?1, ?2)")?
+        .execute(params![face_id, data])?;
+    Ok(())
+}
+
+pub fn clear_faces(conn: &Connection) -> Result<()> {
+    conn.execute("DELETE FROM face_thumbs", [])?;
+    Ok(())
+}
+
 pub fn clear(conn: &Connection) -> Result<()> {
     conn.execute("DELETE FROM thumbs_256", [])?;
     Ok(())

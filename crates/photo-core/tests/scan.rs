@@ -831,6 +831,7 @@ fn long_and_unicode_paths_work_end_to_end() {
         &f.library,
         &ids,
         &options,
+        None,
         &AtomicBool::new(false),
         &|_, _| {},
     )

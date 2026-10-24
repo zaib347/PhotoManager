@@ -143,11 +143,19 @@ fn indexes_a_library_and_finds_photos_by_description() {
         }
     }
     let cancel = AtomicBool::new(false);
-    let done =
-        search::index_pending(&library, &thumbs_db, &clip, &cancel, &|| false, &|| {}).unwrap();
+    let done = search::index_pending(
+        &library,
+        &thumbs_db,
+        &clip,
+        usize::MAX,
+        &cancel,
+        &|| false,
+        &|| {},
+    )
+    .unwrap();
     assert_eq!(
-        done, 30,
-        "the video is skipped; the photo without a file can't be read"
+        done, 31,
+        "the video is skipped; the photo without a file can't be read (and is recorded)"
     );
     let progress = search::progress(&library.read()).unwrap();
     assert_eq!(
@@ -157,7 +165,16 @@ fn indexes_a_library_and_finds_photos_by_description() {
     );
     // Nothing left to do.
     assert_eq!(
-        search::index_pending(&library, &thumbs_db, &clip, &cancel, &|| false, &|| {}).unwrap(),
+        search::index_pending(
+            &library,
+            &thumbs_db,
+            &clip,
+            usize::MAX,
+            &cancel,
+            &|| false,
+            &|| {}
+        )
+        .unwrap(),
         0
     );
 
@@ -174,7 +191,16 @@ fn indexes_a_library_and_finds_photos_by_description() {
         .execute("DELETE FROM ai_embeddings WHERE asset_id = 7", [])
         .unwrap();
     assert_eq!(
-        search::index_pending(&library, &thumbs_db, &clip, &cancel, &|| false, &|| {}).unwrap(),
+        search::index_pending(
+            &library,
+            &thumbs_db,
+            &clip,
+            usize::MAX,
+            &cancel,
+            &|| false,
+            &|| {}
+        )
+        .unwrap(),
         1
     );
     // Pausing stops a pass before it starts.
@@ -183,7 +209,305 @@ fn indexes_a_library_and_finds_photos_by_description() {
         .execute("DELETE FROM ai_embeddings", [])
         .unwrap();
     assert_eq!(
-        search::index_pending(&library, &thumbs_db, &clip, &cancel, &|| true, &|| {}).unwrap(),
+        search::index_pending(
+            &library,
+            &thumbs_db,
+            &clip,
+            usize::MAX,
+            &cancel,
+            &|| true,
+            &|| {}
+        )
+        .unwrap(),
         0
     );
+}
+
+/// Enlarges a photo 4×: the right size, true to the original, and no seams where the
+/// model's tiles meet.
+#[test]
+fn upscale_enlarges_without_seams() {
+    let Some(src) = models() else { return };
+    use photo_ai::upscale::{FACTOR, Upscaler};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::new(dir.path());
+    store.install_from(Pack::Runtime, &src).unwrap();
+    store.install_from(Pack::Upscale, &src).unwrap();
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get() / 2);
+    let upscaler = Upscaler::load(&store, threads.max(1)).unwrap();
+    // Smooth colour gradients with a few hard-edged shapes, odd-sized.
+    let (w, h) = (250u32, 170u32);
+    let img = RgbImage::from_fn(w, h, |x, y| {
+        let inside = (x / 40 + y / 40) % 3 == 0 && x % 40 > 8 && y % 40 > 8;
+        if inside {
+            Rgb([240, 230, 40])
+        } else {
+            Rgb([(x * 255 / w) as u8, (y * 255 / h) as u8, 120])
+        }
+    });
+    let cancel = AtomicBool::new(false);
+    let started = std::time::Instant::now();
+    let tiles = std::sync::atomic::AtomicUsize::new(0);
+    let big = upscaler
+        .enlarge(&img, &cancel, &|_, total| {
+            tiles.store(total, std::sync::atomic::Ordering::Relaxed)
+        })
+        .unwrap();
+    let tiles = tiles.into_inner();
+    eprintln!(
+        "{tiles} tiles, {} ms each",
+        started.elapsed().as_millis() / tiles.max(1) as u128
+    );
+    assert_eq!(big.dimensions(), (w * FACTOR, h * FACTOR));
+    assert_eq!(tiles, photo_ai::upscale::tiles(w, h));
+    // True to the original: shrunk back, it matches closely (no shift, no colour swap).
+    let back = image::imageops::resize(&big, w, h, image::imageops::FilterType::Triangle);
+    let diff: f64 = back
+        .pixels()
+        .zip(img.pixels())
+        .map(|(a, b)| {
+            (0..3)
+                .map(|c| (a[c] as f64 - b[c] as f64).abs())
+                .sum::<f64>()
+        })
+        .sum::<f64>()
+        / (w * h * 3) as f64;
+    assert!(diff < 6.0, "mean difference {diff}");
+    // No seams: across a tile border, neighbouring columns differ no more than
+    // elsewhere in the smooth gradient.
+    let border = 104 * FACTOR; // the first tile's kept width
+    let y = 30 * FACTOR + 2; // a smooth row
+    let step = |x: u32| (big.get_pixel(x, y)[0] as i32 - big.get_pixel(x - 1, y)[0] as i32).abs();
+    assert!(step(border) <= 4, "seam: {}", step(border));
+}
+
+/// Finds and groups the faces in a scanned library: photos of three people (from the
+/// folder `PHOTO_AI_TEST_FACES`, one sub-folder per person, like LFW), a group photo
+/// of two of them, and a photo without faces. Then names, merges and corrects people.
+#[test]
+fn finds_people_in_a_library_and_lets_the_user_correct_them() {
+    let Some(src) = models() else { return };
+    let Some(faces_dir) = std::env::var_os("PHOTO_AI_TEST_FACES").map(PathBuf::from) else {
+        eprintln!("skipped: set PHOTO_AI_TEST_FACES");
+        return;
+    };
+    use photo_ai::faces::Faces;
+    use photo_ai::people::People;
+    use photo_core::db::Db;
+    use photo_core::scan::Scanner;
+    use photo_core::timeline::{self, View};
+    use photo_core::{library, schema, thumbs};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::new(dir.path().join("ai"));
+    store.install_from(Pack::Runtime, &src).unwrap();
+    store.install_from(Pack::People, &src).unwrap();
+    let faces = Faces::load(&store, 2).unwrap();
+
+    let photos = dir.path().join("photos");
+    std::fs::create_dir_all(&photos).unwrap();
+    let names = ["Colin_Powell", "Serena_Williams", "Hugo_Chavez"];
+    for name in names {
+        for i in 1..=5 {
+            let file = format!("{name}_{i:04}.jpg");
+            std::fs::copy(faces_dir.join(name).join(&file), photos.join(&file)).unwrap();
+        }
+    }
+    // Two people side by side (photos 6, not among the singles).
+    let left = image::open(faces_dir.join("Colin_Powell/Colin_Powell_0006.jpg"))
+        .unwrap()
+        .to_rgb8();
+    let right = image::open(faces_dir.join("Serena_Williams/Serena_Williams_0006.jpg"))
+        .unwrap()
+        .to_rgb8();
+    let mut pair = RgbImage::new(500, 250);
+    image::imageops::replace(&mut pair, &left, 0, 0);
+    image::imageops::replace(&mut pair, &right, 250, 0);
+    pair.save(photos.join("pair.jpg")).unwrap();
+    RgbImage::from_pixel(400, 300, Rgb([90, 140, 200]))
+        .save(photos.join("sky.jpg"))
+        .unwrap();
+
+    let library = Db::open(&dir.path().join("lib.sqlite"), 2, schema::migrate_library).unwrap();
+    let thumbs_db = Db::open(&dir.path().join("thumbs.sqlite"), 2, schema::migrate_thumbs).unwrap();
+    let root = library::add_root(&library.write(), &photos).unwrap();
+    let cancel = AtomicBool::new(false);
+    Scanner {
+        library: &library,
+        thumbs: &thumbs_db,
+        cancel: &cancel,
+    }
+    .scan_root(root, &|_| {})
+    .unwrap();
+
+    let people = People::default();
+    let done = people
+        .index_pending(
+            &library,
+            &thumbs_db,
+            &faces,
+            usize::MAX,
+            &cancel,
+            &|| false,
+            &|| {},
+        )
+        .unwrap();
+    assert_eq!(done, 17);
+    let progress = photo_ai::people::progress(&library.read()).unwrap();
+    assert_eq!((progress.indexed, progress.total), (17, 17));
+    assert_eq!(
+        people
+            .index_pending(
+                &library,
+                &thumbs_db,
+                &faces,
+                usize::MAX,
+                &cancel,
+                &|| false,
+                &|| {}
+            )
+            .unwrap(),
+        0
+    );
+
+    let id_of = |file: &str| -> i64 {
+        library
+            .read()
+            .query_row(
+                "SELECT asset_id FROM files WHERE rel_path LIKE ?1",
+                [format!("%{file}")],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    let photos_of = |name: &str| -> Vec<i64> {
+        (1..=5)
+            .map(|i| id_of(&format!("{name}_{i:04}.jpg")))
+            .collect()
+    };
+    let pair_id = id_of("pair.jpg");
+    let in_view = |person: i64| -> Vec<i64> {
+        let conn = library.read();
+        let mut ids =
+            timeline::asset_ids(&conn, View::Person(person), &Default::default()).unwrap();
+        ids.sort();
+        ids
+    };
+
+    // Three people, each in their five photos; the two in the pair photo in it too.
+    let list = people.list(&library.read(), false).unwrap();
+    assert_eq!(list.len(), 3, "{list:?}");
+    let person_with = |asset: i64| {
+        list.iter()
+            .find(|p| in_view(p.id).contains(&asset))
+            .unwrap()
+            .id
+    };
+    for name in names {
+        let mut expected = photos_of(name);
+        let person = person_with(expected[0]);
+        if name != "Hugo_Chavez" {
+            expected.push(pair_id);
+        }
+        expected.sort();
+        assert_eq!(in_view(person), expected, "{name}");
+    }
+    // Every face has a portrait.
+    let face_ids: Vec<i64> = library
+        .read()
+        .prepare("SELECT id FROM ai_faces")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(face_ids.len(), 17);
+    for id in &face_ids {
+        assert!(thumbs::get_face(&thumbs_db.read(), *id).unwrap().is_some());
+    }
+
+    // Naming.
+    let colin = person_with(photos_of("Colin_Powell")[0]);
+    let serena = person_with(photos_of("Serena_Williams")[0]);
+    let hugo = person_with(photos_of("Hugo_Chavez")[0]);
+    people.rename(&library, colin, " Colin ").unwrap();
+    let list = people.list(&library.read(), false).unwrap();
+    assert_eq!(
+        list[0].name.as_deref(),
+        Some("Colin"),
+        "named people come first"
+    );
+    assert_eq!(
+        people.in_photo(&library.read(), pair_id).unwrap(),
+        vec![(colin, "Colin".to_string())]
+    );
+
+    // "Not this person": the pair photo leaves Serena for good.
+    assert_eq!(
+        people.remove_photos(&library, serena, &[pair_id]).unwrap(),
+        1
+    );
+    assert!(!in_view(serena).contains(&pair_id));
+    library
+        .write()
+        .execute("DELETE FROM ai_face_scans WHERE asset_id = ?1", [pair_id])
+        .unwrap();
+
+    // Merging (as if Hugo were Colin); the name is kept.
+    people.merge(&library, colin, &[hugo]).unwrap();
+    let merged = people.get(&library.read(), colin).unwrap().unwrap();
+    assert_eq!((merged.name.as_deref(), merged.photos), (Some("Colin"), 11));
+    assert!(people.get(&library.read(), hugo).unwrap().is_none());
+
+    // Hiding.
+    people.set_hidden(&library, serena, true).unwrap();
+    assert_eq!(people.list(&library.read(), false).unwrap().len(), 1);
+    assert_eq!(people.list(&library.read(), true).unwrap()[0].id, serena);
+
+    // A portrait is made again from the photo when the cache lost it.
+    thumbs::clear_faces(&thumbs_db.write()).unwrap();
+    let again = photo_ai::people::portrait_from_photo(&library, face_ids[0])
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        image::load_from_memory(&again).unwrap().width(),
+        photo_ai::people::PORTRAIT
+    );
+
+    // Removing the feature forgets everything.
+    people.clear(&library, &thumbs_db).unwrap();
+    assert!(people.list(&library.read(), false).unwrap().is_empty());
+    assert_eq!(
+        photo_ai::people::progress(&library.read()).unwrap().indexed,
+        0
+    );
+}
+
+/// Downloads the real People and Upscale packs (~44 MB) through the same path as the app:
+/// plain files, and a package with two files kept from it.
+#[test]
+#[ignore]
+fn downloads_and_installs_people_and_upscale() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::new(dir.path());
+    let cancel = AtomicBool::new(false);
+    for pack in [Pack::People, Pack::Upscale] {
+        store.install(pack, &cancel, &|_, _| {}).unwrap();
+        store.verify(pack).unwrap();
+        assert!(store.is_installed(pack));
+    }
+    assert!(
+        store
+            .path(Pack::Upscale, "real_esrgan_general_x4v3.data")
+            .exists()
+    );
+    assert!(!store.path(Pack::Upscale, "upscale.zip.download").exists());
+    // Text needs no download: installing just turns it on.
+    store
+        .install(Pack::Text, &cancel, &|_, _| panic!("nothing to download"))
+        .unwrap();
+    assert!(store.is_installed(Pack::Text));
+    assert!(store.remove(Pack::Text, false).unwrap());
+    assert!(!store.is_installed(Pack::Text));
 }

@@ -50,6 +50,16 @@ them on the user's computer:
 - **Search by description:** OpenAI's [CLIP](https://github.com/openai/CLIP) ViT-B/32 (MIT
   license), in the 8-bit ONNX export by [Xenova](https://huggingface.co/Xenova/clip-vit-base-patch32),
   pinned to one revision.
+- **People:** [YuNet](https://github.com/ShiqiYu/libfacedetection) face detection (MIT
+  license, Shiqi Yu) and [SFace](https://arxiv.org/abs/2205.12010) face recognition (Apache
+  2.0, Yaoyao Zhong and Weihong Deng), from the
+  [OpenCV model zoo](https://huggingface.co/opencv), pinned to one revision each. Faces and
+  people stay in the library on the user's computer.
+- **Upscale:** [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) General x4v3 (BSD
+  3-Clause license, Xintao Wang et al.), in the ONNX export by
+  [Qualcomm AI Hub](https://huggingface.co/qualcomm/Real-ESRGAN-General-x4v3) (release 0.65.0).
+- **Text in photos:** the text recognition built into Windows (`Windows.Media.Ocr`);
+  nothing is downloaded.
 - **Runtime:** Microsoft's [ONNX Runtime](https://github.com/microsoft/onnxruntime) 1.24.4
   (MIT license), from its official NuGet package.
 
@@ -59,6 +69,8 @@ Every file is checked against a SHA-256 fixed in `crates/photo-ai/src/models.rs`
 
 - `crates/photo-core/` — storage, schema, timeline queries, thumbnails. No Tauri dependency.
 - `crates/photo-ai/` — the optional AI features (model downloads, ONNX Runtime, search by
-  description). Nothing in it runs until the user installs a feature.
-- `src-tauri/` — desktop shell: commands and the `thumb://` protocol.
+  description, people, upscaling, text in photos). Nothing in it runs until the user
+  installs a feature.
+- `src-tauri/` — desktop shell: commands and the `thumb://`, `media://` and `face://`
+  protocols.
 - `src/` — React UI (`timeline/` holds the virtual grid and date scrubber).
