@@ -70,7 +70,10 @@ fn shrink(img: DynamicImage, edge: u32) -> DynamicImage {
 
 /// Viewer-sized JPEG for originals the webview cannot display (TIFF etc.).
 pub fn preview(path: &Path, orientation: Option<u8>, look: &Look) -> Result<Vec<u8>> {
-    let mut img = shrink(image::open(path)?, (2048.0 * look.zoom().min(2.0)) as u32);
+    let mut img = shrink(
+        crate::raw::open(path)?,
+        (2048.0 * look.zoom().min(2.0)) as u32,
+    );
     orient(&mut img, orientation);
     encode_jpeg(&look.apply(img).to_rgb8())
 }
@@ -78,7 +81,7 @@ pub fn preview(path: &Path, orientation: Option<u8>, look: &Look) -> Result<Vec<
 /// Full decode of the original, scaled so the short edge is `GRID_SIZE` (the grid
 /// crops to squares) with the long edge capped for panoramas.
 pub fn from_file(path: &Path, orientation: Option<u8>, look: &Look) -> Result<Vec<u8>> {
-    let img = image::open(path)?;
+    let img = crate::raw::open(path)?;
     if look.edit.is_none() {
         let mut thumb = grid_sized(img);
         orient(&mut thumb, crate::rotate::compose(orientation, look.turns));
@@ -110,7 +113,7 @@ pub fn preview_from_os(path: &Path, look: &Look) -> Result<Vec<u8>> {
 /// The whole photo with its look, for the viewer when the user turned or edited a
 /// photo the webview would otherwise show from the file as it is.
 pub fn full_adjusted(path: &Path, orientation: Option<u8>, look: &Look) -> Result<Vec<u8>> {
-    let mut img = image::open(path)?;
+    let mut img = crate::raw::open(path)?;
     orient(&mut img, orientation);
     let mut buf = Cursor::new(Vec::new());
     JpegEncoder::new_with_quality(&mut buf, 92).encode_image(&look.apply(img).to_rgb8())?;

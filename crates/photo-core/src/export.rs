@@ -121,8 +121,15 @@ struct Decoded {
 fn decode(source: &Path, bytes: &[u8]) -> Result<Decoded> {
     let exif = exif::Reader::new()
         .read_from_container(&mut Cursor::new(bytes))
-        .ok();
-    let ours = ImageReader::new(Cursor::new(bytes))
+        .ok()
+        .or_else(|| crate::raw::exif(source).into_iter().next());
+    // A RAW file is exported from the JPEG preview the camera embedded in it.
+    let preview = if crate::raw::is_raw(source) {
+        Some(crate::raw::preview(source)?)
+    } else {
+        None
+    };
+    let ours = ImageReader::new(Cursor::new(preview.as_deref().unwrap_or(bytes)))
         .with_guessed_format()
         .ok()
         .and_then(|r| r.into_decoder().ok());
