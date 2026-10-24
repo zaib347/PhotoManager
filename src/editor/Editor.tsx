@@ -2,6 +2,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, NO_EDIT, type Recipe } from "../api";
 import { photoLooks } from "../looks";
+import { copiedEdit } from "./copied";
 import { CropBox, fitAspect } from "./CropBox";
 
 type Tone = Omit<Recipe, "crop" | "straighten">;
@@ -120,6 +121,7 @@ export function Editor({ id, onClose, onError }: Props) {
   const [comparing, setComparing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [imageAspect, setImageAspect] = useState(1);
+  const [copied, setCopied] = useState(false);
 
   const reportError = useRef(onError);
   reportError.current = onError;
@@ -176,6 +178,13 @@ export function Editor({ id, onClose, onError }: Props) {
     }
   };
 
+  const copy = () => {
+    if (!recipe) return;
+    copiedEdit.set(recipe);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+
   const pickAspect = (value: (typeof ASPECTS)[number]["value"]) => {
     setAspect(value);
     if (value === null) return;
@@ -206,6 +215,14 @@ export function Editor({ id, onClose, onError }: Props) {
           Cancel
         </button>
         <div className="spacer" />
+        <button
+          className="ghost"
+          onClick={copy}
+          disabled={!recipe || same(recipe, NO_EDIT)}
+          title="Copy these settings to paste onto other selected photos"
+        >
+          {copied ? "Copied ✓" : "Copy edit"}
+        </button>
         <button
           className="ghost"
           onPointerDown={() => setComparing(true)}

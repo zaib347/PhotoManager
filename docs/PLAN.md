@@ -287,7 +287,7 @@ Ground rule: tools write new files; originals are only replaced through `fileops
 Each feature is its own branch, merged after the user's go-ahead. Everything runs offline
 and needs no downloads.
 
-1. - [ ] **Copy and paste edits** (small, ~2–3 days)
+1. - [x] **Copy and paste edits** (small, ~2–3 days)
    - Editor and viewer: **Copy edit**. Selection bar: **Paste edit** with a choice of
      everything, or light and colour only (skip crop and straighten, which rarely suit
      another photo).

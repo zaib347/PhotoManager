@@ -386,6 +386,7 @@ pub fn run() {
             edit_commands::edit_preview,
             edit_commands::edit_auto,
             edit_commands::edit_save,
+            edit_commands::edit_paste,
             cleanup_commands::duplicate_overview,
             cleanup_commands::duplicate_groups,
             cleanup_commands::remove_duplicates,

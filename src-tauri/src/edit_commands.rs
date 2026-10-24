@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use photo_core::edit::{self, Recipe};
+use photo_core::edit::{self, PasteWhat, Recipe};
 use tauri::State;
 use tauri::ipc::Response;
 
@@ -64,6 +64,30 @@ pub async fn edit_save(
         // The watermark preview shows the edit; decode it again next time.
         *s.watermark_base.lock().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(version)
+    })
+    .await
+}
+
+/// Pastes a copied edit onto photos `ids` (videos are skipped), replacing their edits.
+/// Their thumbnails are made again on their next request. Returns (id, new edit
+/// version) for each photo pasted onto.
+#[tauri::command]
+pub async fn edit_paste(
+    state: State<'_, Arc<AppState>>,
+    ids: Vec<i64>,
+    recipe: Recipe,
+    what: PasteWhat,
+) -> CmdResult<Vec<(i64, i64)>> {
+    blocking(&state, move |s| {
+        let pasted = edit::paste(&mut s.library.write(), &ids, &recipe, what)?;
+        let mut thumbs = s.thumbs.write();
+        let tx = thumbs.transaction()?;
+        for &(id, _) in &pasted {
+            photo_core::thumbs::delete(&tx, id)?;
+        }
+        tx.commit()?;
+        *s.watermark_base.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        Ok(pasted)
     })
     .await
 }

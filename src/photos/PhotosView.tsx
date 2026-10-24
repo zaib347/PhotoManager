@@ -6,6 +6,7 @@ import { AlbumHeader } from "../collections/AlbumHeader";
 import { useCollections } from "../collections/context";
 import { EventHeader } from "../events/EventHeader";
 import { TripHeader } from "../trips/TripHeader";
+import { copiedEdit } from "../editor/copied";
 import { photoLooks } from "../looks";
 import { DayStore, type Position } from "../timeline/dayStore";
 import { Timeline } from "../timeline/Timeline";
@@ -230,6 +231,19 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
             })
           }
           onRotate={(quarters) => run(() => rotate([...selection], quarters))}
+          onPasteEdit={(what) =>
+            run(async () => {
+              const recipe = copiedEdit.get();
+              if (!recipe) return;
+              const pasted = await api.editPaste([...selection], recipe, what);
+              photoLooks.setVersions(pasted);
+              const skipped = selection.size - pasted.length;
+              onNotice(
+                `Edit pasted onto ${pasted.length.toLocaleString()} ${pasted.length === 1 ? "photo" : "photos"}` +
+                  (skipped > 0 ? ` (${skipped.toLocaleString()} ${skipped === 1 ? "video" : "videos"} skipped).` : "."),
+              );
+            })
+          }
           onRename={(pattern) =>
             run(async () => {
               const report = await api.renameRun([...selection], pattern);

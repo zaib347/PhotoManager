@@ -1,11 +1,14 @@
+import { useSyncExternalStore } from "react";
 import type { ExportOptions, TimelineView } from "../api";
 import { AlbumPicker } from "../collections/AlbumPicker";
 import { useCollections } from "../collections/context";
 import { TagInput } from "../collections/TagInput";
+import { copiedEdit } from "../editor/copied";
 import { Popover } from "../ui/Popover";
 import { DateFixer } from "./DateFixer";
 import { EventMaker } from "./EventMaker";
 import { ExportPanel } from "./ExportPanel";
+import { PastePanel } from "./PastePanel";
 import { RenamePanel } from "./RenamePanel";
 
 type Props = {
@@ -23,6 +26,8 @@ type Props = {
   onRemove: () => void;
   /** Turns the photos: 1 clockwise, -1 counter-clockwise. */
   onRotate: (quarters: number) => void;
+  /** Pastes the copied edit: all of it, or light and color only. */
+  onPasteEdit: (what: "everything" | "tone") => void;
   /** Renames the photos' files from a pattern (undoable). */
   onRename: (pattern: string) => void;
   /** Writes copies, resized/converted, to a folder (in the background). */
@@ -41,6 +46,7 @@ type Props = {
 export function SelectionBar(props: Props) {
   const { count, view, onClear, onFavorite, onRate, onHide } = props;
   const { albums, tags } = useCollections();
+  const copied = useSyncExternalStore(copiedEdit.subscribe, copiedEdit.get);
   return (
     <div className="selection-bar" role="toolbar" aria-label="Selection actions">
       <button className="ghost" onClick={onClear} title="Clear selection (Esc)">
@@ -57,6 +63,20 @@ export function SelectionBar(props: Props) {
       <button className="ghost" onClick={() => props.onRotate(1)} title="Rotate right">
         ⟳
       </button>
+      {copied && (
+        <Popover label="Paste edit" align="right">
+          {(close) => (
+            <PastePanel
+              count={count}
+              copied={copied}
+              onPaste={(what) => {
+                props.onPasteEdit(what);
+                close();
+              }}
+            />
+          )}
+        </Popover>
+      )}
       <Popover label="Fix date" align="right">
         {(close) => (
           <DateFixer

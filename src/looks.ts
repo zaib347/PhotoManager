@@ -37,6 +37,11 @@ export const photoLooks = {
     update(id, { version });
     notify();
   },
+  /** New edit versions, as the backend returned them after pasting. */
+  setVersions(list: [number, number][]) {
+    for (const [id, version] of list) update(id, { version });
+    notify();
+  },
   subscribe(listener: () => void) {
     listeners.add(listener);
     return () => {

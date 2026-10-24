@@ -529,6 +529,52 @@ pub fn save(conn: &Connection, asset_id: i64, recipe: Option<&Recipe>) -> Result
         .query_row(params![asset_id, json], |r| r.get(0))?)
 }
 
+/// How much of a copied edit to paste.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum PasteWhat {
+    Everything,
+    /// Light, colour and sharpening; each photo keeps its own crop and straightening,
+    /// which rarely suit another photo.
+    Tone,
+}
+
+/// Pastes `recipe` onto every photo in `ids` in one transaction, replacing their
+/// edits; videos and unknown ids are skipped. Each photo can still be reverted on its
+/// own. Returns (id, new edit version) for each photo pasted onto.
+pub fn paste(
+    conn: &mut Connection,
+    ids: &[i64],
+    recipe: &Recipe,
+    what: PasteWhat,
+) -> Result<Vec<(i64, i64)>> {
+    let tx = conn.transaction()?;
+    let mut pasted = Vec::with_capacity(ids.len());
+    for &id in ids {
+        let kind: Option<u8> = tx
+            .prepare_cached("SELECT media_kind FROM assets WHERE id = ?1")?
+            .query_row(params![id], |r| r.get(0))
+            .optional()?;
+        if !matches!(kind, Some(k) if k != 1) {
+            continue;
+        }
+        let next = match what {
+            PasteWhat::Everything => recipe.clone(),
+            PasteWhat::Tone => {
+                let own = get(&tx, id)?.unwrap_or_default();
+                Recipe {
+                    crop: own.crop,
+                    straighten: own.straighten,
+                    ..recipe.clone()
+                }
+            }
+        };
+        pasted.push((id, save(&tx, id, Some(&next))?));
+    }
+    tx.commit()?;
+    Ok(pasted)
+}
+
 /// Every photo that looks different from its file (turned or edited, or edited once
 /// and reverted), with its turns and edit version: the frontend puts these in image
 /// URLs.
@@ -708,5 +754,59 @@ mod tests {
         assert_eq!(get(&conn, 1).unwrap(), None);
         assert_eq!(adjusted(&conn).unwrap(), vec![(1, 0, 2)]);
         assert!(save(&conn, 2, Some(&Recipe::default())).is_err(), "videos");
+    }
+
+    #[test]
+    fn pasting_skips_videos_and_can_keep_each_crop() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::schema::migrate_library(&mut conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO assets (id, media_kind, taken_at, taken_src, local_day, created_at)
+             VALUES (1, 0, 0, 0, 0, 0), (2, 0, 0, 0, 0, 0), (3, 1, 0, 0, 0, 0)",
+        )
+        .unwrap();
+        let own_crop = Crop {
+            x: 0.1,
+            y: 0.1,
+            w: 0.5,
+            h: 0.5,
+        };
+        let cropped = Recipe {
+            crop: Some(own_crop),
+            straighten: 3.0,
+            exposure: -1.0,
+            ..Default::default()
+        };
+        save(&conn, 2, Some(&cropped)).unwrap();
+        let copied = Recipe {
+            crop: Some(Crop {
+                x: 0.0,
+                y: 0.0,
+                w: 0.5,
+                h: 1.0,
+            }),
+            straighten: -5.0,
+            contrast: 40.0,
+            vibrance: 20.0,
+            ..Default::default()
+        };
+
+        let pasted = paste(&mut conn, &[1, 2, 3, 99], &copied, PasteWhat::Tone).unwrap();
+        assert_eq!(pasted, vec![(1, 1), (2, 2)]);
+        let first = get(&conn, 1).unwrap().unwrap();
+        assert_eq!((first.crop, first.straighten), (None, 0.0));
+        assert_eq!(first.contrast, 40.0);
+        let second = get(&conn, 2).unwrap().unwrap();
+        assert_eq!(second.crop, Some(own_crop));
+        assert_eq!(second.straighten, 3.0);
+        assert_eq!(
+            (second.exposure, second.vibrance),
+            (0.0, 20.0),
+            "tone replaced"
+        );
+        assert_eq!(get(&conn, 3).unwrap(), None, "videos are skipped");
+
+        paste(&mut conn, &[2], &copied, PasteWhat::Everything).unwrap();
+        assert_eq!(get(&conn, 2).unwrap(), Some(copied));
     }
 }

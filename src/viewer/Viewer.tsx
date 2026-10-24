@@ -4,6 +4,7 @@ import { api, liveUrl, MediaKind, mediaUrl, thumbUrl, type AssetDetails, type Vi
 import { formatTakenAt } from "../format";
 import type { DayStore, Position } from "../timeline/dayStore";
 import { lookKey, photoLooks } from "../looks";
+import { copiedEdit } from "../editor/copied";
 import { Editor } from "../editor/Editor";
 import { InfoPanel } from "./InfoPanel";
 import { ZoomableImage } from "./ZoomableImage";
@@ -59,6 +60,8 @@ export function Viewer({
   const [showInfo, setShowInfo] = useState(readShowInfo);
   const [playingLive, setPlayingLive] = useState(false);
   const [editing, setEditing] = useState(false);
+  // Brief feedback on the Copy edit button.
+  const [copyNote, setCopyNote] = useState<string | null>(null);
   const id = store.idAt(pos);
 
   const [detailsVersion, setDetailsVersion] = useState(0);
@@ -68,6 +71,7 @@ export function Viewer({
     setFailed(false);
     setAsset(null);
     setPlayingLive(false);
+    setCopyNote(null);
   }, [id]);
 
   useEffect(() => {
@@ -155,6 +159,18 @@ export function Viewer({
     [asset, onRotate],
   );
 
+  const copyEdit = useCallback(async () => {
+    if (!asset) return;
+    try {
+      const recipe = await api.editGet(asset.id);
+      if (recipe) copiedEdit.set(recipe);
+      setCopyNote(recipe ? "Copied ✓" : "No edit to copy");
+      window.setTimeout(() => setCopyNote(null), 1500);
+    } catch (e) {
+      onError(e);
+    }
+  }, [asset, onError]);
+
   useEffect(() => {
     if (editing) return; // The editor has the keyboard.
     const onKey = (e: KeyboardEvent) => {
@@ -231,6 +247,9 @@ export function Viewer({
                 </button>
                 <button className="ghost" onClick={() => setEditing(true)} title="Crop, light and color (E)">
                   Edit
+                </button>
+                <button className="ghost" onClick={copyEdit} title="Copy this photo's edit to paste onto other photos">
+                  {copyNote ?? "Copy edit"}
                 </button>
               </>
             )}

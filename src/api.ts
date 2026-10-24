@@ -446,6 +446,12 @@ export const api = {
   editAuto: (id: number, recipe: Recipe) => invoke<Recipe>("edit_auto", { id, recipe }),
   /** Saves an edit (null reverts to the original). Returns the new edit version. */
   editSave: (id: number, recipe: Recipe | null) => invoke<number>("edit_save", { id, recipe }),
+  /**
+   * Pastes a copied edit onto photos (videos are skipped), replacing their edits. "tone"
+   * keeps each photo's own crop and straightening. Returns (id, new edit version).
+   */
+  editPaste: (ids: number[], recipe: Recipe, what: "everything" | "tone") =>
+    invoke<[number, number][]>("edit_paste", { ids, recipe, what }),
   /** Every turned or edited photo: (id, turns, edit version). */
   adjustedPhotos: () => invoke<[number, number, number][]>("adjusted_photos"),
   /** Photo `id` with the watermark drawn on it, as a JPEG. */

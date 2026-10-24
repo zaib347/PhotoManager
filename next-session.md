@@ -138,4 +138,5 @@ Actions tab or a `v*` tag) makes unsigned installers. macOS/Linux entries are co
 
 ## Waiting on the user
 
-- **Not yet confirmed working in the app:** Live Photos (pairing needs a rescan) and faster hide.
+- Live Photos and faster hide: confirmed working by the user (2026-10-24).
+- **F1 copy/paste edits** (branch `f-paste-edits`): built, waiting for the user to test and say merge.
