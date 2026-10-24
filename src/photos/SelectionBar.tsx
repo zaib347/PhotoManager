@@ -99,6 +99,7 @@ export function SelectionBar(props: Props) {
         {(close) => (
           <ExportPanel
             count={count}
+            previewId={props.ids[0]}
             onExport={(options) => {
               props.onExport(options);
               close();

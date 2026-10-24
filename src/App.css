@@ -1444,8 +1444,42 @@ button.primary:disabled {
   border-bottom: 1px solid var(--border);
   word-break: break-all;
 }
+.export-panel {
+  display: grid;
+  grid-template-columns: 300px 300px;
+  gap: 0 20px;
+  width: auto;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+}
+
+.export-panel .export-go {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
 .export-panel input[type="range"] {
   width: 100%;
+}
+
+.watermark-text {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 6px;
+}
+
+.watermark-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  margin: 0 auto;
+  border-radius: 4px;
+}
+
+@media (max-width: 760px) {
+  .export-panel {
+    grid-template-columns: 300px;
+  }
 }
 
 .export-status {

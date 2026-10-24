@@ -39,6 +39,8 @@ pub(crate) struct AppState {
     /// An export is running / should stop.
     exporting: AtomicBool,
     export_cancel: AtomicBool,
+    /// The photo the export panel previews watermarks on, decoded once.
+    watermark_base: Mutex<Option<(i64, Arc<photo_core::export::PreviewBase>)>>,
 }
 
 impl AppState {
@@ -299,6 +301,7 @@ pub fn run() {
                 hash_cancel: AtomicBool::new(false),
                 exporting: AtomicBool::new(false),
                 export_cancel: AtomicBool::new(false),
+                watermark_base: Mutex::default(),
             });
 
             library::refresh_volumes(&state.library.write())?;
@@ -347,6 +350,7 @@ pub fn run() {
             cleanup_commands::remove_photos,
             export_commands::export_photos,
             export_commands::cancel_export,
+            export_commands::watermark_preview,
             cleanup_commands::duplicate_overview,
             cleanup_commands::duplicate_groups,
             cleanup_commands::remove_duplicates,
