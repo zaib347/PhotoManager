@@ -174,8 +174,8 @@ pub enum AssetSource {
         path: PathBuf,
         /// From the file's EXIF.
         orientation: Option<u8>,
-        /// Quarter turns clockwise the user added (see `rotate`).
-        turns: u8,
+        /// The user's turns and edit, shown on top of the file.
+        look: crate::edit::Look,
         kind: u8,
     },
     /// The asset has files, but none are reachable right now (drive offline).
@@ -185,14 +185,16 @@ pub enum AssetSource {
 }
 
 pub fn asset_source(conn: &Connection, asset_id: i64) -> Result<Option<AssetSource>> {
-    let asset: Option<(u8, Option<u8>, u8)> = conn
+    let asset: Option<(u8, Option<u8>, u8, Option<String>)> = conn
         .prepare_cached(
-            "SELECT a.media_kind, a.orientation, COALESCE(u.turns, 0)
+            "SELECT a.media_kind, a.orientation, COALESCE(u.turns, 0), u.edit
              FROM assets a LEFT JOIN user_meta u ON u.asset_id = a.id WHERE a.id = ?1",
         )?
-        .query_row(params![asset_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .query_row(params![asset_id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        })
         .optional()?;
-    let Some((kind, orientation, turns)) = asset else {
+    let Some((kind, orientation, turns, edit)) = asset else {
         return Ok(None);
     };
 
@@ -208,7 +210,10 @@ pub fn asset_source(conn: &Connection, asset_id: i64) -> Result<Option<AssetSour
             return Ok(Some(AssetSource::File {
                 path,
                 orientation,
-                turns,
+                look: crate::edit::Look {
+                    turns,
+                    edit: crate::edit::parse(edit),
+                },
                 kind,
             }));
         }

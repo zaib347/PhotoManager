@@ -226,11 +226,11 @@ fn hash_one(library: &Db, thumbs_db: &Db, id: i64) -> Result<Outcome> {
         Some(AssetSource::File {
             path,
             orientation,
-            turns,
+            look,
             ..
         }) => {
-            let jpeg = thumbs::from_file(&path, crate::rotate::compose(orientation, turns))
-                .or_else(|_| thumbs::from_os(&path, turns))?;
+            let jpeg = thumbs::from_file(&path, orientation, &look)
+                .or_else(|_| thumbs::from_os(&path, &look))?;
             let img = image::load_from_memory(&jpeg)?;
             Ok(Outcome::Hashed(fingerprint(&img), Some(jpeg)))
         }
@@ -513,7 +513,7 @@ fn assess_one(library: &Db, id: i64) -> Result<Assessed> {
     Ok(match source {
         Some(AssetSource::File { path, .. }) => {
             let img = image::open(&path).ok().or_else(|| {
-                let jpeg = thumbs::preview_from_os(&path, 0).ok()?;
+                let jpeg = thumbs::preview_from_os(&path, &Default::default()).ok()?;
                 image::load_from_memory(&jpeg).ok()
             });
             Assessed::Done(img.map(|img| assess(&img)))

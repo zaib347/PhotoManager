@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { api, liveUrl, MediaKind, mediaUrl, thumbUrl, type AssetDetails, type View } from "../api";
 import { formatTakenAt } from "../format";
 import type { DayStore, Position } from "../timeline/dayStore";
-import { photoTurns } from "../turns";
+import { lookKey, photoLooks } from "../looks";
+import { Editor } from "../editor/Editor";
 import { InfoPanel } from "./InfoPanel";
 import { ZoomableImage } from "./ZoomableImage";
 
@@ -24,6 +25,7 @@ type Props = {
   onNavigate: (view: View) => void;
   /** The timeline must refresh when a date changes (items move between days). */
   onDatesChanged: () => Promise<void>;
+  onError: (e: unknown) => void;
 };
 
 function readShowInfo() {
@@ -47,14 +49,16 @@ export function Viewer({
   onRemoveTag,
   onNavigate,
   onDatesChanged,
+  onError,
 }: Props) {
   useSyncExternalStore(store.subscribe, store.getVersion);
-  useSyncExternalStore(photoTurns.subscribe, photoTurns.getVersion);
+  useSyncExternalStore(photoLooks.subscribe, photoLooks.getVersion);
   const [pos, setPos] = useState(start);
   const [asset, setAsset] = useState<AssetDetails | null>(null);
   const [failed, setFailed] = useState(false);
   const [showInfo, setShowInfo] = useState(readShowInfo);
   const [playingLive, setPlayingLive] = useState(false);
+  const [editing, setEditing] = useState(false);
   const id = store.idAt(pos);
 
   const [detailsVersion, setDetailsVersion] = useState(0);
@@ -152,6 +156,7 @@ export function Viewer({
   );
 
   useEffect(() => {
+    if (editing) return; // The editor has the keyboard.
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // Typing a tag name must not trigger shortcuts.
@@ -166,13 +171,14 @@ export function Viewer({
       else if (e.key === "Delete") removeCurrent();
       else if (e.key === "r") rotateCurrent(1);
       else if (e.key === "R") rotateCurrent(-1);
+      else if (e.key === "e" && asset && asset.mediaKind !== MediaKind.Video) setEditing(true);
       else return;
       e.preventDefault();
       e.stopPropagation();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [pos, go, onClose, toggleInfo, toggleFavorite, setRating, removeCurrent, rotateCurrent]);
+  }, [editing, asset, pos, go, onClose, toggleInfo, toggleFavorite, setRating, removeCurrent, rotateCurrent]);
 
   const isVideo = asset?.mediaKind === MediaKind.Video;
   const onlineFile = asset?.files.find((f) => f.online);
@@ -223,6 +229,9 @@ export function Viewer({
                 <button className="ghost" onClick={() => rotateCurrent(1)} title="Rotate right (R)">
                   ⟳
                 </button>
+                <button className="ghost" onClick={() => setEditing(true)} title="Crop, light and color (E)">
+                  Edit
+                </button>
               </>
             )}
             <button className="ghost" onClick={toggleHidden}>
@@ -266,7 +275,7 @@ export function Viewer({
                 onError={() => setFailed(true)}
               />
             ) : (
-              <ZoomableImage key={`${id}:${photoTurns.get(id)}`} placeholder={thumbUrl(id)} src={mediaUrl(id)} onError={() => setFailed(true)} />
+              <ZoomableImage key={lookKey(id)} placeholder={thumbUrl(id)} src={mediaUrl(id)} onError={() => setFailed(true)} />
             ))}
           {id !== undefined && playingLive && (
             <video
@@ -300,6 +309,7 @@ export function Viewer({
           />
         )}
       </div>
+      {editing && asset && <Editor id={asset.id} onClose={() => setEditing(false)} onError={onError} />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { turnsQuery } from "./turns";
+import { lookQuery } from "./looks";
 
 /** Views that are pages rather than timelines. */
 const PAGES = ["events", "trips", "duplicates", "similar", "removed", "organize"] as const;
@@ -188,6 +188,38 @@ export type ExportOptions = {
   /** Drawn on every copy when set. */
   watermark: Watermark | null;
   folder: string;
+};
+
+/** A non-destructive edit. Sliders run from -100 to 100 with 0 "as shot"; exposure is in stops. */
+export type Recipe = {
+  /** Fractions of the straightened photo. */
+  crop: { x: number; y: number; w: number; h: number } | null;
+  /** Degrees, -45 to 45, clockwise. */
+  straighten: number;
+  exposure: number;
+  contrast: number;
+  highlights: number;
+  shadows: number;
+  temperature: number;
+  tint: number;
+  vibrance: number;
+  saturation: number;
+  /** 0 to 100. */
+  sharpen: number;
+};
+
+export const NO_EDIT: Recipe = {
+  crop: null,
+  straighten: 0,
+  exposure: 0,
+  contrast: 0,
+  highlights: 0,
+  shadows: 0,
+  temperature: 0,
+  tint: 0,
+  vibrance: 0,
+  saturation: 0,
+  sharpen: 0,
 };
 
 export type WatermarkPosition = "topLeft" | "topRight" | "bottomLeft" | "bottomRight" | "center" | "tiled";
@@ -384,8 +416,17 @@ export const api = {
   cancelExport: () => invoke<void>("cancel_export"),
   /** Turns photos without touching their files: 1 clockwise, -1 counter-clockwise. */
   rotatePhotos: (ids: number[], quarters: number) => invoke<[number, number][]>("rotate_photos", { ids, quarters }),
-  /** Every turned photo with its quarter turns. */
-  turnedPhotos: () => invoke<[number, number][]>("turned_photos"),
+  /** The saved edit of a photo, or null when it shows as shot. */
+  editGet: (id: number) => invoke<Recipe | null>("edit_get", { id }),
+  /** The photo with `recipe` applied, about 1600 px across. */
+  editPreview: async (id: number, recipe: Recipe) =>
+    new Blob([await invoke<ArrayBuffer>("edit_preview", { id, recipe })], { type: "image/jpeg" }),
+  /** Suggested light and colour; crop and straightening are kept. */
+  editAuto: (id: number, recipe: Recipe) => invoke<Recipe>("edit_auto", { id, recipe }),
+  /** Saves an edit (null reverts to the original). Returns the new edit version. */
+  editSave: (id: number, recipe: Recipe | null) => invoke<number>("edit_save", { id, recipe }),
+  /** Every turned or edited photo: (id, turns, edit version). */
+  adjustedPhotos: () => invoke<[number, number, number][]>("adjusted_photos"),
   /** Photo `id` with the watermark drawn on it, as a JPEG. */
   watermarkPreview: async (id: number, watermark: Watermark) =>
     new Blob([await invoke<ArrayBuffer>("watermark_preview", { id, watermark })], { type: "image/jpeg" }),
@@ -423,7 +464,7 @@ export const events = {
   similarChanged: (cb: () => void): Promise<UnlistenFn> => listen("similar-changed", () => cb()),
 };
 
-export const thumbUrl = (assetId: number) => convertFileSrc(String(assetId), "thumb") + turnsQuery(assetId);
-export const mediaUrl = (assetId: number) => convertFileSrc(String(assetId), "media") + turnsQuery(assetId);
+export const thumbUrl = (assetId: number) => convertFileSrc(String(assetId), "thumb") + lookQuery(assetId);
+export const mediaUrl = (assetId: number) => convertFileSrc(String(assetId), "media") + lookQuery(assetId);
 /** The motion clip of a Live Photo (never turned). */
 export const liveUrl = (assetId: number) => `${convertFileSrc(String(assetId), "media")}?live`;

@@ -244,8 +244,17 @@ Ground rule: tools write new files; originals are only replaced through `fileops
       size), hashing and export. Image URLs carry `?t=<turns>` so cached images never show the
       old way round. Selection bar ⟲ ⟳, viewer buttons and R / Shift+R. Not written into the file
       (other apps still see the original orientation); "Save rotation to file" could come later
-- [ ] Non-destructive editor (crop, straighten, exposure, contrast, highlights/shadows,
-      saturation, white balance, sharpen, auto-enhance, presets; recipe stored, Revert)
+- [x] Non-destructive editor: crop (free / original / square / 4:3 / 3:2 / 16:9), straighten,
+      exposure, contrast, highlights, shadows, warmth, tint, vibrance, saturation, sharpen,
+      auto-enhance, six looks, hold-to-compare, Revert to original. The recipe is JSON in
+      `user_meta.edit` (schema v14) with `edit_v` counting saves for image URLs; it is applied
+      after turns in thumbnails, viewer (full size), export and the watermark preview. Turning a
+      cropped photo turns its crop too. Rendering is CPU (rayon): ~130 ms per 1600 px preview,
+      ~0.5 s for a 12 MP photo with every adjustment (release, 8 threads)
+- [ ] Faster JPEG everywhere: the editor preview uses `jpeg-encoder` (3–4× faster than the
+      `image` crate's encoder); thumbnails and export could switch too
+- [ ] Copy an edit and paste it onto other photos; edit several at once
+- [ ] WebGL preview if CPU previews feel slow on low-end laptops
 
 ## M0 results
 

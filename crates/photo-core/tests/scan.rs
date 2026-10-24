@@ -218,7 +218,8 @@ fn removing_root_drops_its_assets() {
 #[test]
 fn thumbnails_from_files() {
     let f = fixture();
-    let jpeg = thumbs::from_file(&f.photos.join("chart.png"), Some(6)).unwrap();
+    let jpeg =
+        thumbs::from_file(&f.photos.join("chart.png"), Some(6), &Default::default()).unwrap();
     let img = image::load_from_memory(&jpeg).unwrap();
     // 40x30 is smaller than the grid size, so it is kept, then rotated 90°.
     assert_eq!((img.width(), img.height()), (30, 40));

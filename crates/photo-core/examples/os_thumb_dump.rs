@@ -11,7 +11,7 @@ fn main() -> photo_core::Result<()> {
     let output =
         std::path::PathBuf::from(args.next().expect("usage: os_thumb_dump <file> <out.jpg>"));
     let t = Instant::now();
-    let jpeg = photo_core::thumbs::from_os(&input, 0)?;
+    let jpeg = photo_core::thumbs::from_os(&input, &Default::default())?;
     println!("{} bytes in {:?}", jpeg.len(), t.elapsed());
     std::fs::write(output, jpeg)?;
     Ok(())

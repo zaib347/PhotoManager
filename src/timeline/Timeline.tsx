@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { liveUrl, MediaKind, thumbUrl } from "../api";
-import { photoTurns } from "../turns";
+import { photoLooks } from "../looks";
 import { formatDay, formatDuration } from "../format";
 import type { DayStore, Position } from "./dayStore";
 import { buildGrid, GAP, HEADER_H, sectionAt } from "./grid";
@@ -39,7 +39,7 @@ type Props = {
  */
 export function Timeline({ store, selection, keyboard, onActivate, onToggle, onToggleDay, reveal }: Props) {
   useSyncExternalStore(store.subscribe, store.getVersion);
-  useSyncExternalStore(photoTurns.subscribe, photoTurns.getVersion);
+  useSyncExternalStore(photoLooks.subscribe, photoLooks.getVersion);
   const layout = store.layout;
   const viewportRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });

@@ -6,7 +6,7 @@ import { AlbumHeader } from "../collections/AlbumHeader";
 import { useCollections } from "../collections/context";
 import { EventHeader } from "../events/EventHeader";
 import { TripHeader } from "../trips/TripHeader";
-import { photoTurns } from "../turns";
+import { photoLooks } from "../looks";
 import { DayStore, type Position } from "../timeline/dayStore";
 import { Timeline } from "../timeline/Timeline";
 import { Viewer } from "../viewer/Viewer";
@@ -155,7 +155,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
   );
 
   const rotate = useCallback(async (ids: number[], quarters: number) => {
-    photoTurns.set(await api.rotatePhotos(ids, quarters));
+    photoLooks.setTurns(await api.rotatePhotos(ids, quarters));
   }, []);
 
   const run = (action: () => Promise<void>) => action().catch(onError);
@@ -319,6 +319,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
           onRotate={rotate}
           onAddTag={addTag}
           onDatesChanged={afterTimelineChange}
+          onError={onError}
           onRemoveTag={removeTag}
           onNavigate={(target) => {
             setViewing(null);

@@ -28,14 +28,21 @@ blurry/dark shots get a warning under them. Assessment of grouped photos runs af
 (log line "N shots assessed").
 
 **Tools milestone (new, before the beta; installer/signing/auto-update are left for the very
-end, by the user's choice):** export and watermark merged to `main`; rotate on branch
-**`tools-rotate`**, not merged yet. Test export: select photos → **Export** → pick format/size/quality/folder →
+end, by the user's choice):** export, watermark and rotate merged to `main`; the editor on
+branch **`tools-editor`**, not merged yet. Test export: select photos → **Export** → pick format/size/quality/folder →
 toolbar shows progress → files keep their date (check a HEIC → JPEG too, including its rotation,
 which isn't verified). Test watermark: in the Export panel tick **Add a watermark** → type text or
 pick a logo PNG → the preview on the first selected photo updates → exported copies carry it.
 Test rotate: select photos → ⟲ / ⟳ (or R / Shift+R in the viewer) → grid and viewer turn at
 once, stay turned after a restart, and exports come out turned. The file itself is unchanged.
-Next tools: the non-destructive editor (see PLAN "Tools checklist").
+Test the editor: open a photo → **Edit** (or E) → move sliders (preview updates), try Auto-enhance,
+a look, Crop with a shape and Straighten, hold Compare → **Save** → grid thumbnail and viewer
+show the edit, export carries it → Edit again → **Revert to original**. Rotating a cropped photo
+should keep the same part of the picture. Code: `crates/photo-core/src/edit.rs` (recipe,
+rendering, `Look` = turns + edit), `src-tauri/src/edit_commands.rs`, `src/editor/`, `src/looks.ts`
+(image URLs carry `?t=<turns>&e=<edit version>`).
+After Tools: the beta prep (installer, signing, auto-update) the user left for the end, and
+Browse by place (M3).
 
 ## First thing to do
 

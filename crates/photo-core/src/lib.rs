@@ -8,6 +8,7 @@ pub mod collections;
 pub mod dates;
 pub mod db;
 pub mod duplicates;
+pub mod edit;
 pub mod events;
 pub mod export;
 pub mod fileops;

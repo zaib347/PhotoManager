@@ -25,6 +25,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::db::Db;
+use crate::edit::Look;
 use crate::library::{self, AssetSource};
 use crate::watermark::{self, Mark, Watermark};
 use crate::{Error, Result};
@@ -311,17 +312,17 @@ pub fn prepare_mark(options: &Options) -> Result<Option<Mark>> {
     }
 }
 
-/// Converts one file, turned `turns` quarter turns clockwise and with `mark` drawn
-/// on it. Returns the new file's bytes and extension.
+/// Converts one file, with its look (turns and edit) and `mark` drawn on it. Returns
+/// the new file's bytes and extension.
 pub fn convert(
     source: &Path,
-    turns: u8,
+    look: &Look,
     options: &Options,
     mark: Option<&Mark>,
 ) -> Result<(Vec<u8>, &'static str)> {
     let bytes = std::fs::read(source)?;
     let decoded = decode(source, &bytes)?;
-    let image = crate::rotate::turn(decoded.image, turns);
+    let image = look.apply(decoded.image);
     let mut image = match options.max_edge {
         Some(edge) => resize(image, edge)?,
         None => image,
@@ -341,13 +342,19 @@ pub fn convert(
     ))
 }
 
-/// A photo upright and shrunk, kept while watermark settings change.
+/// A photo upright and shrunk, kept while watermark or edit settings change.
 pub struct PreviewBase(DynamicImage);
 
+impl PreviewBase {
+    pub fn image(&self) -> &DynamicImage {
+        &self.0
+    }
+}
+
 /// The photo upright and shrunk to `max_edge`, for previewing a watermark on.
-pub fn preview_base(source: &Path, turns: u8, max_edge: u32) -> Result<PreviewBase> {
+pub fn preview_base(source: &Path, look: &Look, max_edge: u32) -> Result<PreviewBase> {
     let bytes = std::fs::read(source)?;
-    let image = crate::rotate::turn(decode(source, &bytes)?.image, turns);
+    let image = look.apply(decode(source, &bytes)?.image);
     Ok(PreviewBase(resize(image, max_edge)?))
 }
 
@@ -422,8 +429,8 @@ pub fn run(
     for &id in asset_ids {
         match library::asset_source(&db.read(), id)? {
             Some(AssetSource::File {
-                path, turns, kind, ..
-            }) if kind != 1 => sources.push((path, turns)),
+                path, look, kind, ..
+            }) if kind != 1 => sources.push((path, look)),
             Some(AssetSource::Unavailable { .. }) => {
                 report.failed += 1;
                 if report.errors.len() < MAX_ERRORS {
@@ -447,11 +454,11 @@ pub fn run(
     let results: Vec<Option<std::result::Result<(u64, u64), String>>> = pool.install(|| {
         sources
             .par_iter()
-            .map(|(source, turns)| {
+            .map(|(source, look)| {
                 if cancel.load(Ordering::Relaxed) {
                     return None;
                 }
-                let result = convert(source, *turns, options, mark.as_ref())
+                let result = convert(source, look, options, mark.as_ref())
                     .and_then(|(data, ext)| {
                         let stem = source
                             .file_stem()
@@ -548,7 +555,7 @@ mod tests {
             max_edge: Some(300),
             ..Default::default()
         };
-        let (data, ext) = convert(&source, 0, &options, None).unwrap();
+        let (data, ext) = convert(&source, &Look::default(), &options, None).unwrap();
         assert_eq!(ext, "jpg");
         let img = image::load_from_memory(&data).unwrap();
         // 600×400 turned on its side, then the long edge cut to 300.
@@ -572,7 +579,7 @@ mod tests {
                 remove_location: true,
                 ..Default::default()
             };
-            let (data, got) = convert(&source, 0, &options, None).unwrap();
+            let (data, got) = convert(&source, &Look::default(), &options, None).unwrap();
             assert_eq!(got, ext);
             assert_eq!(image::guess_format(&data).unwrap().extensions_str()[0], ext);
             let exif = exif_of(&data);
@@ -596,7 +603,10 @@ mod tests {
                 quality,
                 ..Default::default()
             };
-            convert(&source, 0, &options, None).unwrap().0.len()
+            convert(&source, &Look::default(), &options, None)
+                .unwrap()
+                .0
+                .len()
         };
         assert!(size(40) < size(95));
 

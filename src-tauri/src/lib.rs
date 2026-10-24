@@ -1,6 +1,7 @@
 mod cleanup_commands;
 mod collection_commands;
 mod diag;
+mod edit_commands;
 mod event_commands;
 mod export_commands;
 mod memory_commands;
@@ -17,7 +18,7 @@ use std::time::{Duration, Instant};
 use photo_core::db::Db;
 use photo_core::timeline::{Filter, View};
 use photo_core::{
-    assets, events, fileops, library, places, rotate, schema, synth, thumbs, timeline, trips,
+    assets, edit, events, fileops, library, places, rotate, schema, synth, thumbs, timeline, trips,
 };
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 
@@ -41,6 +42,8 @@ pub(crate) struct AppState {
     export_cancel: AtomicBool,
     /// The photo the export panel previews watermarks on, decoded once.
     watermark_base: Mutex<Option<(i64, Arc<photo_core::export::PreviewBase>)>>,
+    /// The photo open in the editor, decoded once (turned, without its edit).
+    edit_base: Mutex<Option<(i64, Arc<photo_core::export::PreviewBase>)>>,
 }
 
 impl AppState {
@@ -139,15 +142,16 @@ async fn rotate_photos(
         let turned = rotate::rotate(&s.library, &s.thumbs, &ids, quarters)?;
         // The watermark preview holds a decoded photo, which may be one of these.
         *s.watermark_base.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        *s.edit_base.lock().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(turned)
     })
     .await
 }
 
-/// Every turned photo and its turns.
+/// Every turned or edited photo: (id, turns, edit version).
 #[tauri::command]
-async fn turned_photos(state: State<'_, Arc<AppState>>) -> CmdResult<Vec<(i64, u8)>> {
-    blocking(&state, |s| rotate::turned(&s.library.read())).await
+async fn adjusted_photos(state: State<'_, Arc<AppState>>) -> CmdResult<Vec<(i64, u8, i64)>> {
+    blocking(&state, |s| edit::adjusted(&s.library.read())).await
 }
 
 #[tauri::command]
@@ -325,6 +329,7 @@ pub fn run() {
                 exporting: AtomicBool::new(false),
                 export_cancel: AtomicBool::new(false),
                 watermark_base: Mutex::default(),
+                edit_base: Mutex::default(),
             });
 
             library::refresh_volumes(&state.library.write())?;
@@ -353,7 +358,7 @@ pub fn run() {
             filter_options,
             set_favorite,
             rotate_photos,
-            turned_photos,
+            adjusted_photos,
             set_rating,
             set_hidden,
             memory_commands::on_this_day,
@@ -376,6 +381,10 @@ pub fn run() {
             export_commands::export_photos,
             export_commands::cancel_export,
             export_commands::watermark_preview,
+            edit_commands::edit_get,
+            edit_commands::edit_preview,
+            edit_commands::edit_auto,
+            edit_commands::edit_save,
             cleanup_commands::duplicate_overview,
             cleanup_commands::duplicate_groups,
             cleanup_commands::remove_duplicates,

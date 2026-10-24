@@ -342,7 +342,7 @@ impl Scanner<'_> {
                         update_asset(&tx, asset_id, p.work.kind, &p.meta)?;
                         summary.updated += 1;
                         stale_thumbs.push(asset_id);
-                        if crate::rotate::turns_of(&tx, asset_id)? != 0 {
+                        if !crate::edit::look_of(&tx, asset_id)?.is_plain() {
                             p.thumb = None;
                         }
                         asset_id

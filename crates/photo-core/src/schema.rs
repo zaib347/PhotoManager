@@ -267,6 +267,14 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     ALTER TABLE user_meta ADD COLUMN turns INTEGER NOT NULL DEFAULT 0;
     CREATE INDEX idx_user_meta_turned ON user_meta (asset_id) WHERE turns != 0;
     ",
+    // v14: non-destructive edits. `edit`: the recipe (JSON, see `edit::Recipe`), NULL
+    // when the photo shows as shot; `edit_v` counts saves so image URLs change.
+    "
+    ALTER TABLE user_meta ADD COLUMN edit TEXT;
+    ALTER TABLE user_meta ADD COLUMN edit_v INTEGER NOT NULL DEFAULT 0;
+    DROP INDEX idx_user_meta_turned;
+    CREATE INDEX idx_user_meta_adjusted ON user_meta (asset_id) WHERE turns != 0 OR edit_v != 0;
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[
