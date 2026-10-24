@@ -96,8 +96,14 @@ pub fn extract(path: &Path, kind: MediaKind, mtime_ms: i64) -> Metadata {
     let mut meta = Metadata::default();
     match kind {
         MediaKind::Photo => {
-            if let Some(exif) = read_exif(path) {
-                apply_exif(&exif, &mut meta);
+            match read_exif(path) {
+                Some(exif) => apply_exif(&exif, &mut meta),
+                // CR3 and RAF keep their EXIF where the reader can't look.
+                None => {
+                    for exif in crate::raw::exif(path) {
+                        apply_exif(&exif, &mut meta);
+                    }
+                }
             }
             if meta.width.is_none()
                 && let Ok((w, h)) = image::image_dimensions(path)
@@ -123,6 +129,16 @@ pub fn extract(path: &Path, kind: MediaKind, mtime_ms: i64) -> Metadata {
                 meta.height = v.height;
                 meta.lat = v.lat;
                 meta.lon = v.lon;
+            } else if let Some(v) = crate::os_thumb::video_props(path) {
+                // AVI, MKV, MTS…: what the OS's own handlers read from the file.
+                if let Some(recorded) = v.recorded_ms {
+                    meta.tz_offset_min = local_offset_min(recorded);
+                    meta.taken_at = recorded;
+                    meta.taken_src = Some(TimeSource::Video);
+                }
+                meta.duration_ms = v.duration_ms;
+                meta.width = v.width;
+                meta.height = v.height;
             }
         }
     }

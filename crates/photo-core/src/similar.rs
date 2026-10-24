@@ -529,7 +529,7 @@ fn assess_one(library: &Db, id: i64) -> Result<Assessed> {
             // The OS decoder at reduced size first (fast), then our own in full.
             let img = crate::os_thumb::reduced_image(&path, REDUCED_EDGE)
                 .ok()
-                .or_else(|| image::open(&path).ok())
+                .or_else(|| crate::raw::open(&path).ok())
                 .or_else(|| {
                     let jpeg = thumbs::preview_from_os(&path, &Default::default()).ok()?;
                     image::load_from_memory(&jpeg).ok()

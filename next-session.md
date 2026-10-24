@@ -147,6 +147,13 @@ After M3 come:
 - **Don't launch app windows** while the user may be using the app. The user runs `npm run tauri dev` themselves.
 - **Speed checks:** run `cargo run --release -p photo-core --example scale_bench -- <db> 1000000` for 1M-photo timings.
 
+## M5 (in progress)
+
+Part 1 (Windows) on branch **`m5-windows`**, not merged yet: long/Unicode paths, RAW via
+embedded previews (`raw.rs`), video details from Windows for AVI/MKV/MTS/WebM. Test with real
+RAW files and a camcorder/MKV video if available. Next: Part 2, GitHub Actions CI. See PLAN
+"M5 checklist".
+
 ## GitHub
 
 `origin` = https://github.com/zaib347/PhotoManager (`main` pushed 2026-10-24). Push `main` after

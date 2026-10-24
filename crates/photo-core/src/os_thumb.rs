@@ -16,13 +16,49 @@ use crate::{Error, Result};
 pub fn thumbnail(path: &Path, size: u32) -> Result<RgbImage> {
     #[cfg(windows)]
     {
-        match windows_shell::thumbnail(path, size) {
+        let shell = windows_shell::thumbnail(path, size);
+        // The shell can't open some long paths (no short names on that drive); WIC can,
+        // for still images.
+        let shell = shell.or_else(|e| {
+            windows_wic::decode(path, Some(size))
+                .map(|img| {
+                    image::DynamicImage::ImageRgb8(img)
+                        .thumbnail(size, size)
+                        .to_rgb8()
+                })
+                .map_err(|_| e)
+        });
+        match shell {
             Ok(img) => return Ok(img),
             Err(e) if !ffmpeg_available() => return Err(e),
             Err(_) => {}
         }
     }
     ffmpeg_frame(path, size)
+}
+
+/// What the OS knows about a video file.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct VideoProps {
+    pub duration_ms: Option<i64>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    /// When it was recorded (UTC), if the file says.
+    pub recorded_ms: Option<i64>,
+}
+
+/// Video details from the OS, for containers this crate doesn't parse (AVI, MKV,
+/// MTS…). Windows only for now.
+pub fn video_props(path: &Path) -> Option<VideoProps> {
+    #[cfg(windows)]
+    {
+        windows_shell::video_props(path).ok()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        None
+    }
 }
 
 /// Decodes a whole image at full resolution with the OS's codecs (HEIC and other
@@ -53,7 +89,7 @@ mod windows_wic {
         WICBitmapPaletteTypeCustom, WICDecodeMetadataCacheOnDemand,
     };
     use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
-    use windows::core::{HSTRING, Interface};
+    use windows::core::Interface;
 
     use crate::{Error, Result};
 
@@ -65,7 +101,7 @@ mod windows_wic {
     /// (up to 1/8) that keeps the long edge at least that long.
     pub fn decode(path: &Path, min_edge: Option<u32>) -> Result<RgbImage> {
         super::windows_shell::ensure_com();
-        let path = HSTRING::from(std::path::absolute(path)?.as_os_str());
+        let path = super::windows_shell::api_path(path)?;
         // SAFETY: plain COM calls on interfaces we own; the buffer is sized from the
         // frame's own dimensions and stride.
         unsafe {
@@ -223,9 +259,102 @@ mod windows_shell {
         Error::Invalid(format!("Windows thumbnail failed: {e}"))
     }
 
+    /// A path for Windows APIs. Past the old 260-character limit only the `\\?\` form
+    /// (which skips the limit) opens, so long paths get it.
+    pub(super) fn api_path(path: &Path) -> Result<HSTRING> {
+        let path = std::path::absolute(path)?;
+        let text = path.as_os_str().to_string_lossy();
+        if text.len() < 240 || text.starts_with(r"\\?\") {
+            return Ok(HSTRING::from(path.as_os_str()));
+        }
+        Ok(match text.strip_prefix(r"\\") {
+            // \\server\share\… becomes \\?\UNC\server\share\…
+            Some(unc) => HSTRING::from(format!(r"\\?\UNC\{unc}")),
+            None => HSTRING::from(format!(r"\\?\{text}")),
+        })
+    }
+
+    /// The shell takes no `\\?\` paths, so a long path goes in its 8.3 short form
+    /// (`C:\USERS\NAME~1\…`), when the drive keeps short names.
+    fn shell_path(path: &Path) -> Result<HSTRING> {
+        let long = api_path(path)?;
+        if !long.to_string_lossy().starts_with(r"\\?\") {
+            return Ok(long);
+        }
+        use std::os::windows::ffi::OsStrExt;
+        let wide: Vec<u16> = long.to_os_string().encode_wide().chain([0]).collect();
+        let mut buf = vec![0u16; 1024];
+        // SAFETY: both buffers are NUL-terminated or sized as passed.
+        let n = unsafe {
+            windows_sys::Win32::Storage::FileSystem::GetShortPathNameW(
+                wide.as_ptr(),
+                buf.as_mut_ptr(),
+                buf.len() as u32,
+            )
+        } as usize;
+        let short = String::from_utf16_lossy(&buf[..n.min(buf.len())]);
+        let short = short.strip_prefix(r"\\?\").unwrap_or(&short);
+        if n == 0 || n >= buf.len() || short.len() >= 260 {
+            return Err(Error::Invalid(
+                "This path is too long for Windows thumbnails".into(),
+            ));
+        }
+        Ok(HSTRING::from(short))
+    }
+
+    /// Duration, frame size and recording date as Windows reports them (what
+    /// Explorer's Details pane shows), from whichever property handler knows the
+    /// format.
+    pub fn video_props(path: &Path) -> Result<super::VideoProps> {
+        use windows::Win32::Storage::EnhancedStorage::{
+            PKEY_Media_DateEncoded, PKEY_Media_Duration, PKEY_Video_FrameHeight,
+            PKEY_Video_FrameWidth,
+        };
+        use windows::Win32::System::Com::StructuredStorage::{
+            PropVariantToFileTime, PropVariantToUInt32, PropVariantToUInt64,
+        };
+        use windows::Win32::System::Variant::PSTF_UTC;
+        use windows::Win32::UI::Shell::PropertiesSystem::{
+            GPS_DEFAULT, IPropertyStore, SHGetPropertyStoreFromParsingName,
+        };
+
+        ensure_com();
+        let path = shell_path(path)?;
+        // SAFETY: plain COM calls; each PROPVARIANT is owned and dropped (cleared) here.
+        unsafe {
+            let store: IPropertyStore =
+                SHGetPropertyStoreFromParsingName(&path, None, GPS_DEFAULT).map_err(os_error)?;
+            let u32_of = |key| {
+                let v = store.GetValue(key).ok()?;
+                PropVariantToUInt32(&v).ok().filter(|&n| n > 0)
+            };
+            let duration_ms = store
+                .GetValue(&PKEY_Media_Duration)
+                .ok()
+                .and_then(|v| PropVariantToUInt64(&v).ok())
+                .filter(|&d| d > 0)
+                // 100-nanosecond units.
+                .map(|d| (d / 10_000) as i64);
+            let recorded_ms = store
+                .GetValue(&PKEY_Media_DateEncoded)
+                .ok()
+                .and_then(|v| PropVariantToFileTime(&v, PSTF_UTC).ok())
+                .map(|ft| ((ft.dwHighDateTime as u64) << 32) | ft.dwLowDateTime as u64)
+                .filter(|&t| t > 0)
+                // FILETIME counts from 1601.
+                .map(|t| (t / 10_000) as i64 - 11_644_473_600_000);
+            Ok(super::VideoProps {
+                duration_ms,
+                width: u32_of(&PKEY_Video_FrameWidth),
+                height: u32_of(&PKEY_Video_FrameHeight),
+                recorded_ms,
+            })
+        }
+    }
+
     pub fn thumbnail(path: &Path, size: u32) -> Result<RgbImage> {
         ensure_com();
-        let path = HSTRING::from(std::path::absolute(path)?.as_os_str());
+        let path = shell_path(path)?;
         // SAFETY: plain COM calls; the HBITMAP is owned by us and freed below.
         unsafe {
             let factory: IShellItemImageFactory =
@@ -350,6 +479,40 @@ mod tests {
         // Small images aren't reduced at all.
         let small = super::reduced_image(&path, 4000).unwrap();
         assert_eq!(small.width(), 4000);
+    }
+
+    #[test]
+    fn windows_apis_open_long_unicode_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut deep = dir.path().to_path_buf();
+        for i in 0..5 {
+            deep.push(format!("写真 📷 vacances d'été {i} {}", "x".repeat(40)));
+        }
+        std::fs::create_dir_all(&deep).unwrap();
+        let path = deep.join("Ünïcødé 🌅.png");
+        RgbImage::from_pixel(300, 200, Rgb([10, 200, 10]))
+            .save(&path)
+            .unwrap();
+        assert!(path.as_os_str().len() > 300);
+        assert_eq!(super::full_image(&path).unwrap().width(), 300);
+        assert_eq!(super::reduced_image(&path, 100).unwrap().width(), 150);
+        super::thumbnail(&path, 64).unwrap();
+    }
+
+    /// A sample MKV that ships with Windows 11 (Settings uses it); skipped if absent.
+    #[test]
+    fn windows_reads_video_details() {
+        let windir = std::env::var_os("WINDIR").unwrap_or_else(|| r"C:\Windows".into());
+        let path = std::path::Path::new(&windir)
+            .join(r"ImmersiveControlPanel\SystemSettings\Assets\SDRSampleAccessibility.mkv");
+        if !path.is_file() {
+            return;
+        }
+        let props = super::windows_shell::video_props(&path).unwrap();
+        assert!(props.width.is_some_and(|w| w > 0), "{props:?}");
+        assert!(props.height.is_some_and(|h| h > 0), "{props:?}");
+        assert!(props.duration_ms.is_some_and(|d| d > 0), "{props:?}");
+        eprintln!("{props:?}");
     }
 
     #[test]

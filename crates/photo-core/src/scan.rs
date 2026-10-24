@@ -291,9 +291,12 @@ impl Scanner<'_> {
             }
         }
 
+        // A RAW's EXIF thumbnail is tiny (160 px); its big preview makes the grid
+        // thumbnail on first view instead.
         let thumb = meta
             .embedded_thumb
             .take()
+            .filter(|_| !crate::raw::is_raw(&work.abs))
             .and_then(|jpeg| thumbs::from_embedded(&jpeg, meta.orientation).ok());
         Prepared {
             work,

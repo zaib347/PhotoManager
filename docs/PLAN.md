@@ -263,6 +263,34 @@ Ground rule: tools write new files; originals are only replaced through `fileops
 - [ ] Copy an edit and paste it onto other photos; edit several at once
 - [ ] WebGL preview if CPU previews feel slow on low-end laptops
 
+## M5 checklist
+
+Order chosen by the user: Windows platform work first, then CI builds for all three OSes,
+then macOS/Linux; Windows code signing later; macOS signing + notarization at the very end,
+after testing; installer and auto-update just before the beta.
+
+Part 1, Windows:
+- [x] Long (> 260 characters) and Unicode paths: Rust's file APIs already handle them (test:
+      scan, thumbnails, export, remove, undo under a 300+ character path with accents, CJK and
+      emoji). WIC gets the `\\?\` form; the shell (thumbnails, video details) gets the 8.3 short
+      form, falling back to WIC for still images when a drive has no short names. Removed files
+      sit flat in the trash folder (`<n> <name>`) so deep folders don't stop the Recycle Bin.
+      Left: a library folder that is itself near 260 characters can't use the Recycle Bin
+- [x] RAW (CR2, CR3, NEF, ARW, DNG, ORF, PEF, SRW, RW2, RAF) through the camera's embedded
+      JPEG preview (`raw.rs`): grid thumbnails (made from the big preview, not the 160 px EXIF
+      one), viewer, editor, export (from the preview) and similar photos. CR3/RAF metadata from
+      their CMT boxes / preview EXIF. Tested on synthetic files only; needs real RAW samples
+- [x] Video details without ffmpeg: AVI, MKV, MTS, WebM (and MP4 our parser can't read) get
+      duration, size and recording date from Windows' property handlers. Thumbnails already
+      come from the shell. Not playable in the viewer (webview formats only): "Open in default
+      app" stays the way to play them
+
+Part 2, CI: GitHub Actions building Windows, macOS and Linux on every push (unsigned).
+Part 3, macOS (QuickLook/ImageIO decoders, disk UUIDs, permissions) and Linux (libheif,
+ffmpeg, FS UUIDs, non-UTF-8 names, AppImage/deb).
+Part 4, at the end: installer, Windows signing, macOS signing + notarization, auto-update,
+crash reports.
+
 ## M0 results
 
 ### `scale_bench`, 1M synthetic assets (release, dev workstation, 2026-10-23)

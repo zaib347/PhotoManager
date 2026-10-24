@@ -1,7 +1,9 @@
 //! Changes to the user's files, made safe.
 //!
 //! Nothing is ever deleted here. Removing a file moves it into a hidden
-//! `.photomanager-trash/<op>/` folder at the top of its library folder: a rename on
+//! `.photomanager-trash/<op>/` folder at the top of its library folder (flat, as
+//! `<n> <file name>`, so deep folders don't make trash paths too long for the
+//! Recycle Bin; the journal keeps where it came from): a rename on
 //! the same drive, so it's instant and can be undone at any time. Emptying hands the
 //! files to the OS trash, and only on drives where that really keeps them (see
 //! `volume::has_recycle_bin`).
@@ -311,7 +313,7 @@ fn plan(
         ))?;
         for r in &mut rows {
             if kind == Kind::Trash {
-                r.trash_rel = format!("{TRASH_DIR}/{op_id}/{}", r.rel_path);
+                r.trash_rel = format!("{TRASH_DIR}/{op_id}/{}", trash_name(r.seq, &r.rel_path));
             }
             insert.execute(params![
                 op_id,
@@ -622,6 +624,22 @@ fn trash_folders(db: &Db, op_id: i64) -> Result<Vec<PathBuf>> {
 
 /// Removes empty folders under and including `dir`, deepest first. Folders that still
 /// hold anything are left alone, so this can never delete a file.
+/// A removed file's name in the trash folder: its number in the operation (so names
+/// never clash) and its own name, shortened to keep paths short.
+fn trash_name(seq: i64, rel_path: &str) -> String {
+    const MAX_CHARS: usize = 80;
+    let name = rel_path.rsplit('/').next().unwrap_or(rel_path);
+    if name.chars().count() <= MAX_CHARS {
+        return format!("{seq} {name}");
+    }
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((stem, ext)) if ext.len() <= 10 => (stem, format!(".{ext}")),
+        _ => (name, String::new()),
+    };
+    let stem: String = stem.chars().take(MAX_CHARS - ext.chars().count()).collect();
+    format!("{seq} {stem}{ext}")
+}
+
 fn prune_empty(dir: &Path) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -788,11 +806,13 @@ mod tests {
         let report = trash(&db, &ids[1..2], "duplicates", true).unwrap();
         assert_eq!((report.done, report.failed), (1, 0));
         assert!(!photos.join("sub/a copy.jpg").exists());
-        let in_trash = photos
-            .join(TRASH_DIR)
-            .join(report.op_id.to_string())
-            .join("sub/a copy.jpg");
-        assert!(in_trash.is_file());
+        let folder = photos.join(TRASH_DIR).join(report.op_id.to_string());
+        let kept: Vec<String> = std::fs::read_dir(&folder)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(kept.len(), 1);
+        assert!(kept[0].ends_with(" a copy.jpg"), "flat, numbered: {kept:?}");
         assert_eq!(file_count(&db), 2);
 
         let ops = list(&db.read(), Kind::Trash, 10).unwrap();

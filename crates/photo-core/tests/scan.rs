@@ -769,3 +769,86 @@ fn similar_shots_group_and_extra_ones_can_be_removed_and_restored() {
             .all(|g| g.members.iter().all(|m| !burst.contains(&m.asset_id)))
     );
 }
+
+/// Folders nested past Windows' old 260-character limit, with accents, CJK and emoji
+/// in every name: scanning, thumbnails, export, removal and undo all have to work.
+#[test]
+fn long_and_unicode_paths_work_end_to_end() {
+    let f = fixture();
+    let mut deep = f.photos.clone();
+    for i in 0..5 {
+        deep.push(format!(
+            "Família 写真 📷 vacances d'été {i} {}",
+            "x".repeat(30)
+        ));
+    }
+    fs::create_dir_all(&deep).unwrap();
+    let photo = deep.join("Ünïcødé 照片 🌅 sunrise.jpg");
+    write_jpeg(&photo, 42);
+    fs::copy(&photo, deep.join("Ünïcødé 照片 🌅 sunrise (1).jpg")).unwrap();
+    RgbImage::from_pixel(50, 40, Rgb([1, 2, 3]))
+        .save(deep.join("スクリーン.png"))
+        .unwrap();
+    assert!(photo.as_os_str().len() > 300, "{}", photo.display());
+
+    let s = f.scan();
+    assert_eq!(s.errors, 0, "{s:?}");
+    assert_eq!(f.visible_assets(), 6, "two new photos (one with a copy)");
+
+    let png = f.asset_of(&format!(
+        "{}/スクリーン.png",
+        deep.strip_prefix(&f.photos)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/")
+    ));
+    let Some(library::AssetSource::File { path, .. }) =
+        library::asset_source(&f.library.read(), png).unwrap()
+    else {
+        panic!("the long path is reachable");
+    };
+    thumbs::from_file(&path, None, &Default::default()).unwrap();
+
+    // Export into a long folder too.
+    let out = deep.join("export ✓");
+    let options = photo_core::export::Options {
+        folder: out.clone(),
+        ..Default::default()
+    };
+    let ids: Vec<i64> = f
+        .library
+        .read()
+        .prepare("SELECT DISTINCT asset_id FROM files WHERE rel_path LIKE '%Família%'")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    let report = photo_core::export::run(
+        &f.library,
+        &ids,
+        &options,
+        &AtomicBool::new(false),
+        &|_, _| {},
+    )
+    .unwrap();
+    assert_eq!(
+        (report.exported, report.failed),
+        (2, 0),
+        "{:?}",
+        report.errors
+    );
+
+    // Remove the extra copy, then undo.
+    let extras = duplicates::extras(&f.library.read(), None, &Default::default()).unwrap();
+    assert_eq!(extras.len(), 1);
+    let removed = fileops::trash(&f.library, &extras, "duplicates", true).unwrap();
+    assert_eq!(
+        (removed.done, removed.failed),
+        (1, 0),
+        "{:?}",
+        removed.errors
+    );
+    fileops::undo(&f.library, removed.op_id).unwrap();
+    assert!(deep.join("Ünïcødé 照片 🌅 sunrise (1).jpg").is_file());
+}
