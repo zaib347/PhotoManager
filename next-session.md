@@ -9,13 +9,12 @@ The full plan and checklists are in [docs/PLAN.md](docs/PLAN.md).
 
 | Branch | Feature | State |
 |---|---|---|
-| `m7-ai` (from `f-slideshow`) | M7.1 search by description, smart albums | committed, waiting for the user's test |
-| `m7-people-upscale-text` (from `m7-ai`) | M7.2 People, M7.3 Upscale, M7.4 Text in photos (Windows OCR) | committed, waiting for the user's test |
+| `m7-ai` (from `f-slideshow`) | M7.1 search by description, smart albums | merged to `main` and pushed |
+| `m7-people-upscale-text` (from `m7-ai`) | M7.2 People, M7.3 Upscale, M7.4 Text in photos (Windows OCR) | merged to `main` and pushed |
 
 - Schema is **v20** (v18 search embeddings, v19 faces/people, v20 text FTS5); thumbs DB v2
   (face portraits).
-- Merge order after the go-ahead: `f-slideshow` → `m7-ai` → `m7-people-upscale-text` (all
-  fast-forwards).
+- On 2026-10-24 the user asked to push: `main` now has F5, F6 and all of M7, pushed to origin.
 - **After M7 the user wants detailed testing of the whole app, then the free trial and
   subscription system (M6) as the very last step.**
 
@@ -38,9 +37,7 @@ for approval:
 | `f-collage` | F5 collage and print layouts | committed, waiting for the user's test |
 | `f-slideshow` (from `f-collage`) | F6 memory slideshow and video | committed, waiting for the user's test |
 
-- `main` is **5 commits ahead of origin** (F1–F4 + handoff): pushing was blocked by the
-  permission settings. The user runs `git push origin main`, or allows the push.
-- Merge `f-slideshow` (fast-forward; it contains `f-collage`) after the user's go-ahead.
+- F5–F6 were merged to `main` and pushed with M7 (2026-10-24).
 - Schema is **v17**.
 
 **What the user should try in the app:**
@@ -61,8 +58,8 @@ free trial and **M6 subscription/payments** last. See docs/PLAN.md.
 |---|---|
 | M0–M4, Tools, M5 part 1 + CI | Done, on `main` |
 | F1–F4 | Done, merged to `main` (not pushed) |
-| F5–F6 | Built on branches, waiting for testing |
-| M7 AI pack (search, people, upscale, OCR; opt-in) | Built on branches, waiting for testing |
+| F5–F6 | On `main`, pushed; the user still tests them |
+| M7 AI pack (search, people, upscale, OCR; opt-in) | On `main`, pushed; the user still tests it |
 | M6 free trial + subscription | Last, after detailed testing |
 | Beta prep; M5 parts 3–4 (macOS/Linux, signing) | Later, when the user says |
 
