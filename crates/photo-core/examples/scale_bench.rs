@@ -93,6 +93,14 @@ fn main() -> photo_core::Result<()> {
         options.countries.len(),
         t.elapsed()
     );
+    let t = Instant::now();
+    let countries = places::browse(&db.read())?;
+    println!(
+        "places page ({} countries, {} towns): {:?}",
+        countries.len(),
+        countries.iter().map(|c| c.places.len()).sum::<usize>(),
+        t.elapsed()
+    );
     if let Some(top) = options.places.first() {
         let filter = timeline::Filter {
             place_ids: vec![top.place.id],

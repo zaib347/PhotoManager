@@ -53,6 +53,12 @@ pub fn catch_up(app: &AppHandle, state: &Arc<AppState>) {
     });
 }
 
+/// Countries with photos and their towns, for the Places page.
+#[tauri::command]
+pub async fn browse_places(state: State<'_, Arc<AppState>>) -> CmdResult<Vec<places::Country>> {
+    blocking(&state, move |s| places::browse(&s.library.read())).await
+}
+
 #[tauri::command]
 pub async fn list_trips(state: State<'_, Arc<AppState>>) -> CmdResult<Vec<TripSummary>> {
     blocking(&state, move |s| trips::list(&s.library.read())).await
