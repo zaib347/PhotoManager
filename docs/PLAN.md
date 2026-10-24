@@ -305,10 +305,9 @@ and needs no downloads.
    - Sidebar **Map**: photos as clusters by place (counts shrink into pins as you zoom),
      click a cluster to open the timeline filtered there. Uses `assets.lat/lon` and the
      places we already have; fast at 1M photos via a grid per zoom level.
-   - Map pictures (tiles) — **decision needed**: (a) bundle an offline world map down to
-     city level (~20–40 MB, works offline, fits the privacy story; recommended), or (b)
-     load street-level tiles from an online provider (needs a provider account; the
-     OpenStreetMap servers don't allow app use at scale), or (a) now and (b) later.
+   - Map pictures: **a built-in offline world map** down to city level (~20–40 MB bundled,
+     works offline, fits the privacy story). Chosen by the user on 2026-10-24; no online
+     tile provider for now.
    - Also: **set a location by hand** for photos without GPS (pick a place, or drop on map).
 4. - [ ] **Import from Google Takeout / iCloud** (medium, ~1 week)
    - Google Takeout: reads the `.json` next to each photo (`photoTakenTime`, `geoData`,
