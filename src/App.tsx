@@ -28,6 +28,7 @@ import { formatBytes } from "./format";
 import { LibraryPanel } from "./library/LibraryPanel";
 import { FilterBar } from "./photos/FilterBar";
 import { PhotosView } from "./photos/PhotosView";
+import { PlacesPage } from "./places/PlacesPage";
 import { TripsPage } from "./trips/TripsPage";
 import "./App.css";
 
@@ -49,6 +50,7 @@ function emptyState(view: View): { title: string; hint: string } {
     hidden: { title: "Nothing hidden", hint: "Hidden photos stay in your folders but leave the timeline." },
     events: { title: "", hint: "" },
     trips: { title: "", hint: "" },
+    places: { title: "", hint: "" },
     duplicates: { title: "", hint: "" },
     similar: { title: "", hint: "" },
     removed: { title: "", hint: "" },
@@ -121,6 +123,10 @@ export default function App() {
       showDay: (day: number) => {
         setView("all");
         setFilter({ fromDay: day, toDay: day });
+      },
+      showPlace: (where) => {
+        setView("all");
+        setFilter(where);
       },
     }),
     [albums, tags, reloadCollections],
@@ -273,6 +279,8 @@ export default function App() {
             <EventsPage version={eventsVersion} onError={report} />
           ) : view === "trips" ? (
             <TripsPage version={eventsVersion} onError={report} />
+          ) : view === "places" ? (
+            <PlacesPage version={eventsVersion} onError={report} />
           ) : view === "duplicates" ? (
             <DuplicatesPage version={eventsVersion} onNotice={setNotice} onError={report} />
           ) : view === "similar" ? (

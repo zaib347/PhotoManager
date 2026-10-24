@@ -331,6 +331,69 @@ pub fn place_row(r: &rusqlite::Row, at: usize) -> rusqlite::Result<Option<Place>
     }))
 }
 
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaceCount {
+    pub place: Place,
+    pub count: i64,
+    /// The most recent photo taken there.
+    pub cover_id: i64,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Country {
+    pub code: String,
+    pub name: String,
+    pub count: i64,
+    /// Most photos first.
+    pub places: Vec<PlaceCount>,
+}
+
+/// Every country with photos, most first, and its towns: what the Places page shows.
+/// Counts match the timeline (hidden photos and Live Photo clips left out).
+pub fn browse(conn: &Connection) -> Result<Vec<Country>> {
+    // With max(), SQLite takes the bare column (the id) from the row holding the max.
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {PLACE_COLUMNS}, g.n, g.cover FROM
+             (SELECT a.place_id, count(*) AS n, a.id AS cover, max(a.taken_at) AS latest
+              FROM assets a LEFT JOIN user_meta u ON u.asset_id = a.id
+              WHERE a.place_id > 0 AND a.status = 0 AND a.paired_with IS NULL
+                AND COALESCE(u.hidden, 0) = 0
+              GROUP BY a.place_id) g
+         JOIN places p ON p.id = g.place_id
+         ORDER BY g.n DESC, p.name"
+    ))?;
+    let rows = stmt.query_map([], |r| {
+        Ok(PlaceCount {
+            place: place_row(r, 0)?.expect("joined place"),
+            count: r.get(5)?,
+            cover_id: r.get(6)?,
+        })
+    })?;
+    let mut countries: Vec<Country> = Vec::new();
+    for row in rows {
+        let place = row?;
+        match countries
+            .iter_mut()
+            .find(|c| c.code == place.place.country_code)
+        {
+            Some(c) => {
+                c.count += place.count;
+                c.places.push(place);
+            }
+            None => countries.push(Country {
+                code: place.place.country_code.clone(),
+                name: place.place.country.clone(),
+                count: place.count,
+                places: vec![place],
+            }),
+        }
+    }
+    countries.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
+    Ok(countries)
+}
+
 /// True when some photos with GPS haven't been given a place yet.
 pub fn needs_assign(conn: &Connection) -> Result<bool> {
     let needed: bool = conn.query_row(
@@ -514,5 +577,49 @@ mod tests {
         assert_eq!(ids[1..], [Some(NOWHERE), None]);
         let place = get(&conn, ids[0].unwrap()).unwrap().unwrap();
         assert_eq!(place.name, "Lahore");
+    }
+
+    #[test]
+    fn browse_groups_towns_by_country() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::open(
+            &dir.path().join("lib.sqlite"),
+            1,
+            crate::schema::migrate_library,
+        )
+        .unwrap();
+        // Three in Lahore (one hidden), one in Karachi, two in Paris.
+        db.write()
+            .execute_batch(
+                "INSERT INTO assets (id, media_kind, taken_at, taken_src, local_day, lat, lon, created_at)
+                 VALUES (1, 0, 10, 0, 0, 31.52, 74.36, 0), (2, 0, 30, 0, 0, 31.52, 74.36, 0),
+                        (3, 0, 20, 0, 0, 31.52, 74.36, 0), (4, 0, 0, 0, 0, 24.86, 67.01, 0),
+                        (5, 0, 0, 0, 0, 48.86, 2.35, 0), (6, 0, 0, 0, 0, 48.86, 2.35, 0);
+                 INSERT INTO user_meta (asset_id, hidden) VALUES (2, 1);",
+            )
+            .unwrap();
+        assign(&db).unwrap();
+        let countries = browse(&db.read()).unwrap();
+        // (country, items, [(town, items)])
+        type Summary<'a> = (&'a str, i64, Vec<(&'a str, i64)>);
+        let summary: Vec<Summary> = countries
+            .iter()
+            .map(|c| {
+                let towns = c
+                    .places
+                    .iter()
+                    .map(|p| (p.place.name.as_str(), p.count))
+                    .collect();
+                (c.code.as_str(), c.count, towns)
+            })
+            .collect();
+        assert_eq!(
+            summary,
+            vec![
+                ("PK", 3, vec![("Lahore", 2), ("Karachi", 1)]),
+                ("FR", 2, vec![("Paris", 2)]),
+            ]
+        );
+        assert_eq!(countries[0].places[0].cover_id, 3, "latest visible photo");
     }
 }

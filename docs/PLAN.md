@@ -182,7 +182,10 @@ Batch 2:
       Named after its towns ("Islamabad & Gilgit") or countries; rename/remove like events.
       Trips page, trip view, trip link in the info panel. 1M assets: detection 236 ms (reads
       only per-day place counts from the covering index), list 9 ms, view 28 ms
-- [ ] Browse by place (skipped for now to start M4)
+- [x] Browse by place: Places page (sidebar) lists countries by photo count, each with town
+      cards (latest photo as cover); a town or country opens the timeline filtered to it.
+      `places::browse`; counts match the timeline (hidden photos left out). ~0.9 s at 1M photos
+      (one grouped query when the page opens)
 
 ## M4 checklist
 

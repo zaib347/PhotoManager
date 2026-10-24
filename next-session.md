@@ -10,7 +10,9 @@ The full plan and milestone checklists are in [docs/PLAN.md](docs/PLAN.md).
 | M0 Foundations, M1 Scanner + timeline, M2 Organize | Done, merged to `main` |
 | M3 Memory features | In progress |
 
-**Done:** M3 except Browse by place (Date fixing, On This Day, Events, Places, Trips), all on `main`.
+**Done:** M3 (Date fixing, On This Day, Events, Places, Trips, Browse by place), all on `main`
+except Browse by place, on branch **`m3-places-page`** (not merged yet). Test: sidebar **Places**
+→ countries with town cards → click a town or a country name → timeline filtered to it.
 **M4 built, not yet tested by the user** (they said "we test later"). On `main`: exact
 duplicates, safe file operations, similar photos, best-shot ranking. On branch **`m4-remove`**
 (not merged): remove photos from the timeline/viewer, Recently removed page, organizer.
@@ -41,8 +43,8 @@ show the edit, export carries it → Edit again → **Revert to original**. Rota
 should keep the same part of the picture. Code: `crates/photo-core/src/edit.rs` (recipe,
 rendering, `Look` = turns + edit), `src-tauri/src/edit_commands.rs`, `src/editor/`, `src/looks.ts`
 (image URLs carry `?t=<turns>&e=<edit version>`).
-After Tools: the beta prep (installer, signing, auto-update) the user left for the end, and
-Browse by place (M3).
+After Tools: faster assessment (DCT-scaled decode), the Tools follow-ups in PLAN, then M5 with
+the beta prep (installer, signing, auto-update) the user left for the end.
 
 ## First thing to do
 
@@ -55,8 +57,7 @@ Browse by place (M3).
    - **Recently removed** (shared with Duplicates) → **Undo** brings removed photos back.
 2. Merge: `git checkout main && git merge --no-ff m4-remove` (the user may ask to merge before
    testing, as with earlier branches).
-3. Next: the free public beta (see PLAN). Still open: Browse by place (M3), faster assessment
-   (DCT-scaled decode).
+3. Next: the free public beta (see PLAN). Still open: faster assessment (DCT-scaled decode).
 
 ## How the similar-photos code works
 

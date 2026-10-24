@@ -3,7 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { lookQuery } from "./looks";
 
 /** Views that are pages rather than timelines. */
-const PAGES = ["events", "trips", "duplicates", "similar", "removed", "organize"] as const;
+const PAGES = ["events", "trips", "places", "duplicates", "similar", "removed", "organize"] as const;
 export type PageView = (typeof PAGES)[number];
 export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | PageView;
 export type View = BuiltinView | { album: number } | { tag: number } | { event: number } | { trip: number };
@@ -47,6 +47,14 @@ export type Place = {
   region: string | null;
   country: string;
   countryCode: string;
+};
+
+/** A country on the Places page, with its towns (most photos first). */
+export type Country = {
+  code: string;
+  name: string;
+  count: number;
+  places: { place: Place; count: number; coverId: number }[];
 };
 
 export type FilterOptions = {
@@ -395,6 +403,7 @@ export const api = {
   createEvent: (ids: number[], title: string) => invoke<number>("create_event", { ids, title }),
   removeEvent: (id: number) => invoke<void>("remove_event", { id }),
   listTrips: () => invoke<TripSummary[]>("list_trips"),
+  browsePlaces: () => invoke<Country[]>("browse_places"),
   trip: (id: number) => invoke<TripSummary | null>("get_trip", { id }),
   renameTrip: (id: number, title: string) => invoke<void>("rename_trip", { id, title }),
   removeTrip: (id: number) => invoke<void>("remove_trip", { id }),

@@ -373,6 +373,7 @@ pub fn run() {
             event_commands::split_event,
             event_commands::create_event,
             event_commands::remove_event,
+            event_commands::browse_places,
             event_commands::list_trips,
             event_commands::get_trip,
             event_commands::rename_trip,

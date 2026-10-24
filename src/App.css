@@ -1159,6 +1159,16 @@ button.primary:disabled {
   padding: 0 16px 8px;
 }
 
+.place-country {
+  font: inherit;
+  color: inherit;
+  padding: 0;
+}
+
+.place-country:hover {
+  text-decoration: underline;
+}
+
 .events-year-title {
   margin: 16px 0 10px;
   font-size: 20px;
