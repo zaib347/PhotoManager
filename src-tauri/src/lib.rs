@@ -338,6 +338,7 @@ pub fn run() {
             event_commands::get_trip,
             event_commands::rename_trip,
             event_commands::remove_trip,
+            cleanup_commands::remove_photos,
             cleanup_commands::duplicate_overview,
             cleanup_commands::duplicate_groups,
             cleanup_commands::remove_duplicates,

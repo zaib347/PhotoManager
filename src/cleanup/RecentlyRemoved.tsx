@@ -3,7 +3,11 @@ import { useEffect, useState } from "react";
 import { api, type FileOp, type FileOpReport } from "../api";
 import { formatBytes } from "../format";
 
-const REASONS: Record<string, string> = { duplicates: "Duplicate copies", similar: "Similar photos" };
+const REASONS: Record<string, string> = {
+  duplicates: "Duplicate copies",
+  similar: "Similar photos",
+  removed: "Removed photos",
+};
 
 /** "Moved 3 files (12 MB). 1 skipped: …" */
 export function describeReport(r: FileOpReport, verb: string) {
@@ -19,10 +23,12 @@ type Props = {
   onChanged: () => void;
   onNotice: (message: string) => void;
   onError: (e: unknown) => void;
+  /** Shown as its own page (no heading; says so when empty). */
+  standalone?: boolean;
 };
 
 /** Recent removals, with Undo and Send to Recycle Bin. */
-export function RecentlyRemoved({ version, onChanged, onNotice, onError }: Props) {
+export function RecentlyRemoved({ version, onChanged, onNotice, onError, standalone }: Props) {
   const [ops, setOps] = useState<FileOp[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -55,10 +61,12 @@ export function RecentlyRemoved({ version, onChanged, onNotice, onError }: Props
     if (ok) await act(async () => describeReport(await api.emptyFileOp(op.id), "Sent"));
   };
 
-  if (ops.length === 0) return null;
+  if (ops.length === 0) {
+    return standalone ? <p className="cleanup-ops muted">Nothing has been removed yet.</p> : null;
+  }
   return (
     <section className="cleanup-ops">
-      <h3>Recently removed</h3>
+      {!standalone && <h3>Recently removed</h3>}
       <ul>
         {ops.map((op) => (
           <li key={op.id}>

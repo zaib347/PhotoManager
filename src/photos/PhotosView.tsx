@@ -1,5 +1,7 @@
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { api, isFilterEmpty, type Filter, type Layout, type TimelineView } from "../api";
+import { describeReport } from "../cleanup/RecentlyRemoved";
 import { AlbumHeader } from "../collections/AlbumHeader";
 import { useCollections } from "../collections/context";
 import { EventHeader } from "../events/EventHeader";
@@ -16,11 +18,12 @@ type Props = {
   layout: Layout;
   /** Reload layout and counts after changes that move items between views. */
   onLibraryChanged: () => Promise<void>;
+  onNotice: (message: string) => void;
   onError: (e: unknown) => void;
 };
 
 /** One timeline view (All, Favorites, …) with selection and the full-screen viewer. */
-export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: Props) {
+export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, onError }: Props) {
   // `layout` only seeds a new store; later layouts arrive through setLayout below.
   // The parent remounts this component when the view or filter changes.
   const store = useMemo(() => new DayStore(view, filter, layout), [view, filter]);
@@ -49,6 +52,25 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
     setSelection(new Set(await api.assetIds(view, filter)));
   }, [view, filter]);
 
+  /** Asks, then moves the photos' files to the trash folder. True if they were removed. */
+  const remove = useCallback(
+    async (ids: number[]) => {
+      const n = ids.length;
+      const ok = await confirm(
+        `Remove ${n === 1 ? "this photo" : `${n.toLocaleString()} photos`}?\n\n` +
+          "Every copy moves to a hidden .photomanager-trash folder next to it. You can put them back from " +
+          "Recently removed.",
+        { title: "Remove photos", kind: "warning", okLabel: "Remove" },
+      );
+      if (!ok) return false;
+      const report = await api.removePhotos(ids);
+      onNotice(`${describeReport(report, "Moved")}. Undo from Recently removed.`);
+      await onLibraryChanged();
+      return report.done > 0;
+    },
+    [onLibraryChanged, onNotice],
+  );
+
   useEffect(() => {
     if (viewing) return;
     const onKey = (e: KeyboardEvent) => {
@@ -58,10 +80,16 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
         e.preventDefault();
         selectAll().catch(onError);
       }
+      if (e.key === "Delete" && selection.size > 0) {
+        e.preventDefault();
+        remove([...selection])
+          .then((removed) => removed && clearSelection())
+          .catch(onError);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [viewing, selection.size, clearSelection, selectAll, onError]);
+  }, [viewing, selection, clearSelection, selectAll, remove, onError]);
 
   const toggle = (pos: Position, id: number) => {
     setSelection((s) => {
@@ -191,6 +219,11 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
               clearSelection();
             })
           }
+          onRemove={() =>
+            run(async () => {
+              if (await remove([...selection])) clearSelection();
+            })
+          }
           onAddToAlbum={(id) =>
             run(async () => {
               await api.addToAlbum(id, [...selection]);
@@ -270,6 +303,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onError }: 
           }}
           onFavorite={setFavorite}
           onHidden={setHidden}
+          onRemove={remove}
           onAddTag={addTag}
           onDatesChanged={afterTimelineChange}
           onRemoveTag={removeTag}

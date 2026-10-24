@@ -2,7 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** Views that are pages rather than timelines. */
-const PAGES = ["events", "trips", "duplicates", "similar"] as const;
+const PAGES = ["events", "trips", "duplicates", "similar", "removed"] as const;
 export type PageView = (typeof PAGES)[number];
 export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | PageView;
 export type View = BuiltinView | { album: number } | { tag: number } | { event: number } | { trip: number };
@@ -321,6 +321,8 @@ export const api = {
   /** Moves every file of these photos to the trash folder (undoable). */
   removeSimilar: (ids: number[]) => invoke<FileOpReport>("remove_similar", { ids }),
   keepSimilar: (ids: number[]) => invoke<void>("keep_similar", { ids }),
+  /** Moves every file of these photos to the trash folder next to it (undoable). */
+  removePhotos: (ids: number[]) => invoke<FileOpReport>("remove_photos", { ids }),
   listFileOps: () => invoke<FileOp[]>("list_file_ops"),
   undoFileOp: (id: number) => invoke<FileOpReport>("undo_file_op", { id }),
   emptyFileOp: (id: number) => invoke<FileOpReport>("empty_file_op", { id }),

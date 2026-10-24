@@ -19,6 +19,7 @@ import {
 } from "./api";
 import { CollectionsContext, type Collections } from "./collections/context";
 import { DuplicatesPage } from "./cleanup/DuplicatesPage";
+import { RecentlyRemoved } from "./cleanup/RecentlyRemoved";
 import { SimilarPage } from "./cleanup/SimilarPage";
 import { EventsPage } from "./events/EventsPage";
 import { LibraryPanel } from "./library/LibraryPanel";
@@ -47,6 +48,7 @@ function emptyState(view: View): { title: string; hint: string } {
     trips: { title: "", hint: "" },
     duplicates: { title: "", hint: "" },
     similar: { title: "", hint: "" },
+    removed: { title: "", hint: "" },
   }[view];
 }
 
@@ -257,6 +259,23 @@ export default function App() {
             <DuplicatesPage version={eventsVersion} onNotice={setNotice} onError={report} />
           ) : view === "similar" ? (
             <SimilarPage onNotice={setNotice} onError={report} />
+          ) : view === "removed" ? (
+            <div className="events-page cleanup-page">
+              <section className="cleanup-summary">
+                <h2>Recently removed</h2>
+                <p className="muted small">
+                  Removed photos wait in a hidden .photomanager-trash folder next to where they were. Undo puts them
+                  back; Send to Recycle Bin frees the space.
+                </p>
+              </section>
+              <RecentlyRemoved
+                standalone
+                version={eventsVersion}
+                onChanged={() => reloadTimeline().catch(report)}
+                onNotice={setNotice}
+                onError={report}
+              />
+            </div>
           ) : current && current.days.length > 0 ? (
             <PhotosView
               key={key}
@@ -264,6 +283,7 @@ export default function App() {
               filter={filter}
               layout={current}
               onLibraryChanged={reloadTimeline}
+              onNotice={setNotice}
               onError={report}
             />
           ) : current ? (
