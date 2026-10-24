@@ -264,6 +264,13 @@ Ground rule: tools write new files; originals are only replaced through `fileops
       Keep 400 ms / 972 KB, Show 145 ms / 1405 KB. jpeg-encoder 0.7.1 corrupts files when
       4:2:0 is combined with optimized tables, so that pairing is never used and a test
       round-trips every mode
+- [x] Rename from a pattern (`rename.rs`): presets and parts {date} {time} {year} {month}
+      {day} {place} {event} {trip} {camera} {counter} {original}; preview first, then
+      journaled through `fileops` (`relocate_with`, Undo in Organize files). RAW+JPEG pairs,
+      Live Photo clips and .xmp/.aae/.thm sidecars (journaled companions with no library
+      row) are renamed together; taken names get " (2)"; moves are ordered so a file can
+      take a name another one is leaving (re-numbering works). Names held by missing files
+      count as taken
 - [ ] Copy an edit and paste it onto other photos; edit several at once
 - [ ] WebGL preview if CPU previews feel slow on low-end laptops
 

@@ -147,6 +147,13 @@ After M3 come:
 - **Don't launch app windows** while the user may be using the app. The user runs `npm run tauri dev` themselves.
 - **Speed checks:** run `cargo run --release -p photo-core --example scale_bench -- <db> 1000000` for 1M-photo timings.
 
+## Latest (2026-10-24)
+
+On `main` and pushed: faster JPEG (`jpeg.rs`) and rename from a pattern (`rename.rs`,
+selection bar **Rename**). The user plans to give the app to their team for testing once
+this round is done: make the installer with the **Build apps** workflow and write a test
+checklist. `target/debug` was cleaned (20 GB) on 2026-10-24.
+
 ## M5 (in progress)
 
 Part 1 (Windows) on branch **`m5-windows`**, not merged yet: long/Unicode paths, RAW via
