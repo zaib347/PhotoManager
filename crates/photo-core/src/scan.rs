@@ -555,7 +555,7 @@ fn update_asset(conn: &Connection, id: i64, kind: MediaKind, m: &Metadata) -> Re
         "UPDATE assets SET media_kind = CASE WHEN media_kind = 2 AND ?2 = 0 THEN 2 ELSE ?2 END,
              {dates} width = ?7, height = ?8, orientation = ?9, duration_ms = ?10,
              camera_make = ?11, camera_model = ?12, lat = ?13, lon = ?14, phash = NULL, blur = NULL,
-             phash_v = NULL,
+             phash_v = NULL, focus = NULL, exposure = NULL, quality_v = NULL,
              place_id = CASE WHEN lat IS ?13 AND lon IS ?14 THEN place_id END
          WHERE id = ?1"
     ))?

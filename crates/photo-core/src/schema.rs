@@ -253,6 +253,14 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
         at       INTEGER NOT NULL
     );
     ",
+    // v12: shot quality from a 1024 px decode, for photos in similar groups only.
+    // `focus`: sharpness of the sharpest tiles; `exposure`: 0 (badly clipped or very
+    // dark/bright) to 1; `quality_v`: the assessment version (NULL: not assessed).
+    "
+    ALTER TABLE assets ADD COLUMN focus REAL;
+    ALTER TABLE assets ADD COLUMN exposure REAL;
+    ALTER TABLE assets ADD COLUMN quality_v INTEGER;
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

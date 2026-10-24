@@ -22,18 +22,29 @@ pub fn run_in_background(app: &AppHandle, state: &Arc<AppState>) {
         .name("similar".into())
         .spawn(move || {
             let started = std::time::Instant::now();
-            let result = similar::hash_pending(&state.library, &state.thumbs, &state.hash_cancel)
+            let hashed = similar::hash_pending(&state.library, &state.thumbs, &state.hash_cancel)
                 .and_then(|n| {
                     similar::detect(&state.library)?;
                     Ok(n)
                 });
-            match result {
+            match hashed {
                 Ok(0) => {}
                 Ok(n) => crate::diag::log(format!("{n} photos hashed in {:?}", started.elapsed())),
                 Err(e) => crate::diag::log(format!("similar photos failed: {e}")),
             }
-            state.hashing.store(false, Ordering::SeqCst);
+            // Groups can be shown now; then the slower assessment of their photos,
+            // which refines the suggested best shots.
             let _ = app.emit("similar-changed", ());
+            let started = std::time::Instant::now();
+            match similar::assess_pending(&state.library, &state.hash_cancel) {
+                Ok(0) => {}
+                Ok(n) => {
+                    crate::diag::log(format!("{n} shots assessed in {:?}", started.elapsed()));
+                    let _ = app.emit("similar-changed", ());
+                }
+                Err(e) => crate::diag::log(format!("shot assessment failed: {e}")),
+            }
+            state.hashing.store(false, Ordering::SeqCst);
         })
         .expect("spawn similar thread");
 }

@@ -388,6 +388,137 @@ pub fn overview(conn: &Connection) -> Result<Overview> {
     )?)
 }
 
+/// Version of the shot assessment; bumping it assesses every grouped photo again.
+pub const QUALITY_VERSION: i64 = 1;
+/// Long edge the original is decoded to for assessing it.
+const ASSESS_EDGE: u32 = 1024;
+/// Tiles per side; focus is judged on the sharpest few, where the subject is.
+const TILES: u32 = 8;
+const SHARPEST_TILES: usize = 4;
+/// Photos assessed per write transaction (each is a full decode, so keep it small).
+const ASSESS_BATCH: usize = 32;
+
+/// How sharp the in-focus part of a photo is, and how well exposed it is:
+/// `exposure` is 0 when good, towards -1 when too dark, towards +1 when too bright or
+/// blown out.
+pub fn assess(img: &DynamicImage) -> (f64, f64) {
+    let luma = img.thumbnail(ASSESS_EDGE, ASSESS_EDGE).to_luma8();
+    (focus(&luma), exposure(&luma))
+}
+
+/// Mean Laplacian variance of the sharpest tiles. A sharp subject on a soft
+/// background scores as sharp; motion blur or missed focus doesn't.
+fn focus(luma: &GrayImage) -> f64 {
+    let (w, h) = luma.dimensions();
+    if w < TILES * 3 || h < TILES * 3 {
+        return 0.0;
+    }
+    let at = |x: u32, y: u32| luma.get_pixel(x, y).0[0] as f64;
+    let (tw, th) = (w / TILES, h / TILES);
+    let mut tiles: Vec<f64> = Vec::with_capacity((TILES * TILES) as usize);
+    for ty in 0..TILES {
+        for tx in 0..TILES {
+            let (mut sum, mut sq, mut n) = (0.0, 0.0, 0.0);
+            for y in (ty * th).max(1)..((ty + 1) * th).min(h - 1) {
+                for x in (tx * tw).max(1)..((tx + 1) * tw).min(w - 1) {
+                    let l =
+                        at(x - 1, y) + at(x + 1, y) + at(x, y - 1) + at(x, y + 1) - 4.0 * at(x, y);
+                    sum += l;
+                    sq += l * l;
+                    n += 1.0;
+                }
+            }
+            if n > 0.0 {
+                tiles.push(sq / n - (sum / n).powi(2));
+            }
+        }
+    }
+    tiles.sort_by(|a, b| b.total_cmp(a));
+    let top = &tiles[..tiles.len().min(SHARPEST_TILES)];
+    top.iter().sum::<f64>() / top.len().max(1) as f64
+}
+
+/// Clipped highlights and shadows, and overall brightness, as one signed number.
+fn exposure(luma: &GrayImage) -> f64 {
+    let n = (luma.width() * luma.height()).max(1) as f64;
+    let (mut hi, mut lo, mut sum) = (0.0, 0.0, 0.0);
+    for p in luma.pixels() {
+        let v = p.0[0];
+        hi += (v >= 250) as u8 as f64;
+        lo += (v <= 5) as u8 as f64;
+        sum += v as f64;
+    }
+    let (hi, lo, mean) = (hi / n, lo / n, sum / n);
+    let bright = (hi * 4.0 + ((mean - 200.0) / 55.0).max(0.0)).min(1.0);
+    let dark = (lo * 4.0 + ((60.0 - mean) / 60.0).max(0.0)).min(1.0);
+    if bright >= dark { bright } else { -dark }
+}
+
+/// Assesses grouped photos that haven't been yet, from their originals. Returns how
+/// many were done; stops early when `cancel` is set.
+pub fn assess_pending(library: &Db, cancel: &AtomicBool) -> Result<usize> {
+    let mut after = i64::MIN;
+    let mut done = 0;
+    while !cancel.load(Ordering::Relaxed) {
+        let batch: Vec<i64> = {
+            let conn = library.read();
+            let mut stmt = conn.prepare_cached(
+                "SELECT a.id FROM similar_members m JOIN assets a ON a.id = m.asset_id
+                 WHERE a.quality_v IS NULL AND a.status = 0 AND a.media_kind != 1 AND a.id > ?1
+                 ORDER BY a.id LIMIT ?2",
+            )?;
+            stmt.query_map(params![after, ASSESS_BATCH as i64], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?
+        };
+        let Some(&last) = batch.last() else {
+            break;
+        };
+        after = last;
+        let results: Vec<(i64, Assessed)> = batch
+            .into_par_iter()
+            .map(|id| (id, assess_one(library, id).unwrap_or(Assessed::Done(None))))
+            .collect();
+        let mut conn = library.write();
+        let tx = conn.transaction()?;
+        {
+            let mut write = tx.prepare_cached(
+                "UPDATE assets SET focus = ?2, exposure = ?3, quality_v = ?4 WHERE id = ?1",
+            )?;
+            for (id, result) in results {
+                if let Assessed::Done(found) = result {
+                    let (focus, exposure) = found.unzip();
+                    write.execute(params![id, focus, exposure, QUALITY_VERSION])?;
+                    done += 1;
+                }
+            }
+        }
+        tx.commit()?;
+    }
+    Ok(done)
+}
+
+enum Assessed {
+    /// Focus and exposure, or `None` when the original couldn't be decoded.
+    Done(Option<(f64, f64)>),
+    /// The drive isn't connected: try another time.
+    Later,
+}
+
+fn assess_one(library: &Db, id: i64) -> Result<Assessed> {
+    let source = library::asset_source(&library.read(), id)?;
+    Ok(match source {
+        Some(AssetSource::File { path, .. }) => {
+            let img = image::open(&path).ok().or_else(|| {
+                let jpeg = thumbs::preview_from_os(&path).ok()?;
+                image::load_from_memory(&jpeg).ok()
+            });
+            Assessed::Done(img.map(|img| assess(&img)))
+        }
+        Some(AssetSource::Unavailable { .. }) => Assessed::Later,
+        Some(AssetSource::NoFiles { .. }) | None => Assessed::Done(None),
+    })
+}
+
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Member {
@@ -401,9 +532,18 @@ pub struct Member {
     pub bytes: i64,
     pub favorite: bool,
     pub rating: Option<u8>,
+    /// From the thumbnail, for every hashed photo.
     pub sharpness: Option<f64>,
+    /// From the original, once assessed (see `assess`).
+    pub focus: Option<f64>,
+    pub exposure: Option<f64>,
     /// The one suggested to keep.
     pub best: bool,
+    /// Why it was suggested: favorite, rated, sharpest, exposure, biggest or similar
+    /// (no clear winner; the first of the best).
+    pub why: Option<&'static str>,
+    /// Weak points next to the others in its group: blurry, dark, bright.
+    pub notes: Vec<&'static str>,
 }
 
 #[derive(Serialize, Debug)]
@@ -415,29 +555,95 @@ pub struct Group {
     pub members: Vec<Member>,
 }
 
-/// Which member to keep: favorites and ratings first; then for similar shots the
-/// sharpest, for copies the biggest.
-fn best_index(kind: &str, members: &[Member]) -> usize {
-    let pixels = |m: &Member| m.width.unwrap_or(0) as u64 * m.height.unwrap_or(0) as u64;
-    let key = |m: &Member| {
-        let sharp = m.sharpness.unwrap_or(0.0);
-        let (first, second) = if kind == "copies" {
-            (pixels(m) as f64, m.bytes as f64)
+/// Below this share of the group's best focus, a shot is called blurry.
+const BLURRY: f64 = 0.5;
+/// Beyond this exposure (either way), a shot is called dark or bright.
+const BADLY_EXPOSED: f64 = 0.4;
+/// Score differences smaller than this are no real difference.
+const CLOSE: f64 = 0.03;
+
+/// Picks the member to keep and explains it, and notes weak shots.
+///
+/// Favorites, then ratings, come first. For copies, the most pixels, then the biggest
+/// file. For similar shots, a score of focus (relative to the group's sharpest, 75%)
+/// and exposure (25%): focus from the original where every member has been assessed,
+/// else from the thumbnails.
+fn rank(kind: &str, members: &mut [Member]) {
+    let n = members.len();
+    if n == 0 {
+        return;
+    }
+    let assessed = members.iter().all(|m| m.focus.is_some());
+    let sharp = |m: &Member| if assessed { m.focus } else { m.sharpness }.unwrap_or(0.0);
+    let max_sharp = members.iter().map(sharp).fold(0.0, f64::max);
+    let rel = |m: &Member| {
+        if max_sharp > 0.0 {
+            sharp(m) / max_sharp
         } else {
-            (sharp, pixels(m) as f64)
-        };
-        (m.favorite, m.rating.unwrap_or(0), first, second)
+            1.0
+        }
     };
-    (0..members.len())
-        .max_by(|&a, &b| {
-            let (ka, kb) = (key(&members[a]), key(&members[b]));
-            (ka.0, ka.1)
-                .cmp(&(kb.0, kb.1))
-                .then(ka.2.total_cmp(&kb.2))
-                .then(ka.3.total_cmp(&kb.3))
-                .then(b.cmp(&a)) // earlier one on a full tie
-        })
-        .unwrap_or(0)
+    let exposed = |m: &Member| 1.0 - m.exposure.unwrap_or(0.0).abs();
+    let score = |m: &Member| 0.75 * rel(m) + 0.25 * exposed(m);
+    let pixels = |m: &Member| m.width.unwrap_or(0) as f64 * m.height.unwrap_or(0) as f64;
+    let quality = |m: &Member| {
+        if kind == "copies" {
+            (pixels(m), m.bytes as f64)
+        } else {
+            (score(m), 0.0)
+        }
+    };
+    let order = |a: usize, b: usize| {
+        let (ma, mb) = (&members[a], &members[b]);
+        (ma.favorite, ma.rating.unwrap_or(0))
+            .cmp(&(mb.favorite, mb.rating.unwrap_or(0)))
+            .then(quality(ma).0.total_cmp(&quality(mb).0))
+            .then(quality(ma).1.total_cmp(&quality(mb).1))
+            .then(b.cmp(&a)) // the earlier one on a full tie
+    };
+    let best = (0..n).max_by(|&a, &b| order(a, b)).unwrap_or(0);
+    let runner_up = (0..n).filter(|&i| i != best).max_by(|&a, &b| order(a, b));
+
+    let why = match runner_up.map(|i| &members[i]) {
+        None => "similar",
+        Some(other) => {
+            let me = &members[best];
+            if me.favorite && !other.favorite {
+                "favorite"
+            } else if me.rating.unwrap_or(0) > other.rating.unwrap_or(0) {
+                "rated"
+            } else if kind == "copies" {
+                if quality(me) > quality(other) {
+                    "biggest"
+                } else {
+                    "similar"
+                }
+            } else if score(me) - score(other) < CLOSE {
+                "similar"
+            } else if rel(me) >= 1.0 {
+                // The sharpest of all; it won on focus whatever else it has.
+                "sharpest"
+            } else {
+                "exposure"
+            }
+        }
+    };
+    if kind != "copies" {
+        for m in members.iter_mut() {
+            let mut notes = Vec::new();
+            if rel(m) < BLURRY {
+                notes.push("blurry");
+            }
+            match m.exposure {
+                Some(e) if e <= -BADLY_EXPOSED => notes.push("dark"),
+                Some(e) if e >= BADLY_EXPOSED => notes.push("bright"),
+                _ => {}
+            }
+            m.notes = notes;
+        }
+    }
+    members[best].best = true;
+    members[best].why = Some(why);
 }
 
 /// A page of groups, newest first, members in time order.
@@ -454,7 +660,7 @@ pub fn groups(conn: &Connection, offset: usize, limit: usize) -> Result<Vec<Grou
     let mut stmt = conn.prepare_cached(
         "SELECT a.id, a.media_kind, a.taken_at, a.tz_offset_min, a.width, a.height,
                 COALESCE((SELECT max(size) FROM files f WHERE f.asset_id = a.id AND f.missing_since IS NULL), 0),
-                COALESCE(u.favorite, 0), u.rating, a.blur
+                COALESCE(u.favorite, 0), u.rating, a.blur, a.focus, a.exposure
          FROM similar_members m JOIN assets a ON a.id = m.asset_id
          LEFT JOIN user_meta u ON u.asset_id = a.id
          WHERE m.group_id = ?1 AND a.status = 0
@@ -475,15 +681,18 @@ pub fn groups(conn: &Connection, offset: usize, limit: usize) -> Result<Vec<Grou
                     favorite: r.get(7)?,
                     rating: r.get(8)?,
                     sharpness: r.get(9)?,
+                    focus: r.get(10)?,
+                    exposure: r.get(11)?,
                     best: false,
+                    why: None,
+                    notes: Vec::new(),
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
         if members.len() < 2 {
             continue; // some were removed since the last detection
         }
-        let best = best_index(&kind, &members);
-        members[best].best = true;
+        rank(&kind, &mut members);
         out.push(Group { id, kind, members });
     }
     Ok(out)
@@ -593,6 +802,107 @@ mod tests {
         });
         let blurred = image::imageops::blur(&crisp, 3.0);
         assert!(print(blurred).1 < print(crisp).1 / 2.0);
+    }
+
+    /// Hard-edged squares: lots of detail everywhere.
+    fn checks(w: u32, h: u32) -> RgbImage {
+        RgbImage::from_fn(w, h, |x, y| {
+            let v = if (x / 16 + y / 16) % 2 == 0 { 200 } else { 40 };
+            Rgb([v, v, v])
+        })
+    }
+
+    #[test]
+    fn focus_follows_the_sharpest_part() {
+        let sharp = checks(800, 600);
+        let soft = image::imageops::blur(&sharp, 2.5);
+        // Sharp subject in the middle of a soft background.
+        let mut portrait = image::imageops::blur(&sharp, 6.0);
+        image::imageops::overlay(
+            &mut portrait,
+            &image::imageops::crop_imm(&sharp, 300, 200, 200, 200).to_image(),
+            300,
+            200,
+        );
+        let f = |img: RgbImage| assess(&DynamicImage::ImageRgb8(img)).0;
+        let (sharp, soft, portrait) = (f(sharp), f(soft), f(portrait));
+        assert!(soft < sharp / 3.0, "{soft} vs {sharp}");
+        assert!(
+            portrait > soft * 2.0,
+            "a sharp subject counts: {portrait} vs {soft}"
+        );
+    }
+
+    #[test]
+    fn exposure_tells_dark_from_blown_out() {
+        let e = |img: RgbImage| assess(&DynamicImage::ImageRgb8(img)).1;
+        let fine = e(checks(400, 300));
+        assert!(fine.abs() < 0.1, "{fine}");
+        let dark = e(RgbImage::from_fn(400, 300, |x, _| {
+            Rgb([(x % 20) as u8, 0, 0])
+        }));
+        assert!(dark <= -BADLY_EXPOSED, "{dark}");
+        let blown = e(RgbImage::from_fn(400, 300, |x, _| {
+            let v = if x < 300 { 255 } else { 120 };
+            Rgb([v, v, v])
+        }));
+        assert!(blown >= BADLY_EXPOSED, "{blown}");
+    }
+
+    fn member(id: i64, focus: f64, exposure: f64) -> Member {
+        Member {
+            asset_id: id,
+            media_kind: 0,
+            taken_at: id,
+            tz_offset_min: 0,
+            width: Some(4000),
+            height: Some(3000),
+            bytes: 1000,
+            favorite: false,
+            rating: None,
+            sharpness: Some(1.0),
+            focus: Some(focus),
+            exposure: Some(exposure),
+            best: false,
+            why: None,
+            notes: Vec::new(),
+        }
+    }
+
+    fn winner(kind: &str, members: &mut [Member]) -> (i64, &'static str) {
+        rank(kind, members);
+        let best = members.iter().find(|m| m.best).unwrap();
+        (best.asset_id, best.why.unwrap())
+    }
+
+    #[test]
+    fn ranking_prefers_favorites_then_focus_then_exposure() {
+        let mut shots = [
+            member(1, 100.0, 0.0),
+            member(2, 400.0, 0.0),
+            member(3, 390.0, -0.8),
+        ];
+        assert_eq!(winner("similar", &mut shots), (2, "sharpest"));
+        assert_eq!(shots[0].notes, ["blurry"]);
+        assert_eq!(shots[2].notes, ["dark"]);
+
+        // Equally sharp: the better exposed one.
+        let mut shots = [member(1, 400.0, 0.7), member(2, 395.0, 0.0)];
+        assert_eq!(winner("similar", &mut shots), (2, "exposure"));
+
+        // The user's favorite wins over a sharper shot.
+        let mut shots = [member(1, 100.0, 0.0), member(2, 400.0, 0.0)];
+        shots[0].favorite = true;
+        assert_eq!(winner("similar", &mut shots), (1, "favorite"));
+
+        // No real difference: the first one.
+        let mut shots = [member(1, 400.0, 0.0), member(2, 400.0, 0.0)];
+        assert_eq!(winner("similar", &mut shots), (1, "similar"));
+
+        // Copies: the biggest picture.
+        let mut copies = [member(1, 1.0, 0.0), member(2, 1.0, 0.0)];
+        copies[0].width = Some(1600);
+        assert_eq!(winner("copies", &mut copies), (2, "biggest"));
     }
 
     #[test]

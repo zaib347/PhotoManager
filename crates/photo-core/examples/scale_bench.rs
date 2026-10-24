@@ -150,6 +150,17 @@ fn main() -> photo_core::Result<()> {
         std::hint::black_box(similar::fingerprint(&img));
     }
     println!("fingerprint one thumbnail: {:?}", t.elapsed() / 200);
+    // Assessing a grouped photo decodes its original: a 12 MP JPEG here.
+    let original = thumbs::encode_jpeg(&image::RgbImage::from_fn(4000, 3000, |x, y| {
+        let v = ((x * 7 + y * 3) % 251) as u8 ^ ((x / 64 + y / 64) % 2 * 120) as u8;
+        image::Rgb([v, v / 2, 255 - v])
+    }))?;
+    let t = Instant::now();
+    for _ in 0..5 {
+        let img = image::load_from_memory(&original).expect("original");
+        std::hint::black_box(similar::assess(&img));
+    }
+    println!("assess one 12 MP original: {:?}", t.elapsed() / 5);
 
     let t = Instant::now();
     let list = events::list(&db.read())?;

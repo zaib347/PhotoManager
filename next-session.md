@@ -12,7 +12,13 @@ The full plan and milestone checklists are in [docs/PLAN.md](docs/PLAN.md).
 
 **Done:** M3 except Browse by place (Date fixing, On This Day, Events, Places, Trips), all on `main`.
 **M4 in progress:** exact duplicates + safe file operations are on `main`. Similar photos
-(near-duplicates, bursts) on branch **`m4-similar`**, **not merged yet**.
+(near-duplicates, bursts) on branch **`m4-similar`**, and better best-shot ranking on
+**`m4-best-shot`** (branched from `m4-similar`, so it contains it). **Neither is merged yet.**
+If both check out, merging `m4-best-shot` alone brings in both.
+
+Best-shot test: in a burst group the badge should say why ("Sharpest", "Best exposed"…) and
+blurry/dark shots get a warning under them. Assessment of grouped photos runs after hashing
+(log line "N shots assessed").
 
 ## First thing to do
 
@@ -23,7 +29,7 @@ The full plan and milestone checklists are in [docs/PLAN.md](docs/PLAN.md).
    - **Similar photos** in the sidebar: groups with the best one ticked (Best badge).
    - **Remove N** per group, **Keep all** (group disappears), or remove unticked in all shown.
    - **Recently removed** (shared with Duplicates) → **Undo** brings removed photos back.
-2. If they're OK, merge: `git checkout main && git merge --no-ff m4-similar`
+2. If they're OK, merge: `git checkout main && git merge --no-ff m4-best-shot`
 3. Next in M4: better best-shot ranking, other planned/previewed operations. Browse by place
    (M3) is still open too.
 
@@ -48,9 +54,9 @@ The full plan and milestone checklists are in [docs/PLAN.md](docs/PLAN.md).
 
 ## Disk space
 
-D: filled up (0 GB) during this session: `target/` had grown to 17 GB. `target/debug/incremental`
-(6 GB) was deleted to continue; `CARGO_INCREMENTAL=0` keeps it from coming back during checks.
-Run `cargo clean` if space runs low again.
+D: filled up (0 GB) once: `target/` had grown to 17 GB. `cargo clean` was run on 2026-10-24
+(freed 13.6 GB). Checks run with `CARGO_INCREMENTAL=0` to keep the incremental cache from
+growing back. Run `cargo clean` again if space runs low.
 
 ## How the trips code works
 

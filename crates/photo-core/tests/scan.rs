@@ -705,6 +705,31 @@ fn similar_shots_group_and_extra_ones_can_be_removed_and_restored() {
     assert_eq!(group.kind, "similar");
     assert_eq!(group.members.iter().filter(|m| m.best).count(), 1);
     assert!(
+        group.members.iter().all(|m| m.focus.is_none()),
+        "not assessed yet"
+    );
+
+    // Grouped photos are then assessed from their originals.
+    let assessed = similar::assess_pending(&f.library, &AtomicBool::new(false)).unwrap();
+    assert!(assessed >= 3);
+    let groups = similar::groups(&f.library.read(), 0, 50).unwrap();
+    let group = groups
+        .iter()
+        .find(|g| g.members.iter().any(|m| m.asset_id == burst[0]))
+        .unwrap();
+    assert!(
+        group
+            .members
+            .iter()
+            .all(|m| m.focus.is_some() && m.exposure.is_some())
+    );
+    let best = group.members.iter().find(|m| m.best).unwrap();
+    assert!(best.why.is_some());
+    assert_eq!(
+        similar::assess_pending(&f.library, &AtomicBool::new(false)).unwrap(),
+        0
+    );
+    assert!(
         groups
             .iter()
             .all(|g| g.members.iter().all(|m| m.asset_id != other))

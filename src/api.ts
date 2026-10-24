@@ -154,9 +154,17 @@ export type SimilarMember = {
   bytes: number;
   favorite: boolean;
   rating: number | null;
+  /** From the thumbnail. */
   sharpness: number | null;
+  /** From the original, once assessed: focus of the sharpest part, and exposure
+   * (0 good, towards -1 too dark, towards +1 too bright). */
+  focus: number | null;
+  exposure: number | null;
   /** The one suggested to keep. */
   best: boolean;
+  why: "favorite" | "rated" | "sharpest" | "exposure" | "biggest" | "similar" | null;
+  /** Weak points next to the others in the group. */
+  notes: ("blurry" | "dark" | "bright")[];
 };
 
 export type SimilarGroup = {

@@ -6,6 +6,17 @@ import { describeReport, RecentlyRemoved } from "./RecentlyRemoved";
 
 const PAGE = 30;
 
+const WHY = {
+  favorite: "Your favorite",
+  rated: "Rated highest",
+  sharpest: "Sharpest",
+  exposure: "Best exposed",
+  biggest: "Biggest",
+  similar: "Best",
+} as const;
+
+const NOTES = { blurry: "Blurry", dark: "Too dark", bright: "Overexposed" } as const;
+
 type Props = {
   onNotice: (message: string) => void;
   onError: (e: unknown) => void;
@@ -110,8 +121,9 @@ export function SimilarPage({ onNotice, onError }: Props) {
               Remove unticked photos in all groups shown
             </button>
             <p className="muted small">
-              The best photo of each group is ticked: favorites and ratings first, then the sharpest shot or the
-              biggest copy. Change the ticks to keep others.
+              The best photo of each group is ticked: your favorites and ratings first, then the shot with the
+              sharpest focus and best exposure (judged on the full photo), or the biggest copy. Change the ticks to
+              keep others.
             </p>
           </>
         )}
@@ -148,8 +160,15 @@ export function SimilarPage({ onNotice, onError }: Props) {
                         onChange={() => setChoice((c) => ({ ...c, [m.assetId]: !keep }))}
                       />
                       {keep ? "Keep" : "Remove"}
-                      {m.best && <span className="badge">Best</span>}
+                      {m.best && (
+                        <span className="badge" title="Suggested to keep">
+                          {WHY[m.why ?? "similar"]}
+                        </span>
+                      )}
                     </span>
+                    {m.notes.length > 0 && (
+                      <span className="warn small">{m.notes.map((n) => NOTES[n]).join(" · ")}</span>
+                    )}
                     <span className="muted small">
                       {m.width && m.height ? `${m.width}×${m.height} · ` : ""}
                       {formatBytes(m.bytes)}

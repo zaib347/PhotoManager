@@ -205,8 +205,14 @@ Batch 2:
       startup, pauses while a scan runs (~4 ms per thumbnail on one core, parallel). Similar
       photos page: tick what to keep, remove the rest through `fileops` (undoable), or
       "Keep all" (group stays hidden). 1M hashed photos: grouping 3.3 s on a reader
-- [~] Best-shot ranking: first version picks favorites, ratings, then the sharpest shot
-      (similar) or biggest copy (copies). Still to do: eyes open / faces, exposure
+- [x] Best-shot ranking (schema v12 `focus`, `exposure`, `quality_v`): photos in similar groups
+      are assessed in the background from their originals at 1024 px. Focus = Laplacian
+      variance of the 4 sharpest of 8×8 tiles (a sharp subject on a soft background counts);
+      exposure = clipped highlights/shadows and overall brightness, signed (dark/bright).
+      Choice: favorite, rating, then 75% focus relative to the group's sharpest + 25% exposure;
+      copies by pixels then bytes. The page says why ("Sharpest", "Best exposed", "Your
+      favorite", …) and flags "Blurry", "Too dark", "Overexposed". Faces and closed eyes need a
+      model: AI pack (M7)
 - [ ] Other planned/previewed operations on top of `fileops` (e.g. remove a selection)
 
 ## M0 results
