@@ -43,7 +43,7 @@ show the edit, export carries it → Edit again → **Revert to original**. Rota
 should keep the same part of the picture. Code: `crates/photo-core/src/edit.rs` (recipe,
 rendering, `Look` = turns + edit), `src-tauri/src/edit_commands.rs`, `src/editor/`, `src/looks.ts`
 (image URLs carry `?t=<turns>&e=<edit version>`).
-After Tools: faster assessment (DCT-scaled decode), the Tools follow-ups in PLAN, then M5 with
+After Tools: the Tools follow-ups in PLAN, then M5 with
 the beta prep (installer, signing, auto-update) the user left for the end.
 
 ## First thing to do
@@ -57,7 +57,8 @@ the beta prep (installer, signing, auto-update) the user left for the end.
    - **Recently removed** (shared with Duplicates) → **Undo** brings removed photos back.
 2. Merge: `git checkout main && git merge --no-ff m4-remove` (the user may ask to merge before
    testing, as with earlier branches).
-3. Next: the free public beta (see PLAN). Still open: faster assessment (DCT-scaled decode).
+3. Next: the free public beta (see PLAN). Faster assessment is on branch **`m4-fast-assess`**
+   (not merged yet); after it, the Tools follow-ups and M5.
 
 ## How the similar-photos code works
 

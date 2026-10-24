@@ -30,7 +30,7 @@ pub fn thumbnail(path: &Path, size: u32) -> Result<RgbImage> {
 pub fn full_image(path: &Path) -> Result<image::DynamicImage> {
     #[cfg(windows)]
     {
-        windows_wic::decode(path).map(image::DynamicImage::ImageRgb8)
+        windows_wic::decode(path, None).map(image::DynamicImage::ImageRgb8)
     }
     #[cfg(not(windows))]
     {
@@ -48,11 +48,12 @@ mod windows_wic {
     use image::RgbImage;
     use windows::Win32::Foundation::GENERIC_READ;
     use windows::Win32::Graphics::Imaging::{
-        CLSID_WICImagingFactory, GUID_WICPixelFormat24bppRGB, IWICImagingFactory, IWICPalette,
-        WICBitmapDitherTypeNone, WICBitmapPaletteTypeCustom, WICDecodeMetadataCacheOnDemand,
+        CLSID_WICImagingFactory, GUID_WICPixelFormat24bppRGB, IWICBitmapSource, IWICImagingFactory,
+        IWICPalette, WICBitmapDitherTypeNone, WICBitmapInterpolationModeFant,
+        WICBitmapPaletteTypeCustom, WICDecodeMetadataCacheOnDemand,
     };
     use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
-    use windows::core::HSTRING;
+    use windows::core::{HSTRING, Interface};
 
     use crate::{Error, Result};
 
@@ -60,8 +61,9 @@ mod windows_wic {
         Error::Invalid(format!("Windows couldn't decode this image: {e}"))
     }
 
-    /// First frame as 24-bit RGB.
-    pub fn decode(path: &Path) -> Result<RgbImage> {
+    /// First frame as 24-bit RGB; with `min_edge`, shrunk by the largest power of two
+    /// (up to 1/8) that keeps the long edge at least that long.
+    pub fn decode(path: &Path, min_edge: Option<u32>) -> Result<RgbImage> {
         super::windows_shell::ensure_com();
         let path = HSTRING::from(std::path::absolute(path)?.as_os_str());
         // SAFETY: plain COM calls on interfaces we own; the buffer is sized from the
@@ -79,10 +81,32 @@ mod windows_wic {
                 )
                 .map_err(os_error)?;
             let frame = decoder.GetFrame(0).map_err(os_error)?;
+            let source: IWICBitmapSource = match min_edge {
+                None => frame.cast().map_err(os_error)?,
+                Some(edge) => {
+                    let (mut fw, mut fh) = (0u32, 0u32);
+                    frame.GetSize(&mut fw, &mut fh).map_err(os_error)?;
+                    let mut k = 1;
+                    while k < 8 && fw.max(fh) / (k * 2) >= edge {
+                        k *= 2;
+                    }
+                    // Power-of-two sizes let the JPEG codec scale while decoding.
+                    let scaler = factory.CreateBitmapScaler().map_err(os_error)?;
+                    scaler
+                        .Initialize(
+                            &frame,
+                            fw.div_ceil(k),
+                            fh.div_ceil(k),
+                            WICBitmapInterpolationModeFant,
+                        )
+                        .map_err(os_error)?;
+                    scaler.cast().map_err(os_error)?
+                }
+            };
             let converter = factory.CreateFormatConverter().map_err(os_error)?;
             converter
                 .Initialize(
-                    &frame,
+                    &source,
                     &GUID_WICPixelFormat24bppRGB,
                     WICBitmapDitherTypeNone,
                     None::<&IWICPalette>,
@@ -99,6 +123,23 @@ mod windows_wic {
                 .map_err(os_error)?;
             RgbImage::from_raw(w, h, buf).ok_or_else(|| Error::Invalid("Bad image size".into()))
         }
+    }
+}
+
+/// Decodes an image shrunk by a power of two (1/2, 1/4, 1/8) while keeping the long
+/// edge at least `min_edge`. JPEG decoders skip most of the work at those sizes, so
+/// this is much faster than a full decode. Windows only for now (WIC).
+pub fn reduced_image(path: &Path, min_edge: u32) -> Result<image::DynamicImage> {
+    #[cfg(windows)]
+    {
+        windows_wic::decode(path, Some(min_edge)).map(image::DynamicImage::ImageRgb8)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (path, min_edge);
+        Err(Error::Invalid(
+            "Reduced decoding isn't available on this system yet".into(),
+        ))
     }
 }
 
@@ -292,6 +333,23 @@ mod tests {
         let img = super::full_image(&path).unwrap().to_rgb8();
         assert_eq!(img.dimensions(), (1500, 900));
         assert_eq!(img.get_pixel(700, 400).0, [10, 200, 10]);
+    }
+
+    #[test]
+    fn windows_codecs_decode_reduced_by_powers_of_two() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("photo.jpg");
+        RgbImage::from_pixel(4000, 3000, Rgb([200, 120, 40]))
+            .save(&path)
+            .unwrap();
+        // A quarter keeps the long edge at 1000 >= 960; an eighth (500) wouldn't.
+        let img = super::reduced_image(&path, 960).unwrap().to_rgb8();
+        assert_eq!(img.dimensions(), (1000, 750));
+        let p = img.get_pixel(500, 375).0;
+        assert!(p[0].abs_diff(200) < 6 && p[2].abs_diff(40) < 6, "{p:?}");
+        // Small images aren't reduced at all.
+        let small = super::reduced_image(&path, 4000).unwrap();
+        assert_eq!(small.width(), 4000);
     }
 
     #[test]
