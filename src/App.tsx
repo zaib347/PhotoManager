@@ -18,6 +18,8 @@ import {
   type Stats,
   type TagInfo,
   type View,
+  type AiPack,
+  type AiStatus,
 } from "./api";
 import { CollectionsContext, type Collections } from "./collections/context";
 import { DuplicatesPage } from "./cleanup/DuplicatesPage";
@@ -31,6 +33,8 @@ import { FilterBar } from "./photos/FilterBar";
 import { PhotosView } from "./photos/PhotosView";
 import { PlacesPage } from "./places/PlacesPage";
 import { MapPage } from "./map/MapPage";
+import { AiPage } from "./ai/AiPage";
+import { SearchBox } from "./ai/SearchBox";
 import { TripsPage } from "./trips/TripsPage";
 import "./App.css";
 
@@ -54,6 +58,7 @@ function emptyState(view: View): { title: string; hint: string } {
     trips: { title: "", hint: "" },
     places: { title: "", hint: "" },
     map: { title: "", hint: "" },
+    ai: { title: "", hint: "" },
     duplicates: { title: "", hint: "" },
     similar: { title: "", hint: "" },
     removed: { title: "", hint: "" },
@@ -111,6 +116,48 @@ export default function App() {
   const reloadRoots = useCallback(async () => setRoots(await api.listRoots()), []);
 
   const report = useCallback((e: unknown) => setNotice(`Failed: ${e}`), []);
+
+  const [ai, setAi] = useState<AiStatus | null>(null);
+  const [aiInstalling, setAiInstalling] = useState<{ pack: AiPack; done: number; total: number } | null>(null);
+  const [things, setThings] = useState<[string, string][]>([]);
+  const reloadAi = useCallback(() => {
+    api.aiStatus().then(setAi).catch(() => {});
+  }, []);
+  const searchReady = !!ai?.search && ai.search.indexed > 0;
+
+  useEffect(() => {
+    reloadAi();
+    api.aiSmartAlbums().then(setThings).catch(() => {});
+    const unlisten = [
+      events.aiInstallProgress((p) => setAiInstalling(p)),
+      events.aiInstallFinished(({ pack, error }) => {
+        setAiInstalling(null);
+        setNotice(error ? (error === "Stopped" ? "Install stopped; it resumes where it left off." : `Install failed: ${error}`) : pack === "search" ? "Search by description is installed. Your photos are being indexed in the background." : "Installed.");
+        reloadAi();
+      }),
+      events.aiIndexProgress((p) => setAi((s) => (s ? { ...s, search: p, indexing: true } : s))),
+      events.aiIndexFinished(reloadAi),
+    ];
+    return () => unlisten.forEach((p) => p.then((off) => off()));
+  }, [reloadAi]);
+
+  /** Shows photos matching a description, labelled `label`. */
+  const searchPhotos = useCallback(
+    async (query: string, label: string) => {
+      try {
+        const ids = await api.aiSearch(query);
+        if (ids.length === 0) {
+          setNotice(`Nothing matched “${label}”.`);
+          return;
+        }
+        setView("all");
+        setFilter({ ids, searchText: label });
+      } catch (e) {
+        report(e);
+      }
+    },
+    [report],
+  );
 
   useEffect(() => {
     reloadTimeline().catch(report);
@@ -256,6 +303,9 @@ export default function App() {
           {stats ? `${stats.assets.toLocaleString()} items · ${stats.days.toLocaleString()} days` : "Loading…"}
         </span>
         <div className="spacer" />
+        {ai?.features.some((f) => f.id === "search" && f.installed) && (
+          <SearchBox onSearch={(q) => searchPhotos(q, q)} />
+        )}
         {exporting && (
           <span className="export-status muted">
             Exporting {exporting.done.toLocaleString()} of {exporting.total.toLocaleString()}
@@ -298,6 +348,8 @@ export default function App() {
           onRemove={removeRoot}
           onError={report}
           onNotice={setNotice}
+          things={searchReady ? things : []}
+          onThing={(name, description) => searchPhotos(description, name)}
           onImported={() => {
             Promise.all([reloadTimeline(), reloadCollections()]).catch(report);
             setEventsVersion((v) => v + 1);
@@ -313,6 +365,8 @@ export default function App() {
             <TripsPage version={eventsVersion} onError={report} />
           ) : view === "places" ? (
             <PlacesPage version={eventsVersion} onError={report} />
+          ) : view === "ai" ? (
+            <AiPage status={ai} installing={aiInstalling} onChanged={reloadAi} onNotice={setNotice} onError={report} />
           ) : view === "map" ? (
             <MapPage
               placing={placing?.ids ?? null}

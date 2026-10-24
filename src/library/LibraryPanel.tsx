@@ -19,6 +19,7 @@ const VIEWS: { id: BuiltinView; label: string }[] = [
   { id: "similar", label: "Similar photos" },
   { id: "organize", label: "Organize files" },
   { id: "removed", label: "Recently removed" },
+  { id: "ai", label: "AI features" },
 ];
 
 type Props = {
@@ -34,6 +35,9 @@ type Props = {
   onNotice: (message: string) => void;
   /** An import changed dates, places, albums or favorites. */
   onImported: () => void;
+  /** Ready-made searches (name, description), once search by description is ready. */
+  things: [string, string][];
+  onThing: (name: string, description: string) => void;
 };
 
 export function LibraryPanel({
@@ -48,6 +52,8 @@ export function LibraryPanel({
   onError,
   onNotice,
   onImported,
+  things,
+  onThing,
 }: Props) {
   const { albums, tags, reload } = useCollections();
   const [newAlbum, setNewAlbum] = useState<string | null>(null);
@@ -126,6 +132,21 @@ export function LibraryPanel({
           <p className="muted sidebar-hint">Select photos and choose Add to album, or press +.</p>
         )}
       </nav>
+
+      {things.length > 0 && (
+        <>
+          <div className="sidebar-title">
+            <span>Things</span>
+          </div>
+          <nav className="views" aria-label="Things">
+            {things.map(([name, description]) => (
+              <button key={name} className="view-link" onClick={() => onThing(name, description)}>
+                <span className="link-label">{name}</span>
+              </button>
+            ))}
+          </nav>
+        </>
+      )}
 
       {tags.length > 0 && (
         <>

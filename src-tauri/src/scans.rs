@@ -80,6 +80,7 @@ pub fn start(app: &AppHandle, state: &Arc<AppState>, root_id: i64) -> bool {
                 },
             );
             crate::similar_commands::run_in_background(&app, &state);
+            crate::ai_commands::run_indexer(&app, &state);
         })
         .expect("spawn scan thread");
     true

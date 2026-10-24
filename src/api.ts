@@ -3,7 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { lookQuery } from "./looks";
 
 /** Views that are pages rather than timelines. */
-const PAGES = ["events", "trips", "places", "map", "duplicates", "similar", "removed", "organize"] as const;
+const PAGES = ["events", "trips", "places", "map", "ai", "duplicates", "similar", "removed", "organize"] as const;
 export type PageView = (typeof PAGES)[number];
 export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | PageView;
 export type View = BuiltinView | { album: number } | { tag: number } | { event: number } | { trip: number };
@@ -40,6 +40,21 @@ export type Filter = {
   countries?: string[];
   /** A rectangle of the map, from a map cluster. */
   area?: Area;
+  /** Only these items: the results of a search by description… */
+  ids?: number[];
+  /** …and what was searched, for the filter chip (not sent to a query). */
+  searchText?: string;
+};
+
+/** An optional AI feature. */
+export type AiPack = "search";
+export type AiFeature = { id: AiPack; installed: boolean; downloadBytes: number; diskBytes: number };
+export type AiStatus = {
+  features: AiFeature[];
+  installing: AiPack | null;
+  /** Search indexing progress, when search is installed. */
+  search: { indexed: number; total: number } | null;
+  indexing: boolean;
 };
 
 /** A rectangle of the map in degrees; west > east crosses the antimeridian. */
@@ -97,6 +112,8 @@ export function normalizeFilter(f: Filter): Filter {
   if (f.placeIds?.length) out.placeIds = [...f.placeIds].sort((a, b) => a - b);
   if (f.countries?.length) out.countries = [...f.countries].sort();
   if (f.area) out.area = f.area;
+  if (f.ids) out.ids = f.ids;
+  if (f.searchText) out.searchText = f.searchText;
   return out;
 }
 
@@ -525,6 +542,16 @@ export const api = {
   searchCities: (query: string) => invoke<CityInfo[]>("search_cities", { query }),
   /** Places photos by hand; returns how many. */
   setLocation: (ids: number[], lat: number, lon: number) => invoke<number>("set_location", { ids, lat, lon }),
+  aiStatus: () => invoke<AiStatus>("ai_status"),
+  /** Downloads and installs an AI feature in the background; watch `events.aiInstall*`. */
+  aiInstall: (pack: AiPack) => invoke<void>("ai_install", { pack }),
+  aiCancelInstall: () => invoke<void>("ai_cancel_install"),
+  /** Removes a feature and what it made; false if some files go at the next restart. */
+  aiRemove: (pack: AiPack) => invoke<boolean>("ai_remove", { pack }),
+  /** Photos matching a description, best first. */
+  aiSearch: (query: string) => invoke<number[]>("ai_search", { query }),
+  /** Ready-made searches: (name, description). */
+  aiSmartAlbums: () => invoke<[string, string][]>("ai_smart_albums"),
   /** The photos a slideshow plays, in order: no near-duplicates, the best if there are many. */
   slideshowPick: (ids: number[]) => invoke<number[]>("slideshow_pick", { ids }),
   /** A music file's bytes, to play under the slideshow. */
@@ -582,6 +609,13 @@ export const events = {
     listen<{ done: number; total: number }>("export-progress", (e) => cb(e.payload)),
   exportFinished: (cb: (f: { report: ExportReport | null; error: string | null }) => void): Promise<UnlistenFn> =>
     listen<{ report: ExportReport | null; error: string | null }>("export-finished", (e) => cb(e.payload)),
+  aiInstallProgress: (cb: (p: { pack: AiPack; done: number; total: number }) => void): Promise<UnlistenFn> =>
+    listen<{ pack: AiPack; done: number; total: number }>("ai-install-progress", (e) => cb(e.payload)),
+  aiInstallFinished: (cb: (f: { pack: AiPack; error: string | null }) => void): Promise<UnlistenFn> =>
+    listen<{ pack: AiPack; error: string | null }>("ai-install-finished", (e) => cb(e.payload)),
+  aiIndexProgress: (cb: (p: { indexed: number; total: number }) => void): Promise<UnlistenFn> =>
+    listen<{ indexed: number; total: number }>("ai-index-progress", (e) => cb(e.payload)),
+  aiIndexFinished: (cb: () => void): Promise<UnlistenFn> => listen("ai-index-finished", () => cb()),
   videoProgress: (cb: (p: { done: number; total: number }) => void): Promise<UnlistenFn> =>
     listen<{ done: number; total: number }>("video-progress", (e) => cb(e.payload)),
   videoFinished: (cb: (f: { report: VideoReport | null; error: string | null }) => void): Promise<UnlistenFn> =>

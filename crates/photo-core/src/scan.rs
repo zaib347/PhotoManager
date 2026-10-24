@@ -361,6 +361,10 @@ impl Scanner<'_> {
                     // Same path, changed content: update its asset unless copies share it.
                     (Some((file_id, Some(asset_id))), _) if !shared(&tx, asset_id, file_id)? => {
                         update_asset(&tx, asset_id, p.work.kind, &p.meta)?;
+                        tx.execute(
+                            "DELETE FROM ai_embeddings WHERE asset_id = ?1",
+                            params![asset_id],
+                        )?;
                         summary.updated += 1;
                         stale_thumbs.push(asset_id);
                         if !crate::edit::look_of(&tx, asset_id)?.is_plain() {

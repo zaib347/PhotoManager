@@ -1,0 +1,26 @@
+[package]
+name = "photo-ai"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+ndarray = "0.17.2"
+# ONNX Runtime is loaded at run time from the downloaded runtime (load-dynamic), so the
+# app itself carries no runtime; API level 24 matches the version it downloads.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "load-dynamic", "api-24", "ndarray"] }
+photo-core = { path = "../photo-core" }
+rusqlite = "0.40.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+ureq = { version = "3.5.0", default-features = false, features = ["rustls"] }
+zip = { version = "9.1.0", default-features = false, features = ["deflate"] }
+
+[target."cfg(windows)".dependencies]
+libloading = "0.9"
+windows = { version = "0.62.2", features = ["Win32_System_Power", "Win32_Foundation"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"

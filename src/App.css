@@ -2006,3 +2006,38 @@ button.primary:disabled {
   font-weight: 600;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
+
+/* ---------- AI ---------- */
+
+.ai-search {
+  width: 260px;
+}
+
+.ai-feature {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 720px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.ai-feature p,
+.ai-feature h3 {
+  margin: 0;
+}
+
+.ai-feature-head,
+.ai-actions,
+.ai-progress {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.ai-progress .progress {
+  flex: 1;
+}

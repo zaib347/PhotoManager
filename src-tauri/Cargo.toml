@@ -23,5 +23,6 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 photo-core = { path = "../crates/photo-core" }
+photo-ai = { path = "../crates/photo-ai" }
 tauri-plugin-dialog = "2.8.3"
 rayon = "1.12.0"

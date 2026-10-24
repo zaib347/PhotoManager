@@ -87,7 +87,7 @@ Rule: anything that is not window/IPC glue goes in `photo-core`. That keeps it t
 | — | **Free public beta** | ~month 5–6 | Real libraries, real crash reports. Installer, code signing and auto-update are done just before. |
 | M5 | Platform hardening | 4 | HEIC/RAW/video on all 3 OSes, long/Unicode paths, macOS permissions, AppImage/deb, signed + notarized builds, auto-update. |
 | M6 | Annual subscription | 2–3 | MoR checkout, signed offline license token, 14–30 day grace. Browsing, timeline and export are never paywalled. |
-| M7 | AI pack (opt-in) | 6–8 | Built last. Nothing is downloaded unless the user turns a feature on. Model manager (download, verify, delete), `ort` with `load-dynamic`; search by description, then people (face grouping), then upscale. See "M7 checklist". |
+| M7 | AI pack (opt-in) | 6–8 | Built last. Nothing is downloaded unless the user turns a feature on. Model manager (download, verify, delete), `ort` with `load-dynamic`; search by description, then people (face grouping), then upscale, then text in photos (the OS's built-in OCR, no download). See "M7 checklist". |
 
 Realistic solo estimate: **9–12 months** to paid 1.0.
 
@@ -278,9 +278,10 @@ Ground rule: tools write new files; originals are only replaced through `fileops
 ## Order from here (the user's choice, 2026-10-24)
 
 1. **F: the six non-AI features**, in the order below (smallest first).
-2. Beta prep and **M6** (subscription), as planned.
-3. **M7: the three AI features, last.** Each is the user's choice: off by default, and its
-   model downloads only when the user turns that feature on.
+2. **M7: the AI features (search, people, upscale, text in photos/OCR).** Each is the user's
+   choice: off by default, and its model downloads only when the user turns that feature on.
+3. Beta prep and **M6** (subscription and payments) as the very last step (the user's
+   choice, 2026-10-24).
 
 ## F checklist (non-AI features)
 
@@ -337,10 +338,25 @@ Off by default. **Settings → AI features** lists each feature with what it doe
 download size and an **Install** button; nothing is downloaded before that. Models run on
 the user's PC only (no photos leave it), can be deleted any time, and are checked against a
 SHA-256 before first use. ONNX Runtime via `ort` with `load-dynamic`, so the app itself
-stays small and the runtime comes with the first model (DirectML on Windows for GPUs).
-Indexing runs in the background, pauses during scans and on battery.
+stays small and the runtime comes with the first model. Indexing runs in the background,
+pauses during scans and on battery.
 
-1. - [ ] **Search by description** (~150–350 MB model): "beach sunset", "birthday cake" find
+Decisions made while building search (2026-10-24, measured on this PC):
+- **CPU only, no DirectML.** With the 8-bit CLIP model DirectML was 4× slower than the CPU
+  on an integrated GPU (430 vs 104 ms a photo), and ONNX Runtime 1.24.4 crashed (access
+  violation) optimising the model for DirectML. DirectML is also a 202 MB download. A
+  different model (fp16, for discrete GPUs) could bring it back later, behind a test.
+- **Runtime:** `onnxruntime.dll` from Microsoft's DirectML NuGet package (12 MB, against
+  125 MB for the plain CPU one; its DirectML provider is never used). It needs the Visual
+  C++ 2015–2022 runtime: checked before downloading, with a clear message. **Beta prep:**
+  have the installer bring that runtime (app-local DLLs or the redistributable).
+- **One photo per model run:** the 8-bit model scales over its whole input, so batching
+  made a photo's embedding depend on its batch-mates (up to 2% apart). Unbatched is 35%
+  slower (~80–100 ms a photo on a laptop CPU, ~2.5 h per 100k photos) but deterministic.
+- Embeddings come from the 256 px grid thumbnails (no full decodes) and are stored as
+  512 bytes each in the library; results are what stands out (z-score ≥ 2.2) for each search.
+
+1. - [x] **Search by description** (~165 MB download: model 154 MB + runtime 12 MB): "beach sunset", "birthday cake" find
    photos without tags. CLIP-style image + text embeddings; ~20–50 ms per photo to index on
    CPU, instant search. Then automatic smart albums (Food, Pets, Documents…) from the same
    model.
@@ -350,6 +366,19 @@ Indexing runs in the background, pauses during scans and on battery.
    hours, then new photos only.
 3. - [ ] **Upscale** (~20–70 MB model): enlarge small or old photos 2–4×, as an Export size
    option. Seconds to a minute per photo on CPU, so it's a deliberate action.
+4. - [ ] **Text in photos (OCR)** (no download): reads the words in screenshots, receipts,
+   documents, signs and whiteboards, so "wifi password" or "invoice 4521" finds them from
+   the same search box (CLIP knows a photo *is* a receipt but can't read it). Added by the
+   user on 2026-10-24.
+   - **Uses the OS's own OCR, never a downloaded model:** Windows `Windows.Media.Ocr`
+     (WinRT, Windows 10/11; languages follow the installed Windows language packs), and on
+     macOS Apple's Vision framework (`VNRecognizeTextRequest`) when the Mac version is
+     built. Linux has no built-in OCR; decide then (e.g. a small Apache-licensed model as
+     a pack).
+   - Opt-in like the others (Install button, but nothing to download), removable; text
+     stored only in the library, in a full-text index.
+   - Runs only on photos likely to hold text (screenshots, and what search scores as
+     documents/receipts), in the background with the same pauses as indexing.
 
 ## M5 checklist
 

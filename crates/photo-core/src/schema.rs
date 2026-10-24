@@ -356,6 +356,18 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
         PRIMARY KEY (import_id, album_id)
     ) WITHOUT ROWID;
     ",
+    // v18: the opt-in AI pack (crate `photo-ai`). `ai_embeddings`: one search embedding
+    // per photo, made on this computer: `model` names the model, `vec` is 8-bit values
+    // times `scale` (empty when the photo couldn't be read). Removed with the asset, and
+    // when its file's content changes.
+    "
+    CREATE TABLE ai_embeddings (
+        asset_id INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+        model    TEXT NOT NULL,
+        scale    REAL NOT NULL,
+        vec      BLOB NOT NULL
+    );
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

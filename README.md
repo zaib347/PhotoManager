@@ -44,8 +44,21 @@ The world map is made from [Natural Earth](https://www.naturalearthdata.com/) ve
 (v5.1.2: land, lakes, urban areas, borders, rivers and roads), which is in the public
 domain. It is clipped into tiles and packed into a compact binary file.
 
+The optional AI features download their models only when the user installs them, and run
+them on the user's computer:
+
+- **Search by description:** OpenAI's [CLIP](https://github.com/openai/CLIP) ViT-B/32 (MIT
+  license), in the 8-bit ONNX export by [Xenova](https://huggingface.co/Xenova/clip-vit-base-patch32),
+  pinned to one revision.
+- **Runtime:** Microsoft's [ONNX Runtime](https://github.com/microsoft/onnxruntime) 1.24.4
+  (MIT license), from its official NuGet package.
+
+Every file is checked against a SHA-256 fixed in `crates/photo-ai/src/models.rs`.
+
 ## Layout
 
 - `crates/photo-core/` — storage, schema, timeline queries, thumbnails. No Tauri dependency.
+- `crates/photo-ai/` — the optional AI features (model downloads, ONNX Runtime, search by
+  description). Nothing in it runs until the user installs a feature.
 - `src-tauri/` — desktop shell: commands and the `thumb://` protocol.
 - `src/` — React UI (`timeline/` holds the virtual grid and date scrubber).

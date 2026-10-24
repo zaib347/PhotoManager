@@ -1,3 +1,4 @@
+mod ai_commands;
 mod cleanup_commands;
 mod collection_commands;
 mod diag;
@@ -53,6 +54,8 @@ pub(crate) struct AppState {
     edit_base: Mutex<Option<(i64, Arc<photo_core::export::PreviewBase>)>>,
     /// Locations of visible photos for the map, loaded when it opens.
     map_points: Mutex<Option<Arc<photo_core::map::Points>>>,
+    /// The optional AI pack.
+    ai: ai_commands::AiState,
 }
 
 impl AppState {
@@ -342,6 +345,7 @@ pub fn run() {
                 watermark_base: Mutex::default(),
                 edit_base: Mutex::default(),
                 map_points: Mutex::default(),
+                ai: ai_commands::AiState::new(dir.join("ai")),
             });
 
             library::refresh_volumes(&state.library.write())?;
@@ -357,6 +361,7 @@ pub fn run() {
             event_commands::catch_up(app.handle(), &state);
             similar_commands::run_in_background(app.handle(), &state);
             xmp_commands::run_writer(&state);
+            ai_commands::run_indexer(app.handle(), &state);
             poll_volumes(app.handle().clone(), state.clone());
             app.manage(state);
             Ok(())
@@ -407,6 +412,12 @@ pub fn run() {
             edit_commands::edit_paste,
             xmp_commands::xmp_settings,
             import_commands::import_metadata,
+            ai_commands::ai_status,
+            ai_commands::ai_install,
+            ai_commands::ai_cancel_install,
+            ai_commands::ai_remove,
+            ai_commands::ai_search,
+            ai_commands::ai_smart_albums,
             import_commands::list_imports,
             import_commands::undo_import,
             map_commands::map_data,

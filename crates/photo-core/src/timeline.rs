@@ -84,6 +84,8 @@ pub struct Filter {
     pub countries: Vec<String>,
     /// A rectangle of the map (opened from a map cluster).
     pub area: Option<crate::map::Area>,
+    /// Only these items (search results); an empty list matches nothing.
+    pub ids: Option<Vec<i64>>,
 }
 
 impl Filter {
@@ -154,6 +156,14 @@ impl Filter {
         }
         if let Some(area) = &self.area {
             sql.push_str(&area.sql());
+        }
+        if let Some(ids) = &self.ids {
+            if ids.is_empty() {
+                sql.push_str(" AND 0");
+            } else {
+                let list: Vec<String> = ids.iter().map(i64::to_string).collect();
+                sql.push_str(&format!(" AND a.id IN ({})", list.join(", ")));
+            }
         }
         (sql, values)
     }
