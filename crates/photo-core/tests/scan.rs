@@ -702,7 +702,10 @@ fn similar_shots_group_and_extra_ones_can_be_removed_and_restored() {
         .expect("the burst forms a group");
     let mut members: Vec<i64> = group.members.iter().map(|m| m.asset_id).collect();
     members.sort_unstable();
-    assert_eq!(members, burst);
+    // Ids follow the order the OS lists files in, which differs between systems.
+    let mut expected = burst.clone();
+    expected.sort_unstable();
+    assert_eq!(members, expected);
     assert_eq!(group.kind, "similar");
     assert_eq!(group.members.iter().filter(|m| m.best).count(), 1);
     assert!(

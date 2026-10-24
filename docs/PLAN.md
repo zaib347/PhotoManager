@@ -285,7 +285,12 @@ Part 1, Windows:
       come from the shell. Not playable in the viewer (webview formats only): "Open in default
       app" stays the way to play them
 
-Part 2, CI: GitHub Actions building Windows, macOS and Linux on every push (unsigned).
+- [x] Part 2, CI (Windows only for now, by the user's choice): `ci.yml` checks every branch
+      (fmt, clippy, tests, build) with Rust pinned in `rust-toolchain.toml`; `build-apps.yml`
+      (run it from the Actions tab, or push a `v*` tag) makes unsigned .msi/.exe installers.
+      macOS and Linux were checked once (2026-10-24): everything compiled and every test passed
+      except one test that assumed Windows' file order (fixed). Their matrix entries are
+      commented out in both workflows, ready for part 3
 Part 3, macOS (QuickLook/ImageIO decoders, disk UUIDs, permissions) and Linux (libheif,
 ffmpeg, FS UUIDs, non-UTF-8 names, AppImage/deb).
 Part 4, at the end: installer, Windows signing, macOS signing + notarization, auto-update,
