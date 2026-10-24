@@ -3,20 +3,38 @@
 Where PhotoManager stands as of 2026-10-24 (evening), and what to pick up next.
 The full plan and checklists are in [docs/PLAN.md](docs/PLAN.md).
 
-## Start here tonight
+## Start here
 
-**Milestone F, feature 1: copy and paste edits** (PLAN "F checklist"). New branch
-`f-paste-edits`:
-- Editor and viewer: **Copy edit** (keeps the photo's recipe in memory).
-- Selection bar: **Paste edit**, with a choice of everything, or light and colour only
-  (no crop/straighten).
-- Applies through `edit::save` for each photo in one batch (videos skipped), bumps each
-  photo's edit version (`photoLooks.setVersion`) so thumbnails refresh; each photo can still
-  be reverted on its own.
-Then F2 XMP sidecars, F3 map view, F4 Takeout/iCloud import, F5 collage, F6 slideshow/video.
+**F1–F4 are built, committed and waiting for the user to test** (built 2026-10-24 while
+the user was out; they asked for all of them in one go without stopping for approval).
+They sit on **stacked branches**, each started from the one before, so merging the last
+one brings all four:
 
-**Map view decision (made 2026-10-24):** a **built-in offline world map** down to city level
-(~20–40 MB bundled, works offline). No online tile provider for now.
+| Branch | Feature | Commit |
+|---|---|---|
+| `f-paste-edits` | F1 copy/paste edits | 550777c |
+| `f-xmp` | F2 XMP sidecars | 5f6563e |
+| `f-map` | F3 map view | 737cc72 |
+| `f-import` | F4 Google Takeout / iCloud import | 697cbd7 |
+
+- **Not merged and not pushed.** Ask the user before merging `f-import` into `main`
+  (fast-forward) and pushing; then delete the four branches.
+- All checks passed on each branch (fmt, clippy -D warnings, all tests, `npm run build`).
+  None of it has been run in the app window yet.
+- Schema is now **v17** (v15 XMP, v16 `user_meta.location_set`, v17 imports).
+
+**What the user should try in the app:**
+1. Paste edits: edit a photo → Copy edit → select others → Paste edit (both choices).
+2. XMP: rescan a folder with Lightroom/darktable `.xmp` files → ratings, keywords (tags),
+   descriptions (Info panel, editable now). Sidebar "Sidecars": turn on writing, change a
+   rating/tag, check the `.xmp` next to the photo a few seconds later.
+3. Map: sidebar Map → pan (drag), zoom (wheel, double-click, +/−), town search, click a
+   cluster → timeline filtered to that area ("Map area" chip). Selection bar → Location →
+   pick a town, or "Pick on the map…". Check light and dark themes.
+4. Import: add a Takeout or iCloud export folder, scan it, then the folder's "Import…" →
+   Import from export → report; Undo in the same panel.
+
+**Then:** F5 collage and print layouts, F6 memory slideshow and video.
 
 ## Where things stand
 
@@ -24,17 +42,43 @@ Then F2 XMP sidecars, F3 map view, F4 Takeout/iCloud import, F5 collage, F6 slid
 |---|---|
 | M0–M4, Tools (export, watermark, rotate, editor, faster JPEG, rename) | Done, on `main` |
 | M5 part 1 (Windows: long/Unicode paths, RAW, video details) + CI | Done, on `main` |
-| F (6 non-AI features) | Next, starting tonight |
+| F (6 non-AI features) | F1–F4 built (unmerged branches); F5, F6 next |
 | Beta prep, M6 subscription | After F |
 | M7 AI pack (search, people, upscale; opt-in downloads) | Last |
 | M5 parts 3–4 (macOS/Linux, signing, notarization) | Later, when the user says |
 
-- Everything is merged and pushed (`main` = origin/main). No open branches with work.
+- `main` = origin/main (8f93bec + nothing new). The work is on the branches above.
 - **Testing:** the user's team has the installer
   (`target/release/bundle/nsis/PhotoManager_0.1.0_x64-setup.exe`, built locally with
   `npm run tauri build`, unsigned). Expect bug reports; fix those before new work when
   they come in.
 - Disk: `target/debug` cleaned 2026-10-24 (20 GB); `target/release` is 2.3 GB.
+
+## How the F1–F4 code works
+
+- **Paste edits:** `edit::paste` (one transaction, videos skipped, `PasteWhat::Tone` keeps
+  each photo's crop/straighten); `edit_paste` command drops thumbnails. Copied recipe lives
+  in `src/editor/copied.ts` (memory only).
+- **XMP:** `crates/photo-core/src/xmp.rs`. `parse` (quick-xml 0.37, namespace-aware),
+  `merge` (our values go in their own `rdf:Description`; the same properties are removed
+  elsewhere; idempotent), `embedded` (JPEG APP1). Scan: `.xmp` files collected in the walk,
+  `import_sidecars` in finalize (`xmp_seen` by mtime), embedded XMP applied in commit. Reads
+  only fill blanks (rating, note) and add tags; label "Favorite" ⇒ favorite, other labels ⇒
+  tags. Writing: `settings` table (`xmp_write`, `xmp_favorite`), triggers fill `xmp_dirty`,
+  `xmp_commands::run_writer` polls every 3 s. Sidecar name: `IMG_1.xmp`, or `IMG_1.JPG.xmp`
+  when another file shares the stem or that one exists. `user_meta.note` is the description.
+- **Map:** data `crates/photo-core/data/map.bin` (9.5 MB) from `examples/build_map.rs`
+  (Natural Earth 5.1.2 GeoJSON, public domain; format in the example's doc comment). Frontend
+  `src/map/world.ts` decodes tiles lazily into `Path2D`s and draws per zoom level;
+  `MapPage.tsx` handles pan/zoom, clusters (DOM markers), placing mode. Backend
+  `map::Points` (loaded on `map_load`, ~0.4 s at 1M) and `clusters` (4–25 ms per view at
+  1M). `Filter.area` filters the timeline. `map::set_location` sets `location_set`, which
+  `scan::update_asset` respects.
+- **Import:** `crates/photo-core/src/imports.rs`. `plan` reads Takeout JSONs (name
+  matching: `.supplemental-metadata` cut short, `(n)` counters, long names, `-edited`
+  copies) and iCloud `Photo Details*.csv` / `Albums/*.csv`; `run` applies in one
+  transaction with a journal (`imports`, `import_items`, `import_albums`); `undo` takes it
+  back. Imported dates use `taken_src` 5 and the date-fix original columns.
 
 ## How the similar-photos code works
 
@@ -139,4 +183,4 @@ Actions tab or a `v*` tag) makes unsigned installers. macOS/Linux entries are co
 ## Waiting on the user
 
 - Live Photos and faster hide: confirmed working by the user (2026-10-24).
-- **F1 copy/paste edits** (branch `f-paste-edits`): built, waiting for the user to test and say merge.
+- **F1–F4** (branches above): built, waiting for the user to test and say merge.
