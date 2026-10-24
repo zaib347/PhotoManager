@@ -5,54 +5,67 @@ The full plan and checklists are in [docs/PLAN.md](docs/PLAN.md).
 
 ## Start here
 
-**F1–F4 are built, committed and waiting for the user to test** (built 2026-10-24 while
-the user was out; they asked for all of them in one go without stopping for approval).
-They sit on **stacked branches**, each started from the one before, so merging the last
-one brings all four:
+**Milestone F is complete.** F1–F4 are merged into `main` locally (the user confirmed them
+2026-10-24). F5 and F6 were built right after, at the user's request, without stopping
+for approval:
 
-| Branch | Feature | Commit |
+| Branch | Feature | State |
 |---|---|---|
-| `f-paste-edits` | F1 copy/paste edits | 550777c |
-| `f-xmp` | F2 XMP sidecars | 5f6563e |
-| `f-map` | F3 map view | 737cc72 |
-| `f-import` | F4 Google Takeout / iCloud import | 697cbd7 |
+| `f-collage` | F5 collage and print layouts | committed, waiting for the user's test |
+| `f-slideshow` (from `f-collage`) | F6 memory slideshow and video | committed, waiting for the user's test |
 
-- **Not merged and not pushed.** Ask the user before merging `f-import` into `main`
-  (fast-forward) and pushing; then delete the four branches.
-- All checks passed on each branch (fmt, clippy -D warnings, all tests, `npm run build`).
-  None of it has been run in the app window yet.
-- Schema is now **v17** (v15 XMP, v16 `user_meta.location_set`, v17 imports).
+- `main` is **5 commits ahead of origin** (F1–F4 + handoff): pushing was blocked by the
+  permission settings. The user runs `git push origin main`, or allows the push.
+- Merge `f-slideshow` (fast-forward; it contains `f-collage`) after the user's go-ahead.
+- Schema is **v17**.
 
 **What the user should try in the app:**
-1. Paste edits: edit a photo → Copy edit → select others → Paste edit (both choices).
-2. XMP: rescan a folder with Lightroom/darktable `.xmp` files → ratings, keywords (tags),
-   descriptions (Info panel, editable now). Sidebar "Sidecars": turn on writing, change a
-   rating/tag, check the `.xmp` next to the photo a few seconds later.
-3. Map: sidebar Map → pan (drag), zoom (wheel, double-click, +/−), town search, click a
-   cluster → timeline filtered to that area ("Map area" chip). Selection bar → Location →
-   pick a town, or "Pick on the map…". Check light and dark themes.
-4. Import: add a Takeout or iCloud export folder, scan it, then the folder's "Import…" →
-   Import from export → report; Undo in the same panel.
+1. Collage: select 2–9 photos → Collage. Layouts (Grid, Mosaic, Feature, Strips), sizes
+   (Square, Story, Wide, prints 4×6/5×7/8×10/A4 at 300 dpi), portrait/landscape, spacing,
+   corners, background. Drag a photo onto another to swap; click one, then drag to move it
+   in its frame, scroll or slider to zoom. Save… → JPEG, opens its folder.
+2. Slideshow: ▶ Play in an event, a trip, On This Day, or select photos → ▶ Slideshow.
+   Space/arrows/Esc, speed, ♪ Music… (mp3/m4a/wav/flac/ogg), Save as video… → MP4 made in
+   the background ("Making video N%" in the toolbar, Stop).
 
-**Then:** F5 collage and print layouts, F6 memory slideshow and video.
+**Next (the user's order, 2026-10-24):** beta prep can wait; next is **M6 subscription**,
+then **M7 AI pack**. See docs/PLAN.md.
 
 ## Where things stand
 
 | Milestone | State |
 |---|---|
-| M0–M4, Tools (export, watermark, rotate, editor, faster JPEG, rename) | Done, on `main` |
-| M5 part 1 (Windows: long/Unicode paths, RAW, video details) + CI | Done, on `main` |
-| F (6 non-AI features) | F1–F4 built (unmerged branches); F5, F6 next |
-| Beta prep, M6 subscription | After F |
-| M7 AI pack (search, people, upscale; opt-in downloads) | Last |
-| M5 parts 3–4 (macOS/Linux, signing, notarization) | Later, when the user says |
+| M0–M4, Tools, M5 part 1 + CI | Done, on `main` |
+| F1–F4 | Done, merged to `main` (not pushed) |
+| F5–F6 | Built on branches, waiting for testing |
+| M6 subscription | Next |
+| M7 AI pack (search, people, upscale; opt-in downloads) | After M6 |
+| Beta prep; M5 parts 3–4 (macOS/Linux, signing) | Later, when the user says |
 
-- `main` = origin/main (8f93bec + nothing new). The work is on the branches above.
 - **Testing:** the user's team has the installer
   (`target/release/bundle/nsis/PhotoManager_0.1.0_x64-setup.exe`, built locally with
-  `npm run tauri build`, unsigned). Expect bug reports; fix those before new work when
-  they come in.
-- Disk: `target/debug` cleaned 2026-10-24 (20 GB); `target/release` is 2.3 GB.
+  `npm run tauri build`, unsigned). Expect bug reports; fix those before new work.
+
+## How the F5–F6 code works
+
+- **Collage:** `crates/photo-core/src/collage.rs` renders a `Collage` (cells in canvas
+  fractions + pan/zoom per photo; `cell_rect` and `crop_for` match `src/collage/templates.ts`
+  exactly, so the DOM preview equals the file). Saved with `jpeg::encode_print` (JFIF dpi)
+  and the first photo's EXIF without GPS (`export::exif_for_copy`). Templates in TS
+  (`grid`, `mosaic` = justified rows by photo aspect, `feature`, `strips`; drawn landscape,
+  transposed for portrait). Command `save_collage`; the save dialog needed
+  `dialog:allow-save`.
+- **Slideshow:** `movie::pick` (no videos, best of each similar group, cut to the best
+  `MAX_PHOTOS`=150 by favorite/rating/focus/exposure, then time order). Frontend
+  `src/slideshow/Slideshow.tsx`: CSS crossfade + pan/zoom matching the video's moves;
+  portraits shown whole over a blurred copy; music via `read_audio` bytes → Blob URL.
+- **Video:** `movie::make`: 1920×1080, 30 fps; frames rendered in parallel batches of 24
+  (bilinear crop+resize with fast_image_resize), BT.709 NV12, written with a Media
+  Foundation sink writer (H.264 Main 12 Mbit/s, AAC 192 kbit/s, 48 kHz stereo). Music
+  decoded with an MF source reader, resampled/looped/faded in Rust (`fit_music`).
+  Non-Windows builds return "works on Windows for now". Tauri: `make_video` thread with
+  `video-progress` / `video-finished` events, `cancel_video` (partial file removed).
+  Needs the `Win32_Media_MediaFoundation` feature of `windows`.
 
 ## How the F1–F4 code works
 
@@ -183,4 +196,5 @@ Actions tab or a `v*` tag) makes unsigned installers. macOS/Linux entries are co
 ## Waiting on the user
 
 - Live Photos and faster hide: confirmed working by the user (2026-10-24).
-- **F1–F4** (branches above): built, waiting for the user to test and say merge.
+- F1–F4: confirmed working by the user (2026-10-24), merged locally.
+- **F5–F6** (branches above): built, waiting for the user to test and say merge.
