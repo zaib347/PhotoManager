@@ -1,0 +1,4 @@
+[toolchain]
+# CI and local checks use the same compiler and lints.
+channel = "1.93.1"
+components = ["rustfmt", "clippy"]

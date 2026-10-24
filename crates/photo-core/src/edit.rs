@@ -257,7 +257,7 @@ fn tone(image: &mut RgbImage, r: &Recipe) {
 
     let row_len = image.width() as usize * 3;
     image.par_chunks_mut(row_len).for_each(|row| {
-        for px in row.chunks_exact_mut(3) {
+        for px in row.as_chunks_mut::<3>().0 {
             let mut c = [
                 luts[0][px[0] as usize],
                 luts[1][px[1] as usize],
