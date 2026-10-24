@@ -224,6 +224,12 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
               if (await remove([...selection])) clearSelection();
             })
           }
+          onExport={(options) =>
+            run(async () => {
+              await api.exportPhotos([...selection], options);
+              onNotice(`Exporting ${selection.size.toLocaleString()} photos to ${options.folder}…`);
+            })
+          }
           onAddToAlbum={(id) =>
             run(async () => {
               await api.addToAlbum(id, [...selection]);

@@ -82,7 +82,8 @@ Rule: anything that is not window/IPC glue goes in `photo-core`. That keeps it t
 | M2 | Browsing | 4–5 | Viewer, metadata panel, filters, favorites/tags/albums, video playback. First demo build. |
 | M3 | Memory features | 4 | On This Day, event detection (adaptive time gaps), trips (GPS away from home), offline place names (GeoNames), time correction incl. bulk camera-clock shift. |
 | M4 | Cleanup & safety | 4 | Exact dupes (size → quick hash → full hash), near-dupes/bursts (phash within time window, BK-tree), best-shot ranking, planned/previewed/journaled/undoable ops, trash-only delete. |
-| — | **Free public beta** | ~month 5–6 | Real libraries, real crash reports. |
+| T | Tools | 4–5 | Export copies (resize, convert incl. HEIC → JPEG, compress, metadata kept, remove location), watermark, lossless rotate, non-destructive editor. Upscale and other AI tools go in M7. |
+| — | **Free public beta** | ~month 5–6 | Real libraries, real crash reports. Installer, code signing and auto-update are done just before. |
 | M5 | Platform hardening | 4 | HEIC/RAW/video on all 3 OSes, long/Unicode paths, macOS permissions, AppImage/deb, signed + notarized builds, auto-update. |
 | M6 | Annual subscription | 2–3 | MoR checkout, signed offline license token, 14–30 day grace. Browsing, timeline and export are never paywalled. |
 | M7 | AI pack | 6–8 | Model manager (download, verify, delete), `ort` with `load-dynamic`, image embeddings → semantic search, then OCR; faces last and opt-in. |
@@ -223,6 +224,24 @@ Batch 2:
       (the `files` row follows the file, emptied folders removed); Undo moves everything back
 - [ ] Follow-up: assessing a 12 MP original takes ~450 ms (full JPEG decode); decode at 1/4 scale
       (DCT scaling) before large real libraries
+
+## Tools checklist
+
+Ground rule: tools write new files; originals are only replaced through `fileops` (undoable).
+
+- [x] Export (`export`): selection → **Export** → format (same as original / JPEG / WebP / PNG;
+      HEIC and other non-web formats become JPEG), quality, size (full / 4096 / 2048 / 1080 long
+      edge, Lanczos3 via `fast_image_resize`), remove location, folder. EXIF rebuilt for the copy
+      (date, camera, GPS kept; orientation applied to pixels; MakerNote and thumbnail dropped),
+      ICC profile kept (`img-parts`). Never overwrites (" (2)"). Background job, up to 4 threads,
+      progress + Stop in the toolbar. HEIC and other OS formats decode at full size through WIC
+      (Windows); macOS/Linux decoders come with M5. WebP via libwebp (`webp` crate)
+- [ ] Better JPEG compression (mozjpeg) and AVIF output
+- [ ] "Shrink originals": replace originals with compressed versions through `fileops`
+- [ ] Watermark (text / logo, position, size, opacity) as an export step
+- [ ] Lossless rotate (EXIF orientation only)
+- [ ] Non-destructive editor (crop, straighten, exposure, contrast, highlights/shadows,
+      saturation, white balance, sharpen, auto-enhance, presets; recipe stored, Revert)
 
 ## M0 results
 

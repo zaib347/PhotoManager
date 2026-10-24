@@ -27,6 +27,12 @@ Best-shot test: in a burst group the badge should say why ("Sharpest", "Best exp
 blurry/dark shots get a warning under them. Assessment of grouped photos runs after hashing
 (log line "N shots assessed").
 
+**Tools milestone (new, before the beta; installer/signing/auto-update are left for the very
+end, by the user's choice):** export on branch **`tools-export`**, not merged yet. Test: select
+photos → **Export** → pick format/size/quality/folder → toolbar shows progress → files in the
+folder keep their date (check a HEIC → JPEG too, including its rotation, which isn't verified).
+Next tools: watermark, lossless rotate, editor (see PLAN "Tools checklist").
+
 ## First thing to do
 
 1. Ask whether Similar photos work in the app. Needs real photos (synthetic ones have no files):

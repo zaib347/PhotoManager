@@ -1,10 +1,11 @@
-import type { TimelineView } from "../api";
+import type { ExportOptions, TimelineView } from "../api";
 import { AlbumPicker } from "../collections/AlbumPicker";
 import { useCollections } from "../collections/context";
 import { TagInput } from "../collections/TagInput";
 import { Popover } from "../ui/Popover";
 import { DateFixer } from "./DateFixer";
 import { EventMaker } from "./EventMaker";
+import { ExportPanel } from "./ExportPanel";
 
 type Props = {
   count: number;
@@ -19,6 +20,8 @@ type Props = {
   onHide: (hidden: boolean) => void;
   /** Moves the photos' files to the trash folder (asks first). */
   onRemove: () => void;
+  /** Writes copies, resized/converted, to a folder (in the background). */
+  onExport: (options: ExportOptions) => void;
   onAddToAlbum: (albumId: number) => void;
   onCreateAlbum: (name: string) => void;
   onTag: (name: string) => void;
@@ -89,6 +92,17 @@ export function SelectionBar(props: Props) {
                   }
                 : undefined
             }
+          />
+        )}
+      </Popover>
+      <Popover label="Export" align="right">
+        {(close) => (
+          <ExportPanel
+            count={count}
+            onExport={(options) => {
+              props.onExport(options);
+              close();
+            }}
           />
         )}
       </Popover>

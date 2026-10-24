@@ -7,6 +7,8 @@ publish = false
 [dependencies]
 blake3 = "1.8.7"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+fast_image_resize = "6.1.0"
+img-parts = "0.4.1"
 image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "tiff", "webp"] }
 jwalk = "0.9.0"
 kamadak-exif = "0.6.1"
@@ -15,10 +17,11 @@ rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.21"
 trash = "5.2.9"
+webp = { version = "0.3.1", default-features = false }
 
 [dev-dependencies]
 tempfile = "3.27.0"
 
 [target."cfg(windows)".dependencies]
-windows = { version = "0.62.2", features = ["Win32_UI_Shell", "Win32_System_Com", "Win32_Graphics_Gdi", "Win32_Foundation"] }
+windows = { version = "0.62.2", features = ["Win32_UI_Shell", "Win32_System_Com", "Win32_Graphics_Gdi", "Win32_Graphics_Imaging", "Win32_Foundation"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
