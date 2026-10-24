@@ -74,15 +74,27 @@ pub fn from_file(path: &Path, orientation: Option<u8>) -> Result<Vec<u8>> {
 }
 
 /// Thumbnail from the OS decoders (video frames, HEIC/RAW with an installed codec).
-/// The OS has already applied any rotation.
-pub fn from_os(path: &Path) -> Result<Vec<u8>> {
+/// The OS has already applied the EXIF rotation; `turns` are the user's on top.
+pub fn from_os(path: &Path, turns: u8) -> Result<Vec<u8>> {
     let img = crate::os_thumb::thumbnail(path, GRID_SIZE * 2)?;
-    encode_jpeg(&grid_sized(DynamicImage::ImageRgb8(img)).to_rgb8())
+    let img = crate::rotate::turn(DynamicImage::ImageRgb8(img), turns);
+    encode_jpeg(&grid_sized(img).to_rgb8())
 }
 
 /// Viewer-sized image from the OS decoders, for formats the webview can't show.
-pub fn preview_from_os(path: &Path) -> Result<Vec<u8>> {
-    encode_jpeg(&crate::os_thumb::thumbnail(path, 2048)?)
+pub fn preview_from_os(path: &Path, turns: u8) -> Result<Vec<u8>> {
+    let img = crate::os_thumb::thumbnail(path, 2048)?;
+    encode_jpeg(&crate::rotate::turn(DynamicImage::ImageRgb8(img), turns).to_rgb8())
+}
+
+/// The whole photo, upright and turned, for the viewer when the user turned a photo
+/// the webview would otherwise show from the file as it is.
+pub fn full_turned(path: &Path, orientation: Option<u8>, turns: u8) -> Result<Vec<u8>> {
+    let mut img = image::open(path)?;
+    orient(&mut img, crate::rotate::compose(orientation, turns));
+    let mut buf = Cursor::new(Vec::new());
+    JpegEncoder::new_with_quality(&mut buf, 92).encode_image(&img.to_rgb8())?;
+    Ok(buf.into_inner())
 }
 
 /// Scales so the short edge is `GRID_SIZE`, capping the long edge for panoramas.

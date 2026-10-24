@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use photo_core::db::Db;
 use photo_core::timeline::{Filter, View};
 use photo_core::{
-    assets, events, fileops, library, places, schema, synth, thumbs, timeline, trips,
+    assets, events, fileops, library, places, rotate, schema, synth, thumbs, timeline, trips,
 };
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 
@@ -125,6 +125,29 @@ async fn get_asset(
     id: i64,
 ) -> CmdResult<Option<assets::AssetDetails>> {
     blocking(&state, move |s| assets::details(&s.library.read(), id)).await
+}
+
+/// Turns photos by `quarters` (1 clockwise, -1 counter-clockwise) without touching
+/// their files. Returns each photo's new turns, which the frontend puts in image URLs.
+#[tauri::command]
+async fn rotate_photos(
+    state: State<'_, Arc<AppState>>,
+    ids: Vec<i64>,
+    quarters: i8,
+) -> CmdResult<Vec<(i64, u8)>> {
+    blocking(&state, move |s| {
+        let turned = rotate::rotate(&s.library, &s.thumbs, &ids, quarters)?;
+        // The watermark preview holds a decoded photo, which may be one of these.
+        *s.watermark_base.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        Ok(turned)
+    })
+    .await
+}
+
+/// Every turned photo and its turns.
+#[tauri::command]
+async fn turned_photos(state: State<'_, Arc<AppState>>) -> CmdResult<Vec<(i64, u8)>> {
+    blocking(&state, |s| rotate::turned(&s.library.read())).await
 }
 
 #[tauri::command]
@@ -329,6 +352,8 @@ pub fn run() {
             get_asset,
             filter_options,
             set_favorite,
+            rotate_photos,
+            turned_photos,
             set_rating,
             set_hidden,
             memory_commands::on_this_day,
