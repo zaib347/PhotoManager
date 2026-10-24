@@ -95,6 +95,8 @@ struct Prepared {
     /// A full hash computed for another file while checking for a match.
     candidate_full: Option<(i64, [u8; 32])>,
     thumb: Option<Vec<u8>>,
+    /// XMP embedded in a JPEG.
+    xmp: Option<crate::xmp::Data>,
 }
 
 pub struct Scanner<'a> {
@@ -123,6 +125,8 @@ impl Scanner<'_> {
         let existing = load_existing(&self.library.read(), root_id)?;
         let mut seen: Vec<i64> = Vec::with_capacity(existing.len());
         let mut work: Vec<Work> = Vec::new();
+        // XMP sidecars: (relative path, mtime).
+        let mut sidecars: Vec<(String, i64)> = Vec::new();
         let mut walk_errors = 0u64;
 
         let walker = WalkDir::new(&root)
@@ -150,6 +154,13 @@ impl Scanner<'_> {
             }
             let path = entry.path();
             let Some(kind) = media::kind_of(&path) else {
+                if path
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("xmp"))
+                    && let (Ok(md), Some(rel)) = (entry.metadata(), rel_path(&root, &path))
+                {
+                    sidecars.push((rel, mtime_of(&md)));
+                }
                 continue;
             };
             let (Ok(md), Some(rel)) = (entry.metadata(), rel_path(&root, &path)) else {
@@ -157,11 +168,7 @@ impl Scanner<'_> {
                 continue;
             };
             let size = md.len() as i64;
-            let mtime = md
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map_or(0, |d| d.as_millis() as i64);
+            let mtime = mtime_of(&md);
 
             summary.discovered += 1;
             match existing.get(&rel) {
@@ -232,6 +239,7 @@ impl Scanner<'_> {
             params![root_id, now_ms()],
         )?;
         drop(library);
+        crate::xmp::import_sidecars(self.library, root_id, &root, &sidecars)?;
         crate::live::pair(&mut self.library.write(), root_id)?;
         crate::places::assign(self.library)?;
         crate::events::detect(&mut self.library.write())?;
@@ -298,6 +306,15 @@ impl Scanner<'_> {
             .take()
             .filter(|_| !crate::raw::is_raw(&work.abs))
             .and_then(|jpeg| thumbs::from_embedded(&jpeg, meta.orientation).ok());
+        let is_jpeg = work
+            .abs
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("jpg") || e.eq_ignore_ascii_case("jpeg"));
+        let xmp = is_jpeg
+            .then(|| crate::xmp::embedded(&work.abs))
+            .flatten()
+            .and_then(|x| crate::xmp::parse(&x).ok())
+            .filter(|d| !d.is_empty());
         Prepared {
             work,
             meta,
@@ -306,6 +323,7 @@ impl Scanner<'_> {
             link_asset,
             candidate_full,
             thumb,
+            xmp,
         }
     }
 
@@ -367,6 +385,9 @@ impl Scanner<'_> {
                     "UPDATE assets SET status = 0 WHERE id = ?1",
                     params![asset_id],
                 )?;
+                if let Some(xmp) = &p.xmp {
+                    crate::xmp::apply(&tx, asset_id, xmp)?;
+                }
 
                 let file_id = match p.work.existing {
                     Some((file_id, _)) => {
@@ -425,6 +446,13 @@ impl Scanner<'_> {
         }
         Ok(())
     }
+}
+
+fn mtime_of(md: &std::fs::Metadata) -> i64 {
+    md.modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_millis() as i64)
 }
 
 fn rel_path(root: &Path, path: &Path) -> Option<String> {

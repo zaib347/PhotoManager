@@ -1,4 +1,5 @@
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { useEffect, useState } from "react";
 import type { AssetDetails, View } from "../api";
 import { useCollections } from "../collections/context";
 import { TagInput } from "../collections/TagInput";
@@ -14,9 +15,26 @@ type Props = {
   onRemoveTag: (tagId: number) => void;
   onNavigate: (view: View) => void;
   onRestoreDate: () => void;
+  onSetDescription: (text: string) => void;
 };
 
-export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate, onRestoreDate }: Props) {
+/** A description, saved when the field loses focus. */
+function Description({ value, onSave }: { value: string; onSave: (text: string) => void }) {
+  const [text, setText] = useState(value);
+  useEffect(() => setText(value), [value]);
+  return (
+    <textarea
+      className="description"
+      rows={2}
+      placeholder="Add a description"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => text.trim() !== value && onSave(text)}
+    />
+  );
+}
+
+export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate, onRestoreDate, onSetDescription }: Props) {
   const { tags } = useCollections();
   if (!asset) return <aside className="info-panel" />;
   const camera = [asset.cameraMake, asset.cameraModel].filter(Boolean).join(" ");
@@ -30,6 +48,10 @@ export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate, onRestoreD
 
   return (
     <aside className="info-panel">
+      <section>
+        <Description key={asset.id} value={asset.description ?? ""} onSave={onSetDescription} />
+      </section>
+
       <section>
         <h3>Date</h3>
         <p>{formatTakenAt(asset.takenAt, asset.tzOffsetMin)}</p>

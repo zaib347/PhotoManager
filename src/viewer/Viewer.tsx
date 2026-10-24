@@ -318,6 +318,13 @@ export function Viewer({
             onAddTag={(name) => asset && onAddTag([asset.id], name).then(refreshDetails)}
             onRemoveTag={(tagId) => asset && onRemoveTag([asset.id], tagId).then(refreshDetails)}
             onNavigate={onNavigate}
+            onSetDescription={(text) =>
+              asset &&
+              api
+                .setDescription(asset.id, text)
+                .then(refreshDetails)
+                .catch(onError)
+            }
             onRestoreDate={() =>
               asset &&
               api

@@ -34,6 +34,7 @@ pub mod trips;
 pub mod video;
 pub mod volume;
 pub mod watermark;
+pub mod xmp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

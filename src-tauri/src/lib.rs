@@ -8,6 +8,7 @@ mod memory_commands;
 mod protocol;
 mod scans;
 mod similar_commands;
+mod xmp_commands;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -344,6 +345,7 @@ pub fn run() {
             }
             event_commands::catch_up(app.handle(), &state);
             similar_commands::run_in_background(app.handle(), &state);
+            xmp_commands::run_writer(&state);
             poll_volumes(app.handle().clone(), state.clone());
             app.manage(state);
             Ok(())
@@ -387,6 +389,9 @@ pub fn run() {
             edit_commands::edit_auto,
             edit_commands::edit_save,
             edit_commands::edit_paste,
+            xmp_commands::xmp_settings,
+            xmp_commands::set_xmp_settings,
+            xmp_commands::set_description,
             cleanup_commands::duplicate_overview,
             cleanup_commands::duplicate_groups,
             cleanup_commands::remove_duplicates,

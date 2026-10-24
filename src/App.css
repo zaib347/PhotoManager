@@ -1658,3 +1658,30 @@ button.primary:disabled {
   border-width: 0 3px 3px 0;
   cursor: nwse-resize;
 }
+
+/* ---------- XMP sidecars and descriptions ---------- */
+
+.xmp-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px 12px;
+}
+
+.xmp-settings p {
+  margin: 0;
+}
+
+.xmp-settings .check,
+.xmp-favorite {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.info-panel textarea.description {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  box-sizing: border-box;
+}

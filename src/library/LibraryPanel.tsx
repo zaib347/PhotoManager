@@ -2,6 +2,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { api, thumbUrl, viewKey, type BuiltinView, type RootInfo, type ScanProgress, type View } from "../api";
 import { useCollections } from "../collections/context";
+import { XmpSettings } from "./XmpSettings";
 
 const VIEWS: { id: BuiltinView; label: string }[] = [
   { id: "all", label: "Photos" },
@@ -26,9 +27,10 @@ type Props = {
   onRescan: (rootId: number) => void;
   onCancel: (rootId: number) => void;
   onRemove: (root: RootInfo) => void;
+  onError: (e: unknown) => void;
 };
 
-export function LibraryPanel({ view, onView, roots, progress, onAdd, onRescan, onCancel, onRemove }: Props) {
+export function LibraryPanel({ view, onView, roots, progress, onAdd, onRescan, onCancel, onRemove, onError }: Props) {
   const { albums, tags, reload } = useCollections();
   const [newAlbum, setNewAlbum] = useState<string | null>(null);
   const current = viewKey(view);
@@ -176,6 +178,11 @@ export function LibraryPanel({ view, onView, roots, progress, onAdd, onRescan, o
           );
         })}
       </ul>
+
+      <div className="sidebar-title">
+        <span>Sidecars</span>
+      </div>
+      <XmpSettings onError={onError} />
     </aside>
   );
 }

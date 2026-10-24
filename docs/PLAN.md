@@ -293,7 +293,7 @@ and needs no downloads.
      another photo).
    - Applies the copied recipe to each photo through `edit::save` in one batch; thumbnails
      rebuild; each photo can still be reverted on its own.
-2. - [ ] **XMP sidecars** (small, ~3–4 days)
+2. - [x] **XMP sidecars** (small, ~3–4 days)
    - Read on scan: ratings, keywords (as tags), title/description and labels from existing
      `.xmp` files (Lightroom, darktable, digiKam), so a library brought in from them keeps
      its work. Embedded XMP in JPEGs too.

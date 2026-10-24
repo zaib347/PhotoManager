@@ -198,6 +198,13 @@ export type ExportOptions = {
   folder: string;
 };
 
+/** XMP sidecars are always read; writing them is off by default. */
+export type XmpSettings = {
+  write: boolean;
+  /** XMP has no favorite: written as five stars, or as the label "Favorite". */
+  favoriteAs: "rating" | "label";
+};
+
 /** A non-destructive edit. Sliders run from -100 to 100 with 0 "as shot"; exposure is in stops. */
 export type Recipe = {
   /** Fractions of the straightened photo. */
@@ -346,6 +353,8 @@ export type AssetDetails = {
   favorite: boolean;
   rating: number | null;
   hidden: boolean;
+  /** The user's description, or one read from XMP. */
+  description: string | null;
   files: FileInfo[];
   albums: Named[];
   tags: Named[];
@@ -452,6 +461,11 @@ export const api = {
    */
   editPaste: (ids: number[], recipe: Recipe, what: "everything" | "tone") =>
     invoke<[number, number][]>("edit_paste", { ids, recipe, what }),
+  xmpSettings: () => invoke<XmpSettings>("xmp_settings"),
+  /** Turning writing on writes sidecars for every photo with ratings, tags or a description. */
+  setXmpSettings: (settings: XmpSettings) => invoke<void>("set_xmp_settings", { settings }),
+  /** Sets a photo's description; empty clears it. */
+  setDescription: (id: number, text: string) => invoke<void>("set_description", { id, text }),
   /** Every turned or edited photo: (id, turns, edit version). */
   adjustedPhotos: () => invoke<[number, number, number][]>("adjusted_photos"),
   /** Photo `id` with the watermark drawn on it, as a JPEG. */

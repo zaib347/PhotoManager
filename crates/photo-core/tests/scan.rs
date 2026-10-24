@@ -855,3 +855,50 @@ fn long_and_unicode_paths_work_end_to_end() {
     fileops::undo(&f.library, removed.op_id).unwrap();
     assert!(deep.join("Ünïcødé 照片 🌅 sunrise (1).jpg").is_file());
 }
+
+#[test]
+fn scans_read_xmp_sidecars_when_they_change() {
+    let f = fixture();
+    let sidecar = |rating: u8, keyword: &str| {
+        format!(
+            r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+            <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmp:Rating="{rating}">
+            <dc:subject><rdf:Bag><rdf:li>{keyword}</rdf:li></rdf:Bag></dc:subject>
+            </rdf:Description></rdf:RDF></x:xmpmeta>"#
+        )
+    };
+    fs::write(f.photos.join("2019/beach.xmp"), sidecar(4, "holiday")).unwrap();
+    f.scan();
+    let beach = f.asset_of("2019/beach.jpg");
+    let rating = |id: i64| -> Option<i64> {
+        f.library
+            .read()
+            .query_row(
+                "SELECT rating FROM user_meta WHERE asset_id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    let tags = |id: i64| -> Vec<String> {
+        photo_core::collections::tags_of(&f.library.read(), id)
+            .unwrap()
+            .into_iter()
+            .map(|t| t.name)
+            .collect()
+    };
+    assert_eq!(rating(beach), Some(4));
+    assert_eq!(tags(beach), vec!["holiday"]);
+
+    // The user clears the rating here; an unchanged sidecar doesn't bring it back.
+    photo_core::assets::set_rating(&mut f.library.write(), &[beach], None).unwrap();
+    f.scan();
+    assert_eq!(rating(beach), None);
+
+    // Another app changes the sidecar: its new values are read.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    fs::write(f.photos.join("2019/beach.xmp"), sidecar(2, "sea")).unwrap();
+    f.scan();
+    assert_eq!(rating(beach), Some(2));
+    assert_eq!(tags(beach), vec!["holiday", "sea"]);
+}

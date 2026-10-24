@@ -45,6 +45,8 @@ pub struct AssetDetails {
     pub favorite: bool,
     pub rating: Option<u8>,
     pub hidden: bool,
+    /// The user's description (or one read from XMP).
+    pub description: Option<String>,
     pub files: Vec<FileInfo>,
     pub albums: Vec<Named>,
     pub tags: Vec<Named>,
@@ -60,7 +62,7 @@ pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
             &format!(
                 "SELECT a.media_kind, a.taken_at, a.taken_src, a.tz_offset_min, a.local_day, a.width,
                         a.height, a.orientation, a.duration_ms, a.camera_make, a.camera_model, a.lat,
-                        a.lon, COALESCE(u.favorite, 0), u.rating, COALESCE(u.hidden, 0), {PLACE_COLUMNS}
+                        a.lon, COALESCE(u.favorite, 0), u.rating, COALESCE(u.hidden, 0), u.note, {PLACE_COLUMNS}
                  FROM assets a LEFT JOIN user_meta u ON u.asset_id = a.id
                  LEFT JOIN places p ON p.id = a.place_id WHERE a.id = ?1"
             ),
@@ -81,10 +83,11 @@ pub fn details(conn: &Connection, id: i64) -> Result<Option<AssetDetails>> {
                     camera_model: r.get(10)?,
                     lat: r.get(11)?,
                     lon: r.get(12)?,
-                    place: place_row(r, 16)?,
+                    place: place_row(r, 17)?,
                     favorite: r.get(13)?,
                     rating: r.get(14)?,
                     hidden: r.get(15)?,
+                    description: r.get(16)?,
                     files: Vec::new(),
                     albums: Vec::new(),
                     tags: Vec::new(),

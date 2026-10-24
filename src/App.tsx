@@ -270,6 +270,7 @@ export default function App() {
           onRescan={(id) => api.scanRoot(id).catch(report)}
           onCancel={(id) => api.cancelScan(id).catch(report)}
           onRemove={removeRoot}
+          onError={report}
         />
         <main className="content">
           {!busy && !isPage(view) && stats && stats.assets > 0 && <FilterBar filter={filter} roots={roots} onChange={setFilter} />}

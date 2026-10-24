@@ -71,7 +71,7 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     CREATE INDEX idx_files_asset ON files (asset_id);
     CREATE INDEX idx_files_size_qhash ON files (size, quick_hash);
 
-    -- User-authored data. Scans never write here.
+    -- User-authored data. Scans only fill blanks from XMP (see `xmp`).
     CREATE TABLE user_meta (
         asset_id       INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
         rating         INTEGER,
@@ -274,6 +274,59 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     ALTER TABLE user_meta ADD COLUMN edit_v INTEGER NOT NULL DEFAULT 0;
     DROP INDEX idx_user_meta_turned;
     CREATE INDEX idx_user_meta_adjusted ON user_meta (asset_id) WHERE turns != 0 OR edit_v != 0;
+    ",
+    // v15: XMP sidecars (see `xmp`). `settings`: app settings kept with the library.
+    // `xmp_seen`: sidecars already read, by mtime. `xmp_dirty`: assets whose sidecars
+    // must be written, queued by the triggers below while writing is turned on; a
+    // re-queued asset gets a new rowid, so the writer can tell it changed meanwhile.
+    // `user_meta.note` is the photo's description.
+    "
+    CREATE TABLE settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    ) WITHOUT ROWID;
+    CREATE TABLE xmp_seen (
+        root_id  INTEGER NOT NULL,
+        rel_path TEXT NOT NULL,
+        mtime    INTEGER NOT NULL,
+        PRIMARY KEY (root_id, rel_path)
+    ) WITHOUT ROWID;
+    CREATE TABLE xmp_dirty (asset_id INTEGER NOT NULL UNIQUE);
+
+    CREATE TRIGGER xmp_meta_insert AFTER INSERT ON user_meta
+    WHEN (SELECT value FROM settings WHERE key = 'xmp_write') = '1'
+      AND (NEW.rating IS NOT NULL OR NEW.favorite != 0 OR NEW.note IS NOT NULL)
+    BEGIN
+        INSERT OR REPLACE INTO xmp_dirty (asset_id) VALUES (NEW.asset_id);
+    END;
+    CREATE TRIGGER xmp_meta_update AFTER UPDATE OF rating, favorite, note ON user_meta
+    WHEN (SELECT value FROM settings WHERE key = 'xmp_write') = '1'
+      AND (OLD.rating IS NOT NEW.rating OR OLD.favorite != NEW.favorite OR OLD.note IS NOT NEW.note)
+    BEGIN
+        INSERT OR REPLACE INTO xmp_dirty (asset_id) VALUES (NEW.asset_id);
+    END;
+    CREATE TRIGGER xmp_tag_insert AFTER INSERT ON asset_tags
+    WHEN (SELECT value FROM settings WHERE key = 'xmp_write') = '1'
+    BEGIN
+        INSERT OR REPLACE INTO xmp_dirty (asset_id) VALUES (NEW.asset_id);
+    END;
+    CREATE TRIGGER xmp_tag_delete AFTER DELETE ON asset_tags
+    WHEN (SELECT value FROM settings WHERE key = 'xmp_write') = '1'
+    BEGIN
+        INSERT OR REPLACE INTO xmp_dirty (asset_id) VALUES (OLD.asset_id);
+    END;
+    CREATE TRIGGER xmp_tag_rename AFTER UPDATE OF name ON tags
+    WHEN (SELECT value FROM settings WHERE key = 'xmp_write') = '1'
+    BEGIN
+        INSERT OR REPLACE INTO xmp_dirty (asset_id)
+            SELECT asset_id FROM asset_tags WHERE tag_id = NEW.id;
+    END;
+    CREATE TRIGGER xmp_tag_drop BEFORE DELETE ON tags
+    WHEN (SELECT value FROM settings WHERE key = 'xmp_write') = '1'
+    BEGIN
+        INSERT OR REPLACE INTO xmp_dirty (asset_id)
+            SELECT asset_id FROM asset_tags WHERE tag_id = OLD.id;
+    END;
     ",
 ];
 
