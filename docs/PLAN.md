@@ -238,7 +238,7 @@ Ground rule: tools write new files; originals are only replaced through `fileops
       (Windows); macOS/Linux decoders come with M5. WebP via libwebp (`webp` crate)
 - [ ] Better JPEG compression (mozjpeg) and AVIF output
 - [ ] "Shrink originals": replace originals with compressed versions through `fileops`
-- [ ] Watermark (text / logo, position, size, opacity) as an export step
+- [x] Watermark (text / logo, position incl. tiled, size, opacity) as an export step, with a live preview on the first selected photo. Text uses a system font (Segoe UI on Windows; Arial/Helvetica and DejaVu paths listed for M5).
 - [ ] Lossless rotate (EXIF orientation only)
 - [ ] Non-destructive editor (crop, straighten, exposure, contrast, highlights/shadows,
       saturation, white balance, sharpen, auto-enhance, presets; recipe stored, Revert)

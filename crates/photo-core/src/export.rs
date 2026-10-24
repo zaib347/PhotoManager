@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::Db;
 use crate::library::{self, AssetSource};
+use crate::watermark::{self, Mark, Watermark};
 use crate::{Error, Result};
 
 /// Exports running at once: each holds a full-size image or two in memory.
@@ -54,6 +55,8 @@ pub struct Options {
     pub max_edge: Option<u32>,
     /// Leaves GPS out of the copy (for sharing).
     pub remove_location: bool,
+    /// Drawn on every copy when set.
+    pub watermark: Option<Watermark>,
     pub folder: PathBuf,
 }
 
@@ -64,6 +67,7 @@ impl Default for Options {
             quality: 85,
             max_edge: None,
             remove_location: false,
+            watermark: None,
             folder: PathBuf::new(),
         }
     }
@@ -299,14 +303,29 @@ fn attach(
     }
 }
 
-/// Converts one file. Returns the new file's bytes and extension.
-pub fn convert(source: &Path, options: &Options) -> Result<(Vec<u8>, &'static str)> {
+/// Loads the watermark of `options`, if it has one with something to draw.
+pub fn prepare_mark(options: &Options) -> Result<Option<Mark>> {
+    match &options.watermark {
+        Some(w) => watermark::prepare(w),
+        None => Ok(None),
+    }
+}
+
+/// Converts one file, drawing `mark` on it. Returns the new file's bytes and extension.
+pub fn convert(
+    source: &Path,
+    options: &Options,
+    mark: Option<&Mark>,
+) -> Result<(Vec<u8>, &'static str)> {
     let bytes = std::fs::read(source)?;
     let decoded = decode(source, &bytes)?;
-    let image = match options.max_edge {
+    let mut image = match options.max_edge {
         Some(edge) => resize(decoded.image, edge)?,
         None => decoded.image,
     };
+    if let Some(mark) = mark {
+        mark.apply(&mut image);
+    }
     let format = target_format(options.format, source);
     let encoded = encode(&image, format, options.quality)?;
     let exif = decoded
@@ -317,6 +336,27 @@ pub fn convert(source: &Path, options: &Options) -> Result<(Vec<u8>, &'static st
         attach(encoded, format, exif, decoded.icc),
         extension(format),
     ))
+}
+
+/// A photo upright and shrunk, kept while watermark settings change.
+pub struct PreviewBase(DynamicImage);
+
+/// The photo upright and shrunk to `max_edge`, for previewing a watermark on.
+pub fn preview_base(source: &Path, max_edge: u32) -> Result<PreviewBase> {
+    let bytes = std::fs::read(source)?;
+    Ok(PreviewBase(resize(
+        decode(source, &bytes)?.image,
+        max_edge,
+    )?))
+}
+
+/// `base` with `watermark` drawn on it, as a JPEG.
+pub fn preview(base: &PreviewBase, watermark: &Watermark) -> Result<Vec<u8>> {
+    let mut image = base.0.clone();
+    if let Some(mark) = watermark::prepare(watermark)? {
+        mark.apply(&mut image);
+    }
+    encode(&image, Format::Jpeg, 85)
 }
 
 /// Writes `data` as `<stem>.<ext>` in `folder`, or `<stem> (2).<ext>` and so on if
@@ -371,6 +411,7 @@ pub fn run(
     if options.folder.as_os_str().is_empty() {
         return Err(Error::Invalid("Choose a folder to export to".into()));
     }
+    let mark = prepare_mark(options)?;
     std::fs::create_dir_all(&options.folder)?;
     let mut report = Report {
         folder: options.folder.to_string_lossy().into_owned(),
@@ -407,7 +448,7 @@ pub fn run(
                 if cancel.load(Ordering::Relaxed) {
                     return None;
                 }
-                let result = convert(source, options)
+                let result = convert(source, options, mark.as_ref())
                     .and_then(|(data, ext)| {
                         let stem = source
                             .file_stem()
@@ -504,7 +545,7 @@ mod tests {
             max_edge: Some(300),
             ..Default::default()
         };
-        let (data, ext) = convert(&source, &options).unwrap();
+        let (data, ext) = convert(&source, &options, None).unwrap();
         assert_eq!(ext, "jpg");
         let img = image::load_from_memory(&data).unwrap();
         // 600×400 turned on its side, then the long edge cut to 300.
@@ -528,7 +569,7 @@ mod tests {
                 remove_location: true,
                 ..Default::default()
             };
-            let (data, got) = convert(&source, &options).unwrap();
+            let (data, got) = convert(&source, &options, None).unwrap();
             assert_eq!(got, ext);
             assert_eq!(image::guess_format(&data).unwrap().extensions_str()[0], ext);
             let exif = exif_of(&data);
@@ -552,7 +593,7 @@ mod tests {
                 quality,
                 ..Default::default()
             };
-            convert(&source, &options).unwrap().0.len()
+            convert(&source, &options, None).unwrap().0.len()
         };
         assert!(size(40) < size(95));
 

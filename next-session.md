@@ -28,10 +28,12 @@ blurry/dark shots get a warning under them. Assessment of grouped photos runs af
 (log line "N shots assessed").
 
 **Tools milestone (new, before the beta; installer/signing/auto-update are left for the very
-end, by the user's choice):** export on branch **`tools-export`**, not merged yet. Test: select
-photos → **Export** → pick format/size/quality/folder → toolbar shows progress → files in the
-folder keep their date (check a HEIC → JPEG too, including its rotation, which isn't verified).
-Next tools: watermark, lossless rotate, editor (see PLAN "Tools checklist").
+end, by the user's choice):** export merged to `main`; watermark on branch **`tools-watermark`**,
+not merged yet. Test export: select photos → **Export** → pick format/size/quality/folder →
+toolbar shows progress → files keep their date (check a HEIC → JPEG too, including its rotation,
+which isn't verified). Test watermark: in the Export panel tick **Add a watermark** → type text or
+pick a logo PNG → the preview on the first selected photo updates → exported copies carry it.
+Next tools: lossless rotate, then the editor (see PLAN "Tools checklist").
 
 ## First thing to do
 

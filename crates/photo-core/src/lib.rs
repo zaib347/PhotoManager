@@ -28,6 +28,7 @@ pub mod timeline;
 pub mod trips;
 pub mod video;
 pub mod volume;
+pub mod watermark;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

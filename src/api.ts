@@ -184,7 +184,23 @@ export type ExportOptions = {
   /** Longer edge at most this many pixels; null keeps the full size. */
   maxEdge: number | null;
   removeLocation: boolean;
+  /** Drawn on every copy when set. */
+  watermark: Watermark | null;
   folder: string;
+};
+
+export type WatermarkPosition = "topLeft" | "topRight" | "bottomLeft" | "bottomRight" | "center" | "tiled";
+
+export type Watermark = {
+  /** Drawn when there is no logo. */
+  text: string;
+  /** Path of a logo image, used instead of the text. */
+  logo: string | null;
+  position: WatermarkPosition;
+  /** Height as a percentage of the photo's shorter edge. */
+  size: number;
+  /** 5–100. */
+  opacity: number;
 };
 
 export type ExportReport = {
@@ -365,6 +381,9 @@ export const api = {
   /** Starts a background export; watch `events.exportProgress` / `exportFinished`. */
   exportPhotos: (ids: number[], options: ExportOptions) => invoke<void>("export_photos", { ids, options }),
   cancelExport: () => invoke<void>("cancel_export"),
+  /** Photo `id` with the watermark drawn on it, as a JPEG. */
+  watermarkPreview: async (id: number, watermark: Watermark) =>
+    new Blob([await invoke<ArrayBuffer>("watermark_preview", { id, watermark })], { type: "image/jpeg" }),
   /** Recent removals ("trash") or organizer moves ("move"). */
   listFileOps: (kind: FileOpKind = "trash") => invoke<FileOp[]>("list_file_ops", { kind }),
   organizePreview: (rootId: number, layout: OrganizeLayout, includeUndated: boolean) =>
