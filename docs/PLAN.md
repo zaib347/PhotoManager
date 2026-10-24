@@ -323,7 +323,7 @@ and needs no downloads.
    - Output sizes: square / story for social, and print sizes (4×6, 5×7, 8×10 in, A4) at
      300 dpi. Saved through the export pipeline (`jpeg::Purpose::Keep`, metadata from the
      first photo). Printing itself is from any app (or the OS print dialog later).
-6. - [ ] **Memory slideshow and video** (medium, ~1.5–2 weeks)
+6. - [x] **Memory slideshow and video** (medium, ~1.5–2 weeks)
    - From an event, a trip, On This Day or any selection: full-screen slideshow with
      gentle pan-and-zoom, the best shots first (best-shot ranking skips near-duplicates),
      optional music from the user's own file.

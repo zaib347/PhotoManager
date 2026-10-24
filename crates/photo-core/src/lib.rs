@@ -21,6 +21,7 @@ pub mod live;
 pub mod map;
 pub mod media;
 pub mod memories;
+pub mod movie;
 pub mod organize;
 pub mod os_thumb;
 pub mod places;

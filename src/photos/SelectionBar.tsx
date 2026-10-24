@@ -35,6 +35,8 @@ type Props = {
   onPlaceOnMap: () => void;
   /** Opens the collage editor (2–9 photos). */
   onCollage: () => void;
+  /** Plays the selection as a slideshow. */
+  onSlideshow: () => void;
   /** Renames the photos' files from a pattern (undoable). */
   onRename: (pattern: string) => void;
   /** Writes copies, resized/converted, to a folder (in the background). */
@@ -99,6 +101,11 @@ export function SelectionBar(props: Props) {
           />
         )}
       </Popover>
+      {count >= 2 && (
+        <button onClick={props.onSlideshow} title="Play as a slideshow">
+          ▶ Slideshow
+        </button>
+      )}
       {count >= 2 && count <= 9 && (
         <button onClick={props.onCollage} title="Arrange these photos on one page">
           Collage

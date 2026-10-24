@@ -9,10 +9,12 @@ type Props = {
   /** Bumped by the parent after edits that may change the trip (dates). */
   version: number;
   onError: (e: unknown) => void;
+  /** Plays the trip as a slideshow. */
+  onPlay: () => void;
 };
 
 /** Title row for a trip view: inline rename, back to Trips, remove. */
-export function TripHeader({ id, version, onError }: Props) {
+export function TripHeader({ id, version, onError, onPlay }: Props) {
   const { navigate } = useCollections();
   const [trip, setTrip] = useState<TripSummary | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -76,6 +78,9 @@ export function TripHeader({ id, version, onError }: Props) {
         {formatTripDates(trip)} · {tripLength(trip)} · {trip.count.toLocaleString()} items
       </span>
       <div className="spacer" />
+      <button className="ghost" onClick={onPlay} title="Slideshow">
+        ▶ Play
+      </button>
       <button className="ghost" onClick={remove}>
         Remove trip
       </button>

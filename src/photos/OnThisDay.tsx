@@ -13,7 +13,7 @@ function dismissedToday(today: number) {
 }
 
 /** "N years ago today" cards above the timeline. Hidden when there's nothing. */
-export function OnThisDay() {
+export function OnThisDay({ onPlay }: { onPlay: (days: number[]) => void }) {
   const { showDay } = useCollections();
   const today = todayLocalDay();
   const [memories, setMemories] = useState<DayMemory[]>([]);
@@ -39,6 +39,9 @@ export function OnThisDay() {
     <section className="on-this-day" aria-label="On this day">
       <div className="otd-head">
         <strong>On this day</strong>
+        <button className="ghost small" onClick={() => onPlay(memories.map((m) => m.day))} title="Slideshow">
+          ▶ Play
+        </button>
         <button className="ghost small" onClick={dismiss} title="Hide until tomorrow">
           ✕
         </button>

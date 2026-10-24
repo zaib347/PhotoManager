@@ -231,6 +231,9 @@ export type CollageSpec = {
   cells: { x: number; y: number; w: number; h: number; assetId: number; panX: number; panY: number; zoom: number }[];
 };
 
+/** A slideshow saved as a video. */
+export type VideoReport = { path: string; photos: number; seconds: number; musicSkipped: boolean };
+
 /** What an import of Google Takeout or iCloud metadata changed. */
 export type ImportReport = {
   id: number;
@@ -522,6 +525,14 @@ export const api = {
   searchCities: (query: string) => invoke<CityInfo[]>("search_cities", { query }),
   /** Places photos by hand; returns how many. */
   setLocation: (ids: number[], lat: number, lon: number) => invoke<number>("set_location", { ids, lat, lon }),
+  /** The photos a slideshow plays, in order: no near-duplicates, the best if there are many. */
+  slideshowPick: (ids: number[]) => invoke<number[]>("slideshow_pick", { ids }),
+  /** A music file's bytes, to play under the slideshow. */
+  readAudio: (path: string) => invoke<ArrayBuffer>("read_audio", { path }),
+  /** Starts saving a slideshow as an MP4; watch `events.videoProgress` / `videoFinished`. */
+  makeVideo: (ids: number[], options: { secondsPerPhoto: number; music: string | null }, path: string) =>
+    invoke<void>("make_video", { ids, options, path }),
+  cancelVideo: () => invoke<void>("cancel_video"),
   /** Renders a collage at full size and saves it as a JPEG. */
   saveCollage: (collage: CollageSpec, path: string) => invoke<void>("save_collage", { collage, path }),
   /** Reads a Google Takeout or iCloud export's metadata in a library folder. */
@@ -571,6 +582,10 @@ export const events = {
     listen<{ done: number; total: number }>("export-progress", (e) => cb(e.payload)),
   exportFinished: (cb: (f: { report: ExportReport | null; error: string | null }) => void): Promise<UnlistenFn> =>
     listen<{ report: ExportReport | null; error: string | null }>("export-finished", (e) => cb(e.payload)),
+  videoProgress: (cb: (p: { done: number; total: number }) => void): Promise<UnlistenFn> =>
+    listen<{ done: number; total: number }>("video-progress", (e) => cb(e.payload)),
+  videoFinished: (cb: (f: { report: VideoReport | null; error: string | null }) => void): Promise<UnlistenFn> =>
+    listen<{ report: VideoReport | null; error: string | null }>("video-finished", (e) => cb(e.payload)),
   /** Background hashing finished a pass; similar groups may have changed. */
   similarChanged: (cb: () => void): Promise<UnlistenFn> => listen("similar-changed", () => cb()),
 };

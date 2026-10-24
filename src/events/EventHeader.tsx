@@ -9,10 +9,12 @@ type Props = {
   /** Bumped by the parent after edits that change the event (split, dates). */
   version: number;
   onError: (e: unknown) => void;
+  /** Plays the event as a slideshow. */
+  onPlay: () => void;
 };
 
 /** Title row for an event view: inline rename, back to Events, remove. */
-export function EventHeader({ id, version, onError }: Props) {
+export function EventHeader({ id, version, onError, onPlay }: Props) {
   const { navigate } = useCollections();
   const [event, setEvent] = useState<EventSummary | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -78,6 +80,9 @@ export function EventHeader({ id, version, onError }: Props) {
       </span>
       <div className="spacer" />
       <span className="muted small">Select a photo to split the event there</span>
+      <button className="ghost" onClick={onPlay} title="Slideshow">
+        ▶ Play
+      </button>
       <button className="ghost" onClick={remove}>
         Remove event
       </button>

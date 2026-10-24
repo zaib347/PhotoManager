@@ -7,6 +7,7 @@ mod export_commands;
 mod import_commands;
 mod map_commands;
 mod memory_commands;
+mod movie_commands;
 mod protocol;
 mod scans;
 mod similar_commands;
@@ -43,6 +44,9 @@ pub(crate) struct AppState {
     /// An export is running / should stop.
     exporting: AtomicBool,
     export_cancel: AtomicBool,
+    /// A slideshow video is being made / should stop.
+    making_video: AtomicBool,
+    video_cancel: AtomicBool,
     /// The photo the export panel previews watermarks on, decoded once.
     watermark_base: Mutex<Option<(i64, Arc<photo_core::export::PreviewBase>)>>,
     /// The photo open in the editor, decoded once (turned, without its edit).
@@ -333,6 +337,8 @@ pub fn run() {
                 hash_cancel: AtomicBool::new(false),
                 exporting: AtomicBool::new(false),
                 export_cancel: AtomicBool::new(false),
+                making_video: AtomicBool::new(false),
+                video_cancel: AtomicBool::new(false),
                 watermark_base: Mutex::default(),
                 edit_base: Mutex::default(),
                 map_points: Mutex::default(),
@@ -390,6 +396,10 @@ pub fn run() {
             export_commands::cancel_export,
             export_commands::watermark_preview,
             export_commands::save_collage,
+            movie_commands::slideshow_pick,
+            movie_commands::read_audio,
+            movie_commands::make_video,
+            movie_commands::cancel_video,
             edit_commands::edit_get,
             edit_commands::edit_preview,
             edit_commands::edit_auto,

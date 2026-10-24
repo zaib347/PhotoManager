@@ -13,6 +13,7 @@ import { Timeline } from "../timeline/Timeline";
 import { Viewer } from "../viewer/Viewer";
 import { OnThisDay } from "./OnThisDay";
 import { CollageEditor } from "../collage/CollageEditor";
+import { Slideshow } from "../slideshow/Slideshow";
 import { SelectionBar } from "./SelectionBar";
 
 type Props = {
@@ -46,6 +47,21 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
   const [viewing, setViewing] = useState<Position | null>(null);
   const [reveal, setReveal] = useState<Position | null>(null);
   const [collage, setCollage] = useState<number[] | null>(null);
+  const [slideshow, setSlideshow] = useState<{ ids: number[]; title: string } | null>(null);
+
+  /** Plays `ids` (near-duplicates left out, best shots if there are many). */
+  const play = useCallback(
+    (ids: number[], title: string) => {
+      api
+        .slideshowPick(ids)
+        .then((picked) => {
+          if (picked.length === 0) onNotice("There are no photos to play here.");
+          else setSlideshow({ ids: picked, title });
+        })
+        .catch(onError);
+    },
+    [onNotice, onError],
+  );
 
   useEffect(() => store.setLayout(layout), [store, layout]);
 
@@ -196,10 +212,32 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
 
   return (
     <div className="photos-view">
-      {view === "all" && isFilterEmpty(filter) && selection.size === 0 && <OnThisDay />}
+      {view === "all" && isFilterEmpty(filter) && selection.size === 0 && (
+        <OnThisDay
+          onPlay={(days) =>
+            Promise.all(days.map((d) => api.assetIds("all", { fromDay: d, toDay: d })))
+              .then((lists) => play(lists.flat(), "On this day"))
+              .catch(onError)
+          }
+        />
+      )}
       {album && <AlbumHeader key={`${album.id}:${album.name}`} album={album} onError={onError} />}
-      {eventId !== null && <EventHeader id={eventId} version={eventVersion} onError={onError} />}
-      {tripId !== null && <TripHeader id={tripId} version={eventVersion} onError={onError} />}
+      {eventId !== null && (
+        <EventHeader
+          id={eventId}
+          version={eventVersion}
+          onError={onError}
+          onPlay={() => api.assetIds(view, filter).then((ids) => play(ids, "Event"), onError)}
+        />
+      )}
+      {tripId !== null && (
+        <TripHeader
+          id={tripId}
+          version={eventVersion}
+          onError={onError}
+          onPlay={() => api.assetIds(view, filter).then((ids) => play(ids, "Trip"), onError)}
+        />
+      )}
       {selection.size > 0 && (
         <SelectionBar
           count={selection.size}
@@ -244,6 +282,7 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
           }
           onPlaceOnMap={() => onPlaceOnMap([...selection])}
           onCollage={() => setCollage([...selection])}
+          onSlideshow={() => play([...selection], `${selection.size.toLocaleString()} photos`)}
           onPasteEdit={(what) =>
             run(async () => {
               const recipe = copiedEdit.get();
@@ -359,6 +398,15 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
             setViewing(null);
             collections.navigate(target);
           }}
+        />
+      )}
+      {slideshow && (
+        <Slideshow
+          ids={slideshow.ids}
+          title={slideshow.title}
+          onClose={() => setSlideshow(null)}
+          onNotice={onNotice}
+          onError={onError}
         />
       )}
       {collage && (

@@ -1,3 +1,4 @@
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -84,6 +85,7 @@ export default function App() {
   // Bumped when scans or background detection may have changed events.
   const [eventsVersion, setEventsVersion] = useState(0);
   const [exporting, setExporting] = useState<{ done: number; total: number } | null>(null);
+  const [makingVideo, setMakingVideo] = useState<{ done: number; total: number } | null>(null);
   // Items being placed on the map by hand, and the view to go back to.
   const [placing, setPlacing] = useState<{ ids: number[]; from: View; filter: Filter } | null>(null);
 
@@ -180,6 +182,18 @@ export default function App() {
         setExporting(null);
         setNotice(error ? `Export failed: ${error}` : r ? describeExport(r) : "Export finished");
       }),
+      events.videoProgress((p) => setMakingVideo(p)),
+      events.videoFinished(({ report: r, error }) => {
+        setMakingVideo(null);
+        if (error) setNotice(error === "Stopped" ? "Video stopped." : `The video couldn't be made: ${error}`);
+        else if (r) {
+          setNotice(
+            `Video saved: ${r.path} (${Math.round(r.seconds)} s, ${r.photos} photos)` +
+              (r.musicSkipped ? ". The music file couldn't be read, so it has no sound." : ""),
+          );
+          revealItemInDir(r.path).catch(() => {});
+        }
+      }),
       events.volumesChanged(() => reloadRoots().catch(report)),
     ];
     return () => unlisten.forEach((p) => p.then((off) => off()));
@@ -246,6 +260,14 @@ export default function App() {
           <span className="export-status muted">
             Exporting {exporting.done.toLocaleString()} of {exporting.total.toLocaleString()}
             <button className="link small" onClick={() => api.cancelExport().catch(report)}>
+              Stop
+            </button>
+          </span>
+        )}
+        {makingVideo && (
+          <span className="export-status muted">
+            Making video {Math.round((makingVideo.done / Math.max(1, makingVideo.total)) * 100)}%
+            <button className="link small" onClick={() => api.cancelVideo().catch(report)}>
               Stop
             </button>
           </span>
