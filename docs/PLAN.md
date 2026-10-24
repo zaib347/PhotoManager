@@ -83,10 +83,11 @@ Rule: anything that is not window/IPC glue goes in `photo-core`. That keeps it t
 | M3 | Memory features | 4 | On This Day, event detection (adaptive time gaps), trips (GPS away from home), offline place names (GeoNames), time correction incl. bulk camera-clock shift. |
 | M4 | Cleanup & safety | 4 | Exact dupes (size → quick hash → full hash), near-dupes/bursts (phash within time window, BK-tree), best-shot ranking, planned/previewed/journaled/undoable ops, trash-only delete. |
 | T | Tools | 4–5 | Export copies (resize, convert incl. HEIC → JPEG, compress, metadata kept, remove location), watermark, lossless rotate, non-destructive editor. Upscale and other AI tools go in M7. |
+| F | Features (non-AI) | 7–9 | Copy/paste edits, XMP sidecars, map view, Google Takeout/iCloud import, collage and print layouts, memory slideshow and video. No AI, no downloads; see "F checklist". |
 | — | **Free public beta** | ~month 5–6 | Real libraries, real crash reports. Installer, code signing and auto-update are done just before. |
 | M5 | Platform hardening | 4 | HEIC/RAW/video on all 3 OSes, long/Unicode paths, macOS permissions, AppImage/deb, signed + notarized builds, auto-update. |
 | M6 | Annual subscription | 2–3 | MoR checkout, signed offline license token, 14–30 day grace. Browsing, timeline and export are never paywalled. |
-| M7 | AI pack | 6–8 | Model manager (download, verify, delete), `ort` with `load-dynamic`, image embeddings → semantic search, then OCR; faces last and opt-in. |
+| M7 | AI pack (opt-in) | 6–8 | Built last. Nothing is downloaded unless the user turns a feature on. Model manager (download, verify, delete), `ort` with `load-dynamic`; search by description, then people (face grouping), then upscale. See "M7 checklist". |
 
 Realistic solo estimate: **9–12 months** to paid 1.0.
 
@@ -273,6 +274,83 @@ Ground rule: tools write new files; originals are only replaced through `fileops
       count as taken
 - [ ] Copy an edit and paste it onto other photos; edit several at once
 - [ ] WebGL preview if CPU previews feel slow on low-end laptops
+
+## Order from here (the user's choice, 2026-10-24)
+
+1. **F: the six non-AI features**, in the order below (smallest first).
+2. Beta prep and **M6** (subscription), as planned.
+3. **M7: the three AI features, last.** Each is the user's choice: off by default, and its
+   model downloads only when the user turns that feature on.
+
+## F checklist (non-AI features)
+
+Each feature is its own branch, merged after the user's go-ahead. Everything runs offline
+and needs no downloads.
+
+1. - [ ] **Copy and paste edits** (small, ~2–3 days)
+   - Editor and viewer: **Copy edit**. Selection bar: **Paste edit** with a choice of
+     everything, or light and colour only (skip crop and straighten, which rarely suit
+     another photo).
+   - Applies the copied recipe to each photo through `edit::save` in one batch; thumbnails
+     rebuild; each photo can still be reverted on its own.
+2. - [ ] **XMP sidecars** (small, ~3–4 days)
+   - Read on scan: ratings, keywords (as tags), title/description and labels from existing
+     `.xmp` files (Lightroom, darktable, digiKam), so a library brought in from them keeps
+     its work. Embedded XMP in JPEGs too.
+   - Write (a setting, off by default, since it adds files to the user's folders): ratings,
+     tags, favorite (as a 5-star or a label, to choose) and description to `<name>.xmp`.
+     Merges with what's there; never touches the photo file itself.
+   - Rename and the organizer already move sidecars along.
+3. - [ ] **Map view** (medium, ~1–1.5 weeks)
+   - Sidebar **Map**: photos as clusters by place (counts shrink into pins as you zoom),
+     click a cluster to open the timeline filtered there. Uses `assets.lat/lon` and the
+     places we already have; fast at 1M photos via a grid per zoom level.
+   - Map pictures (tiles) — **decision needed**: (a) bundle an offline world map down to
+     city level (~20–40 MB, works offline, fits the privacy story; recommended), or (b)
+     load street-level tiles from an online provider (needs a provider account; the
+     OpenStreetMap servers don't allow app use at scale), or (a) now and (b) later.
+   - Also: **set a location by hand** for photos without GPS (pick a place, or drop on map).
+4. - [ ] **Import from Google Takeout / iCloud** (medium, ~1 week)
+   - Google Takeout: reads the `.json` next to each photo (`photoTakenTime`, `geoData`,
+     description, favorited), matching Google's shortened names and `-edited` copies; the
+     capture date and place come from there when the photo's own EXIF lost them (common
+     with Google's downloads). Albums become albums.
+   - iCloud (privacy.apple.com export): reads its `Photo Details.csv` files for dates,
+     favorites and hidden, and its album lists.
+   - Shown as an import report (how many dates/places fixed); undoable like date fixes.
+5. - [ ] **Collage and print layouts** (small–medium, ~1 week)
+   - Select 2–9 photos → **Collage**: grid and mosaic templates, spacing, corner rounding,
+     background colour, drag to swap, click to pan inside a cell.
+   - Output sizes: square / story for social, and print sizes (4×6, 5×7, 8×10 in, A4) at
+     300 dpi. Saved through the export pipeline (`jpeg::Purpose::Keep`, metadata from the
+     first photo). Printing itself is from any app (or the OS print dialog later).
+6. - [ ] **Memory slideshow and video** (medium, ~1.5–2 weeks)
+   - From an event, a trip, On This Day or any selection: full-screen slideshow with
+     gentle pan-and-zoom, the best shots first (best-shot ranking skips near-duplicates),
+     optional music from the user's own file.
+   - **Save as video**: H.264 MP4 through Windows' own encoder (Media Foundation; no
+     ffmpeg needed), 1080p, with the music mixed in. A background job with progress and
+     Stop, like export.
+
+## M7 checklist (AI pack, opt-in, built last)
+
+Off by default. **Settings → AI features** lists each feature with what it does, its
+download size and an **Install** button; nothing is downloaded before that. Models run on
+the user's PC only (no photos leave it), can be deleted any time, and are checked against a
+SHA-256 before first use. ONNX Runtime via `ort` with `load-dynamic`, so the app itself
+stays small and the runtime comes with the first model (DirectML on Windows for GPUs).
+Indexing runs in the background, pauses during scans and on battery.
+
+1. - [ ] **Search by description** (~150–350 MB model): "beach sunset", "birthday cake" find
+   photos without tags. CLIP-style image + text embeddings; ~20–50 ms per photo to index on
+   CPU, instant search. Then automatic smart albums (Food, Pets, Documents…) from the same
+   model.
+2. - [ ] **People (face grouping)** (~30 MB models): finds faces, groups the same person,
+   the user names a group once. Opt-in again on its own (face data is sensitive), stored
+   only in the library, removable with one click. First pass over a big library takes
+   hours, then new photos only.
+3. - [ ] **Upscale** (~20–70 MB model): enlarge small or old photos 2–4×, as an Export size
+   option. Seconds to a minute per photo on CPU, so it's a deliberate action.
 
 ## M5 checklist
 
