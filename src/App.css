@@ -1850,3 +1850,34 @@ button.primary:disabled {
   bottom: 6px;
   font-size: 11px;
 }
+
+/* ---------- Imports ---------- */
+
+.import-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 300px;
+}
+
+.import-panel p {
+  margin: 0;
+}
+
+.import-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.import-list li {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: baseline;
+}

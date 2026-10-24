@@ -7,7 +7,7 @@ import { fileName, formatBytes, formatDuration, formatOffset, formatTakenAt, pla
 import { eventTitle } from "../events/format";
 import { tripTitle } from "../trips/format";
 
-const TIME_SOURCES = ["from photo metadata", "from video metadata", "from the file name", "from the file's modified date", "set by you"];
+const TIME_SOURCES = ["from photo metadata", "from video metadata", "from the file name", "from the file's modified date", "set by you", "from Google Photos or iCloud"];
 
 type Props = {
   asset: AssetDetails | null;
@@ -60,7 +60,7 @@ export function InfoPanel({ asset, onAddTag, onRemoveTag, onNavigate, onRestoreD
           {asset.takenSrc === 0 && asset.tzOffsetMin !== 0 && ` · ${formatOffset(asset.tzOffsetMin)}`}
         </p>
         {uncertainTime && <p className="muted small">The real capture date may differ: this file had no date inside it.</p>}
-        {asset.takenSrc === 4 && (
+        {asset.takenSrc >= 4 && (
           <button className="link small" onClick={onRestoreDate}>
             Restore original date
           </button>

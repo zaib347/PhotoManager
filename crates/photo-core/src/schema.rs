@@ -332,6 +332,30 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
     "
     ALTER TABLE user_meta ADD COLUMN location_set INTEGER NOT NULL DEFAULT 0;
     ",
+    // v17: imports of Google Takeout and iCloud metadata (see `imports`), journaled for
+    // undo. `import_items.field`: date | location | favorite | hidden | description |
+    // album (with `album_id`). `import_albums`: albums the import created.
+    "
+    CREATE TABLE imports (
+        id         INTEGER PRIMARY KEY,
+        root_id    INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        report     TEXT NOT NULL,
+        undone     INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE import_items (
+        import_id INTEGER NOT NULL REFERENCES imports(id) ON DELETE CASCADE,
+        asset_id  INTEGER NOT NULL,
+        field     TEXT NOT NULL,
+        album_id  INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (import_id, asset_id, field, album_id)
+    ) WITHOUT ROWID;
+    CREATE TABLE import_albums (
+        import_id INTEGER NOT NULL REFERENCES imports(id) ON DELETE CASCADE,
+        album_id  INTEGER NOT NULL,
+        PRIMARY KEY (import_id, album_id)
+    ) WITHOUT ROWID;
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

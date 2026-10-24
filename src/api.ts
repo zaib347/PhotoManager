@@ -218,6 +218,23 @@ export type ExportOptions = {
   folder: string;
 };
 
+/** What an import of Google Takeout or iCloud metadata changed. */
+export type ImportReport = {
+  id: number;
+  /** Metadata entries in the export, and those matched to a file. */
+  found: number;
+  matched: number;
+  dates: number;
+  places: number;
+  favorites: number;
+  hidden: number;
+  descriptions: number;
+  albums: number;
+  albumItems: number;
+  sources: ("google" | "icloud")[];
+};
+export type ImportInfo = { id: number; rootId: number; createdAt: number; undone: boolean; report: ImportReport };
+
 /** XMP sidecars are always read; writing them is off by default. */
 export type XmpSettings = {
   write: boolean;
@@ -356,7 +373,7 @@ export type AssetDetails = {
   id: number;
   mediaKind: number;
   takenAt: number;
-  /** 0 EXIF, 1 video metadata, 2 filename, 3 file modified time, 4 user */
+  /** 0 EXIF, 1 video metadata, 2 filename, 3 file modified time, 4 user, 5 Google Photos or iCloud export */
   takenSrc: number;
   tzOffsetMin: number;
   localDay: number;
@@ -492,6 +509,11 @@ export const api = {
   searchCities: (query: string) => invoke<CityInfo[]>("search_cities", { query }),
   /** Places photos by hand; returns how many. */
   setLocation: (ids: number[], lat: number, lon: number) => invoke<number>("set_location", { ids, lat, lon }),
+  /** Reads a Google Takeout or iCloud export's metadata in a library folder. */
+  importMetadata: (rootId: number) => invoke<ImportReport>("import_metadata", { rootId }),
+  listImports: (rootId: number) => invoke<ImportInfo[]>("list_imports", { rootId }),
+  /** Takes an import back; returns how many changes were undone. */
+  undoImport: (id: number) => invoke<number>("undo_import", { id }),
   xmpSettings: () => invoke<XmpSettings>("xmp_settings"),
   /** Turning writing on writes sidecars for every photo with ratings, tags or a description. */
   setXmpSettings: (settings: XmpSettings) => invoke<void>("set_xmp_settings", { settings }),

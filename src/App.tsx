@@ -275,6 +275,11 @@ export default function App() {
           onCancel={(id) => api.cancelScan(id).catch(report)}
           onRemove={removeRoot}
           onError={report}
+          onNotice={setNotice}
+          onImported={() => {
+            Promise.all([reloadTimeline(), reloadCollections()]).catch(report);
+            setEventsVersion((v) => v + 1);
+          }}
         />
         <main className="content">
           {!busy && !isPage(view) && stats && stats.assets > 0 && <FilterBar filter={filter} roots={roots} onChange={setFilter} />}

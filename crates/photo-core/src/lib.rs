@@ -13,6 +13,7 @@ pub mod events;
 pub mod export;
 pub mod fileops;
 pub mod hash;
+pub mod imports;
 pub mod jpeg;
 pub mod library;
 pub mod live;

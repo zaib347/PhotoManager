@@ -2,6 +2,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { api, thumbUrl, viewKey, type BuiltinView, type RootInfo, type ScanProgress, type View } from "../api";
 import { useCollections } from "../collections/context";
+import { Popover } from "../ui/Popover";
+import { ImportPanel } from "./ImportPanel";
 import { XmpSettings } from "./XmpSettings";
 
 const VIEWS: { id: BuiltinView; label: string }[] = [
@@ -29,9 +31,24 @@ type Props = {
   onCancel: (rootId: number) => void;
   onRemove: (root: RootInfo) => void;
   onError: (e: unknown) => void;
+  onNotice: (message: string) => void;
+  /** An import changed dates, places, albums or favorites. */
+  onImported: () => void;
 };
 
-export function LibraryPanel({ view, onView, roots, progress, onAdd, onRescan, onCancel, onRemove, onError }: Props) {
+export function LibraryPanel({
+  view,
+  onView,
+  roots,
+  progress,
+  onAdd,
+  onRescan,
+  onCancel,
+  onRemove,
+  onError,
+  onNotice,
+  onImported,
+}: Props) {
   const { albums, tags, reload } = useCollections();
   const [newAlbum, setNewAlbum] = useState<string | null>(null);
   const current = viewKey(view);
@@ -170,6 +187,11 @@ export function LibraryPanel({ view, onView, roots, progress, onAdd, onRescan, o
                     Rescan
                   </button>
                   <button onClick={() => onRemove(root)}>Remove</button>
+                  <Popover label="Import…" title="Google Takeout or iCloud export">
+                    {() => (
+                      <ImportPanel rootId={root.id} onChanged={onImported} onNotice={onNotice} onError={onError} />
+                    )}
+                  </Popover>
                   {root.lastScanAt && (
                     <span className="muted">scanned {new Date(root.lastScanAt).toLocaleDateString()}</span>
                   )}

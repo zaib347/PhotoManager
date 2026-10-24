@@ -309,7 +309,7 @@ and needs no downloads.
      works offline, fits the privacy story). Chosen by the user on 2026-10-24; no online
      tile provider for now.
    - Also: **set a location by hand** for photos without GPS (pick a place, or drop on map).
-4. - [ ] **Import from Google Takeout / iCloud** (medium, ~1 week)
+4. - [x] **Import from Google Takeout / iCloud** (medium, ~1 week)
    - Google Takeout: reads the `.json` next to each photo (`photoTakenTime`, `geoData`,
      description, favorited), matching Google's shortened names and `-edited` copies; the
      capture date and place come from there when the photo's own EXIF lost them (common

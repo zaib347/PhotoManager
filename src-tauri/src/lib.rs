@@ -4,6 +4,7 @@ mod diag;
 mod edit_commands;
 mod event_commands;
 mod export_commands;
+mod import_commands;
 mod map_commands;
 mod memory_commands;
 mod protocol;
@@ -394,6 +395,9 @@ pub fn run() {
             edit_commands::edit_save,
             edit_commands::edit_paste,
             xmp_commands::xmp_settings,
+            import_commands::import_metadata,
+            import_commands::list_imports,
+            import_commands::undo_import,
             map_commands::map_data,
             map_commands::map_cities,
             map_commands::map_load,

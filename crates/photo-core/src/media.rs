@@ -161,7 +161,7 @@ pub fn extract(path: &Path, kind: MediaKind, mtime_ms: i64) -> Metadata {
     meta
 }
 
-fn local_offset_min(utc_ms: i64) -> i32 {
+pub(crate) fn local_offset_min(utc_ms: i64) -> i32 {
     Local
         .timestamp_millis_opt(utc_ms)
         .single()
