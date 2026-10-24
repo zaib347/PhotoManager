@@ -16,7 +16,6 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use exif::{Context, Exif, In, Tag, Value};
 use fast_image_resize::images::{Image, ImageRef};
 use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
-use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageEncoder, ImageReader, RgbImage, RgbaImage};
@@ -238,7 +237,7 @@ fn encode(image: &DynamicImage, format: Format, quality: u8) -> Result<Vec<u8>> 
             out = encoded;
         }
         Format::Jpeg | Format::Original => {
-            JpegEncoder::new_with_quality(&mut out, quality).encode_image(&flatten(image))?;
+            out = crate::jpeg::encode(&flatten(image), quality, crate::jpeg::Purpose::Keep)?;
         }
     }
     Ok(out)
@@ -371,7 +370,7 @@ pub fn preview(base: &PreviewBase, watermark: &Watermark) -> Result<Vec<u8>> {
     if let Some(mark) = watermark::prepare(watermark)? {
         mark.apply(&mut image);
     }
-    encode(&image, Format::Jpeg, 85)
+    crate::jpeg::encode(&image.to_rgb8(), 85, crate::jpeg::Purpose::Show)
 }
 
 /// Writes `data` as `<stem>.<ext>` in `folder`, or `<stem> (2).<ext>` and so on if
@@ -503,6 +502,7 @@ pub fn run(
 mod tests {
     use super::*;
     use image::Rgb;
+    use image::codecs::jpeg::JpegEncoder;
 
     /// A 600×400 JPEG with EXIF: a capture date, GPS and orientation 6 (turn right).
     fn photo_with_exif(dir: &Path) -> PathBuf {
