@@ -9,6 +9,7 @@ use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::Result;
+use crate::edit::Look;
 
 pub const GRID_SIZE: u32 = 256;
 const JPEG_QUALITY: u8 = 80;
@@ -54,46 +55,65 @@ pub fn from_embedded(jpeg: &[u8], orientation: Option<u8>) -> Result<Vec<u8>> {
     encode_jpeg(&img.to_rgb8())
 }
 
-/// Viewer-sized JPEG for originals the webview cannot display (TIFF etc.).
-pub fn preview(path: &Path, orientation: Option<u8>) -> Result<Vec<u8>> {
-    const MAX_EDGE: u32 = 2048;
-    let mut img = image::open(path)?;
-    if img.width().max(img.height()) > MAX_EDGE {
-        img = img.thumbnail(MAX_EDGE, MAX_EDGE);
+/// Longest edge decoded for an edited thumbnail before the edit is applied (more
+/// when a crop zooms in), so the edit runs on a small image.
+const EDIT_WORK_EDGE: f32 = 1024.0;
+
+/// Shrinks so the long edge is at most `edge`.
+fn shrink(img: DynamicImage, edge: u32) -> DynamicImage {
+    if img.width().max(img.height()) > edge {
+        img.thumbnail(edge, edge)
+    } else {
+        img
     }
+}
+
+/// Viewer-sized JPEG for originals the webview cannot display (TIFF etc.).
+pub fn preview(path: &Path, orientation: Option<u8>, look: &Look) -> Result<Vec<u8>> {
+    let mut img = shrink(image::open(path)?, (2048.0 * look.zoom().min(2.0)) as u32);
     orient(&mut img, orientation);
-    encode_jpeg(&img.to_rgb8())
+    encode_jpeg(&look.apply(img).to_rgb8())
 }
 
 /// Full decode of the original, scaled so the short edge is `GRID_SIZE` (the grid
 /// crops to squares) with the long edge capped for panoramas.
-pub fn from_file(path: &Path, orientation: Option<u8>) -> Result<Vec<u8>> {
-    let mut thumb = grid_sized(image::open(path)?);
-    orient(&mut thumb, orientation);
-    encode_jpeg(&thumb.to_rgb8())
+pub fn from_file(path: &Path, orientation: Option<u8>, look: &Look) -> Result<Vec<u8>> {
+    let img = image::open(path)?;
+    if look.edit.is_none() {
+        let mut thumb = grid_sized(img);
+        orient(&mut thumb, crate::rotate::compose(orientation, look.turns));
+        return encode_jpeg(&thumb.to_rgb8());
+    }
+    let mut img = shrink(img, (EDIT_WORK_EDGE * look.zoom().min(4.0)) as u32);
+    orient(&mut img, orientation);
+    encode_jpeg(&grid_sized(look.apply(img)).to_rgb8())
 }
 
 /// Thumbnail from the OS decoders (video frames, HEIC/RAW with an installed codec).
-/// The OS has already applied the EXIF rotation; `turns` are the user's on top.
-pub fn from_os(path: &Path, turns: u8) -> Result<Vec<u8>> {
-    let img = crate::os_thumb::thumbnail(path, GRID_SIZE * 2)?;
-    let img = crate::rotate::turn(DynamicImage::ImageRgb8(img), turns);
-    encode_jpeg(&grid_sized(img).to_rgb8())
+/// The OS has already applied the EXIF rotation; the look goes on top.
+pub fn from_os(path: &Path, look: &Look) -> Result<Vec<u8>> {
+    let edge = if look.edit.is_some() {
+        (EDIT_WORK_EDGE * look.zoom().min(4.0)) as u32
+    } else {
+        GRID_SIZE * 2
+    };
+    let img = crate::os_thumb::thumbnail(path, edge)?;
+    encode_jpeg(&grid_sized(look.apply(DynamicImage::ImageRgb8(img))).to_rgb8())
 }
 
 /// Viewer-sized image from the OS decoders, for formats the webview can't show.
-pub fn preview_from_os(path: &Path, turns: u8) -> Result<Vec<u8>> {
+pub fn preview_from_os(path: &Path, look: &Look) -> Result<Vec<u8>> {
     let img = crate::os_thumb::thumbnail(path, 2048)?;
-    encode_jpeg(&crate::rotate::turn(DynamicImage::ImageRgb8(img), turns).to_rgb8())
+    encode_jpeg(&look.apply(DynamicImage::ImageRgb8(img)).to_rgb8())
 }
 
-/// The whole photo, upright and turned, for the viewer when the user turned a photo
-/// the webview would otherwise show from the file as it is.
-pub fn full_turned(path: &Path, orientation: Option<u8>, turns: u8) -> Result<Vec<u8>> {
+/// The whole photo with its look, for the viewer when the user turned or edited a
+/// photo the webview would otherwise show from the file as it is.
+pub fn full_adjusted(path: &Path, orientation: Option<u8>, look: &Look) -> Result<Vec<u8>> {
     let mut img = image::open(path)?;
-    orient(&mut img, crate::rotate::compose(orientation, turns));
+    orient(&mut img, orientation);
     let mut buf = Cursor::new(Vec::new());
-    JpegEncoder::new_with_quality(&mut buf, 92).encode_image(&img.to_rgb8())?;
+    JpegEncoder::new_with_quality(&mut buf, 92).encode_image(&look.apply(img).to_rgb8())?;
     Ok(buf.into_inner())
 }
 

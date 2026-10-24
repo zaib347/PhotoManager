@@ -2,14 +2,14 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { api } from "./api";
 import App from "./App";
-import { photoTurns } from "./turns";
+import { photoLooks } from "./looks";
 
-// Turned photos first: their image URLs differ, and an image fetched under the wrong
-// URL would stay cached the wrong way round.
+// Turned and edited photos first: their image URLs differ, and an image fetched under
+// the wrong URL would stay cached with its old look.
 api
-  .turnedPhotos()
-  .then((turned) => photoTurns.set(turned))
-  .catch((e) => console.error("Couldn't load turned photos", e))
+  .adjustedPhotos()
+  .then((list) => photoLooks.load(list))
+  .catch((e) => console.error("Couldn't load edited photos", e))
   .finally(() =>
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <React.StrictMode>

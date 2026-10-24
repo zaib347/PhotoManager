@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use photo_core::library::{self, AssetSource};
-use photo_core::{live, media, rotate, thumbs};
+use photo_core::{live, media, thumbs};
 use tauri::http::{Request, Response, StatusCode, header};
 use tauri::{Manager, Runtime, UriSchemeContext, UriSchemeResponder};
 
@@ -71,7 +71,7 @@ fn generate_thumb(state: &AppState, asset_id: i64) -> photo_core::Result<Option<
         AssetSource::File {
             path,
             orientation,
-            turns,
+            look,
             kind,
         } => {
             // Our own decoders first for photos (fast, exact); the OS for video frames
@@ -79,11 +79,11 @@ fn generate_thumb(state: &AppState, asset_id: i64) -> photo_core::Result<Option<
             let generated = if state.os_thumb_failed(asset_id) {
                 None
             } else if kind == 0 {
-                thumbs::from_file(&path, rotate::compose(orientation, turns))
-                    .or_else(|_| thumbs::from_os(&path, turns))
+                thumbs::from_file(&path, orientation, &look)
+                    .or_else(|_| thumbs::from_os(&path, &look))
                     .ok()
             } else {
-                thumbs::from_os(&path, 0).ok()
+                thumbs::from_os(&path, &Default::default()).ok()
             };
             match generated {
                 Some(data) => {
@@ -143,7 +143,7 @@ pub fn handle_media<R: Runtime>(
         let Ok(Some(AssetSource::File {
             path,
             orientation,
-            turns,
+            look,
             kind,
         })) = source
         else {
@@ -151,21 +151,21 @@ pub fn handle_media<R: Runtime>(
             return;
         };
         let web = media::web_mime(&path);
-        if let Some(mime) = web.filter(|_| turns == 0 || kind == 1) {
+        if let Some(mime) = web.filter(|_| look.is_plain() || kind == 1) {
             responder.respond(
                 serve_file(&path, mime, range.as_deref())
                     .unwrap_or_else(|_| status(StatusCode::INTERNAL_SERVER_ERROR)),
             );
         } else if kind == 0 {
             state.decode_pool.spawn(move || {
-                // A turned photo the webview could show is decoded at full size, so
-                // zooming in stays sharp.
+                // A turned or edited photo the webview could show is decoded at full
+                // size, so zooming in stays sharp.
                 let preview = if web.is_some() {
-                    thumbs::full_turned(&path, orientation, turns)
+                    thumbs::full_adjusted(&path, orientation, &look)
                 } else {
-                    thumbs::preview(&path, rotate::compose(orientation, turns))
+                    thumbs::preview(&path, orientation, &look)
                 }
-                .or_else(|_| thumbs::preview_from_os(&path, turns));
+                .or_else(|_| thumbs::preview_from_os(&path, &look));
                 responder.respond(match preview {
                     Ok(data) => Response::builder()
                         .header(header::CONTENT_TYPE, "image/jpeg")

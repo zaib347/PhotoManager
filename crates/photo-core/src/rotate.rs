@@ -88,6 +88,7 @@ pub fn rotate(library: &Db, thumbs_db: &Db, ids: &[i64], quarters: i8) -> Result
                     .unwrap_or(0);
                 let next = (now + delta) % 4;
                 set.execute(params![id, next])?;
+                crate::edit::turn_crop(&tx, id, delta)?;
                 turned.push((id, next));
             }
         }
@@ -111,13 +112,6 @@ pub fn rotate(library: &Db, thumbs_db: &Db, ids: &[i64], quarters: i8) -> Result
         tx.commit()?;
     }
     Ok(turned)
-}
-
-/// Every turned photo and its turns, for the frontend's image URLs.
-pub fn turned(conn: &Connection) -> Result<Vec<(i64, u8)>> {
-    let mut stmt = conn.prepare("SELECT asset_id, turns FROM user_meta WHERE turns != 0")?;
-    let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
-    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 #[cfg(test)]
@@ -183,7 +177,12 @@ mod tests {
     }
 
     fn turned_list(library: &Db) -> Vec<(i64, u8)> {
-        turned(&library.read()).unwrap()
+        crate::edit::adjusted(&library.read())
+            .unwrap()
+            .into_iter()
+            .filter(|&(_, turns, _)| turns != 0)
+            .map(|(id, turns, _)| (id, turns))
+            .collect()
     }
 
     #[test]

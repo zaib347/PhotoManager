@@ -1,9 +1,9 @@
 //! Exporting copies of photos (resize, convert, compress) as a background job.
 
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 
-use photo_core::export::{self, Options, Report};
+use photo_core::export::{self, Options, PreviewBase, Report};
 use photo_core::library::{self, AssetSource};
 use photo_core::watermark::Watermark;
 use serde::Serialize;
@@ -80,33 +80,44 @@ pub async fn watermark_preview(
     watermark: Watermark,
 ) -> CmdResult<Response> {
     let jpeg = blocking(&state, move |s| {
-        let cached = s
-            .watermark_base
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
-            .filter(|(cached, _)| *cached == id);
-        let base = match cached {
-            Some((_, base)) => base,
-            None => {
-                let (path, turns) = match library::asset_source(&s.library.read(), id)? {
-                    Some(AssetSource::File {
-                        path, turns, kind, ..
-                    }) if kind != 1 => (path, turns),
-                    _ => {
-                        return Err(photo_core::Error::Invalid(
-                            "No photo file to preview on".into(),
-                        ));
-                    }
-                };
-                let base = Arc::new(export::preview_base(&path, turns, PREVIEW_EDGE)?);
-                *s.watermark_base.lock().unwrap_or_else(|e| e.into_inner()) =
-                    Some((id, base.clone()));
-                base
-            }
-        };
+        let base = cached_base(s, &s.watermark_base, id, PREVIEW_EDGE, true)?;
         export::preview(&base, &watermark)
     })
     .await?;
     Ok(Response::new(jpeg))
+}
+
+/// Photo `id` decoded upright with its turns (and its edit when `with_edit`), shrunk
+/// to `edge`. Kept in `slot` so the next call for the same photo is instant.
+pub(crate) fn cached_base(
+    s: &AppState,
+    slot: &Mutex<Option<(i64, Arc<PreviewBase>)>>,
+    id: i64,
+    edge: u32,
+    with_edit: bool,
+) -> photo_core::Result<Arc<PreviewBase>> {
+    let cached = slot
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .filter(|(cached, _)| *cached == id);
+    if let Some((_, base)) = cached {
+        return Ok(base);
+    }
+    let (path, mut look) = match library::asset_source(&s.library.read(), id)? {
+        Some(AssetSource::File {
+            path, look, kind, ..
+        }) if kind != 1 => (path, look),
+        _ => {
+            return Err(photo_core::Error::Invalid(
+                "No photo file to preview on".into(),
+            ));
+        }
+    };
+    if !with_edit {
+        look.edit = None;
+    }
+    let base = Arc::new(export::preview_base(&path, &look, edge)?);
+    *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some((id, base.clone()));
+    Ok(base)
 }
