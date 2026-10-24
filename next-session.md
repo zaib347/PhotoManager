@@ -1,11 +1,35 @@
 # Next session
 
-Where PhotoManager stands as of 2026-10-24 (evening), and what to pick up next.
+Where PhotoManager stands as of 2026-10-24 (night), and what to pick up next.
 The full plan and checklists are in [docs/PLAN.md](docs/PLAN.md).
 
 ## Start here
 
-**Milestone F is complete.** F1–F4 are merged into `main` locally (the user confirmed them
+**M7, the AI pack, is complete** (the user asked for all of it, then OCR, in one go):
+
+| Branch | Feature | State |
+|---|---|---|
+| `m7-ai` (from `f-slideshow`) | M7.1 search by description, smart albums | committed, waiting for the user's test |
+| `m7-people-upscale-text` (from `m7-ai`) | M7.2 People, M7.3 Upscale, M7.4 Text in photos (Windows OCR) | committed, waiting for the user's test |
+
+- Schema is **v20** (v18 search embeddings, v19 faces/people, v20 text FTS5); thumbs DB v2
+  (face portraits).
+- Merge order after the go-ahead: `f-slideshow` → `m7-ai` → `m7-people-upscale-text` (all
+  fast-forwards).
+- **After M7 the user wants detailed testing of the whole app, then the free trial and
+  subscription system (M6) as the very last step.**
+
+**What the user should try in the app (AI page in the sidebar):**
+1. Search by description: Install (~167 MB), wait for indexing, type "beach", "food"…
+2. People: Install (~39 MB). Faces are found in the background (People appears in the
+   sidebar). Click a name to name someone; Ctrl-click two people → "Same person: merge";
+   in a person's photos select wrong ones → "Not this person"; one photo → "Use as their
+   picture"; Hide. A photo's info lists the named people in it.
+3. Upscale: Install (4.5 MB). Select small photos → Export → Enlarge (AI) 2× or 4×.
+4. Text in photos: Turn on (no download). Search words seen in screenshots/receipts; a
+   photo's info shows its text with Copy text.
+
+**Earlier: milestone F is complete.** F1–F4 are merged into `main` locally (the user confirmed them
 2026-10-24). F5 and F6 were built right after, at the user's request, without stopping
 for approval:
 
@@ -28,8 +52,8 @@ for approval:
    Space/arrows/Esc, speed, ♪ Music… (mp3/m4a/wav/flac/ogg), Save as video… → MP4 made in
    the background ("Making video N%" in the toolbar, Stop).
 
-**Next (the user's order, 2026-10-24):** beta prep can wait; next is **M6 subscription**,
-then **M7 AI pack**. See docs/PLAN.md.
+**Next (the user's order, 2026-10-24):** the user tests everything in detail; then the
+free trial and **M6 subscription/payments** last. See docs/PLAN.md.
 
 ## Where things stand
 
@@ -38,13 +62,38 @@ then **M7 AI pack**. See docs/PLAN.md.
 | M0–M4, Tools, M5 part 1 + CI | Done, on `main` |
 | F1–F4 | Done, merged to `main` (not pushed) |
 | F5–F6 | Built on branches, waiting for testing |
-| M6 subscription | Next |
-| M7 AI pack (search, people, upscale; opt-in downloads) | After M6 |
+| M7 AI pack (search, people, upscale, OCR; opt-in) | Built on branches, waiting for testing |
+| M6 free trial + subscription | Last, after detailed testing |
 | Beta prep; M5 parts 3–4 (macOS/Linux, signing) | Later, when the user says |
 
 - **Testing:** the user's team has the installer
   (`target/release/bundle/nsis/PhotoManager_0.1.0_x64-setup.exe`, built locally with
   `npm run tauri build`, unsigned). Expect bug reports; fix those before new work.
+
+## How the M7 (AI pack) code works
+
+- Crate `crates/photo-ai`. `models.rs`: packs (Runtime, Search, People, Upscale, Text)
+  with pinned URLs, sizes and SHA-256s; a package can keep several files (Upscale's zip:
+  `.onnx` + `.data`); Text has no files (installing writes the manifest). `runtime.rs`:
+  ONNX Runtime 1.24.4 loaded from the download, CPU only (DirectML was slower and crashed).
+- `clip.rs`/`search.rs`: CLIP embeddings of grid thumbnails, one photo per run (8-bit
+  model is batch-dependent), z-score search. `faces.rs`: YuNet decode + SFace with
+  OpenCV's alignment. `people.rs`: `Groups` (sums of face vectors per person), `assign`
+  (≥ 0.45 to an average face, one face per person per photo), `merges` after each pass;
+  `People` holds the groups and drops them whenever the user changes people (under the
+  library write lock). `picture.rs`: photos read upright at reduced size. `upscale.rs`:
+  128 px tiles, 12 px margins cut. `text.rs`: Windows.Media.Ocr on its own MTA thread,
+  FTS5 `ai_text` (rowid = asset id; a trigger clears it with the asset).
+- Tauri `ai_commands.rs`: install/remove (runtime only for packs that need it), one
+  indexer thread taking turns (64 photos each for search, faces, text; a failing feature
+  stops alone), threads = a quarter of logical CPUs in the background, physical cores for
+  enlarging. `face://<face id>` serves portraits (made again from the photo if missing).
+  Export takes the upscaler as `export::Enlarge` (photo-core stays model-free).
+- Tests with real models: `PHOTO_AI_TEST_MODELS=<folder with the installed files>`
+  (`onnxruntime.dll`, CLIP files, `detector.onnx`, `recognizer.onnx`,
+  `real_esrgan_general_x4v3.onnx/.data`) and `PHOTO_AI_TEST_FACES=<LFW folder>` for
+  People; downloads are `--ignored` tests. `examples/faces_eval.rs` measures grouping on
+  a folder of people (LFW gave 16/16 people, 0 wrong faces).
 
 ## How the F5–F6 code works
 
@@ -198,3 +247,4 @@ Actions tab or a `v*` tag) makes unsigned installers. macOS/Linux entries are co
 - Live Photos and faster hide: confirmed working by the user (2026-10-24).
 - F1–F4: confirmed working by the user (2026-10-24), merged locally.
 - **F5–F6** (branches above): built, waiting for the user to test and say merge.
+- **M7** (`m7-ai`, `m7-people-upscale-text`): built, waiting for the user to test and say merge.
