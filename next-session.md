@@ -35,7 +35,7 @@ Committed and pushed in `1e5d243`:
 - Duplicates: Keep Suggested / Oldest / Newest for all groups (`Prefer` in
   `duplicates::extras`), per-group picks still win; Yes/No confirmations; card layout.
 
-**Not committed yet** (builds and compiles cleanly; commit to `ui-themes` first thing):
+Then committed and pushed in `672da5c` (builds and compiles cleanly):
 - Themed confirm dialog `src/ui/confirm.tsx` (same call as the plugin's `confirm`); all
   11 confirmations use it. File pickers stay native.
 - Text in photos reads up to 4 photos at once (half the cores, max 4), batches of 16.
@@ -112,7 +112,7 @@ free trial and **M6 subscription/payments** last. See docs/PLAN.md.
 | F1–F4 | Done, merged to `main` (not pushed) |
 | F5–F6 | On `main`, pushed; the user still tests them |
 | M7 AI pack (search, people, upscale, OCR; opt-in) | On `main`, pushed; the user still tests it |
-| UI refresh + fixes (`ui-themes`) | Pushed (`1e5d243`), more uncommitted; not merged |
+| UI refresh + fixes (`ui-themes`) | Pushed (`1e5d243`, `672da5c`); not merged |
 | M6 free trial + subscription | Last, after detailed testing |
 | Beta prep; M5 parts 3–4 (macOS/Linux, signing) | Later, when the user says |
 
