@@ -20,6 +20,7 @@
     },
     "dialog:allow-confirm",
     "dialog:allow-ask",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "core:window:allow-set-theme"
   ]
 }

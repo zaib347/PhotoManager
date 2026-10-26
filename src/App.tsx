@@ -37,6 +37,8 @@ import { AiPage } from "./ai/AiPage";
 import { SearchBox } from "./ai/SearchBox";
 import { PeoplePage } from "./people/PeoplePage";
 import { TripsPage } from "./trips/TripsPage";
+import { Icon } from "./ui/Icon";
+import { ThemePicker } from "./ui/ThemePicker";
 import "./App.css";
 
 /** How often the timeline refreshes while a scan is adding photos. */
@@ -312,8 +314,13 @@ export default function App() {
     <CollectionsContext.Provider value={collections}>
     <div className="app">
       <header className="toolbar">
-        <strong>PhotoManager</strong>
-        <span className="muted">
+        <span className="brand">
+          <span className="brand-mark" aria-hidden="true">
+            <Icon name="photos" size={15} />
+          </span>
+          PhotoManager
+        </span>
+        <span className="muted small">
           {stats ? `${stats.assets.toLocaleString()} items · ${stats.days.toLocaleString()} days` : "Loading…"}
         </span>
         <div className="spacer" />
@@ -345,6 +352,7 @@ export default function App() {
             </button>
           </span>
         )}
+        <ThemePicker />
         <details className="dev-menu">
           <summary className="muted">Test data</summary>
           <div className="dev-menu-items">

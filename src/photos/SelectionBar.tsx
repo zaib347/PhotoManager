@@ -4,6 +4,7 @@ import { AlbumPicker } from "../collections/AlbumPicker";
 import { useCollections } from "../collections/context";
 import { TagInput } from "../collections/TagInput";
 import { copiedEdit } from "../editor/copied";
+import { Icon } from "../ui/Icon";
 import { Popover } from "../ui/Popover";
 import { DateFixer } from "./DateFixer";
 import { EventMaker } from "./EventMaker";
@@ -55,169 +56,223 @@ type Props = {
   onPersonCover?: () => void;
 };
 
+/**
+ * Actions for the selected photos, in two rows: the selection and quick marks
+ * (favorite, rating, hide, remove) on top, grouped tools below.
+ */
 export function SelectionBar(props: Props) {
   const { count, view, onClear, onFavorite, onRate, onHide } = props;
   const { albums, tags } = useCollections();
   const copied = useSyncExternalStore(copiedEdit.subscribe, copiedEdit.get);
+  const hidden = view === "hidden";
+  const contextual =
+    !!props.onRemoveFromAlbum ||
+    !!props.onNotThisPerson ||
+    (count === 1 && (!!props.onSetCover || !!props.onPersonCover));
   return (
     <div className="selection-bar" role="toolbar" aria-label="Selection actions">
-      <button className="ghost" onClick={onClear} title="Clear selection (Esc)">
-        ✕
-      </button>
-      <strong>{count.toLocaleString()} selected</strong>
-      <button className="link small" onClick={props.onSelectAll} title="Select all (Ctrl+A)">
-        Select all
-      </button>
-      <div className="spacer" />
-      <button className="ghost" onClick={() => props.onRotate(-1)} title="Rotate left">
-        ⟲
-      </button>
-      <button className="ghost" onClick={() => props.onRotate(1)} title="Rotate right">
-        ⟳
-      </button>
-      {copied && (
-        <Popover label="Paste edit" align="right">
-          {(close) => (
-            <PastePanel
-              count={count}
-              copied={copied}
-              onPaste={(what) => {
-                props.onPasteEdit(what);
-                close();
-              }}
-            />
-          )}
-        </Popover>
-      )}
-      <Popover label="Fix date" align="right">
-        {(close) => (
-          <DateFixer
-            ids={props.ids}
-            onApply={(delta) => {
-              props.onShiftDates(delta);
-              close();
-            }}
-            onRestore={() => {
-              props.onRestoreDates();
-              close();
-            }}
-          />
-        )}
-      </Popover>
-      {count >= 2 && (
-        <button onClick={props.onSlideshow} title="Play as a slideshow">
-          ▶ Slideshow
+      <div className="selection-row">
+        <button className="icon-button" onClick={onClear} title="Clear selection (Esc)">
+          <Icon name="close" />
         </button>
-      )}
-      {count >= 2 && count <= 9 && (
-        <button onClick={props.onCollage} title="Arrange these photos on one page">
-          Collage
+        <strong className="selection-count">{count.toLocaleString()} selected</strong>
+        <button className="link small" onClick={props.onSelectAll} title="Select all (Ctrl+A)">
+          Select all
         </button>
-      )}
-      <Popover label="Location" align="right">
-        {(close) => (
-          <LocationPanel
-            count={count}
-            onSet={(lat, lon) => {
-              props.onSetLocation(lat, lon);
-              close();
-            }}
-            onPickOnMap={() => {
-              props.onPlaceOnMap();
-              close();
-            }}
-          />
-        )}
-      </Popover>
-      <Popover label="Add to album">
-        {(close) => (
-          <AlbumPicker
-            albums={albums}
-            onPick={(id) => {
-              props.onAddToAlbum(id);
-              close();
-            }}
-            onCreate={(name) => {
-              props.onCreateAlbum(name);
-              close();
-            }}
-          />
-        )}
-      </Popover>
-      <Popover label="Event">
-        {(close) => (
-          <EventMaker
-            count={count}
-            onCreate={(name) => {
-              props.onCreateEvent(name);
-              close();
-            }}
-            onSplit={
-              props.onSplitEvent && count === 1
-                ? () => {
-                    props.onSplitEvent!();
-                    close();
-                  }
-                : undefined
-            }
-          />
-        )}
-      </Popover>
-      <Popover label="Rename" align="right">
-        {(close) => (
-          <RenamePanel
-            ids={props.ids}
-            onRename={(pattern) => {
-              props.onRename(pattern);
-              close();
-            }}
-          />
-        )}
-      </Popover>
-      <Popover label="Export" align="right">
-        {(close) => (
-          <ExportPanel
-            count={count}
-            previewId={props.ids[0]}
-            onExport={(options) => {
-              props.onExport(options);
-              close();
-            }}
-          />
-        )}
-      </Popover>
-      <Popover label="Tag">
-        {(close) => (
-          <TagInput
-            autoFocus
-            tags={tags}
-            onAdd={(name) => {
-              props.onTag(name);
-              close();
-            }}
-          />
-        )}
-      </Popover>
-      {props.onRemoveFromAlbum && <button onClick={props.onRemoveFromAlbum}>Remove from album</button>}
-      {props.onSetCover && count === 1 && <button onClick={props.onSetCover}>Set as cover</button>}
-      {props.onNotThisPerson && <button onClick={props.onNotThisPerson}>Not this person</button>}
-      {props.onPersonCover && count === 1 && <button onClick={props.onPersonCover}>Use as their picture</button>}
-      <button onClick={() => onFavorite(true)}>♥ Favorite</button>
-      <button onClick={() => onFavorite(false)}>♡ Unfavorite</button>
-      <div className="stars" role="group" aria-label="Rate selection">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} className="ghost star" onClick={() => onRate(n)} title={`Rate ${n}`}>
-            ★
+        <div className="spacer" />
+        <button className="icon-button" onClick={() => onFavorite(true)} title="Favorite">
+          <Icon name="heart" filled className="fav-icon" />
+        </button>
+        <button className="icon-button" onClick={() => onFavorite(false)} title="Unfavorite">
+          <Icon name="heart" />
+        </button>
+        <div className="stars" role="group" aria-label="Rate selection">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button key={n} className="icon-button star" onClick={() => onRate(n)} title={`Rate ${n}`}>
+              <Icon name="star" filled />
+            </button>
+          ))}
+          <button className="icon-button" onClick={() => onRate(null)} title="Clear rating">
+            <Icon name="close" size={14} />
           </button>
-        ))}
-        <button className="ghost" onClick={() => onRate(null)} title="Clear rating">
-          ⌫
+        </div>
+        <span className="divider" />
+        <button className="tool" onClick={() => onHide(!hidden)}>
+          <Icon name={hidden ? "eye" : "eyeOff"} />
+          {hidden ? "Unhide" : "Hide"}
+        </button>
+        <button className="tool danger" onClick={props.onRemove} title="Move to the trash folder (Delete)">
+          <Icon name="trash" />
+          Remove
         </button>
       </div>
-      <button onClick={() => onHide(view !== "hidden")}>{view === "hidden" ? "Unhide" : "Hide"}</button>
-      <button onClick={props.onRemove} title="Move to the trash folder (Delete)">
-        Remove
-      </button>
+
+      <div className="selection-row tools">
+        <div className="tool-group" role="group" aria-label="Edit">
+          <button className="icon-button" onClick={() => props.onRotate(-1)} title="Rotate left">
+            <Icon name="rotateLeft" />
+          </button>
+          <button className="icon-button" onClick={() => props.onRotate(1)} title="Rotate right">
+            <Icon name="rotateRight" />
+          </button>
+          {copied && (
+            <Popover label={<><Icon name="paste" />Paste edit</>} buttonClass="tool">
+              {(close) => (
+                <PastePanel
+                  count={count}
+                  copied={copied}
+                  onPaste={(what) => {
+                    props.onPasteEdit(what);
+                    close();
+                  }}
+                />
+              )}
+            </Popover>
+          )}
+          <Popover label={<><Icon name="clock" />Fix date</>} buttonClass="tool">
+            {(close) => (
+              <DateFixer
+                ids={props.ids}
+                onApply={(delta) => {
+                  props.onShiftDates(delta);
+                  close();
+                }}
+                onRestore={() => {
+                  props.onRestoreDates();
+                  close();
+                }}
+              />
+            )}
+          </Popover>
+          <Popover label={<><Icon name="pin" />Location</>} buttonClass="tool">
+            {(close) => (
+              <LocationPanel
+                count={count}
+                onSet={(lat, lon) => {
+                  props.onSetLocation(lat, lon);
+                  close();
+                }}
+                onPickOnMap={() => {
+                  props.onPlaceOnMap();
+                  close();
+                }}
+              />
+            )}
+          </Popover>
+        </div>
+
+        <div className="tool-group" role="group" aria-label="Organize">
+          <Popover label={<><Icon name="album" />Add to album</>} buttonClass="tool">
+            {(close) => (
+              <AlbumPicker
+                albums={albums}
+                onPick={(id) => {
+                  props.onAddToAlbum(id);
+                  close();
+                }}
+                onCreate={(name) => {
+                  props.onCreateAlbum(name);
+                  close();
+                }}
+              />
+            )}
+          </Popover>
+          <Popover label={<><Icon name="calendar" />Event</>} buttonClass="tool">
+            {(close) => (
+              <EventMaker
+                count={count}
+                onCreate={(name) => {
+                  props.onCreateEvent(name);
+                  close();
+                }}
+                onSplit={
+                  props.onSplitEvent && count === 1
+                    ? () => {
+                        props.onSplitEvent!();
+                        close();
+                      }
+                    : undefined
+                }
+              />
+            )}
+          </Popover>
+          <Popover label={<><Icon name="tag" />Tag</>} buttonClass="tool">
+            {(close) => (
+              <TagInput
+                autoFocus
+                tags={tags}
+                onAdd={(name) => {
+                  props.onTag(name);
+                  close();
+                }}
+              />
+            )}
+          </Popover>
+          <Popover label={<><Icon name="rename" />Rename</>} buttonClass="tool">
+            {(close) => (
+              <RenamePanel
+                ids={props.ids}
+                onRename={(pattern) => {
+                  props.onRename(pattern);
+                  close();
+                }}
+              />
+            )}
+          </Popover>
+        </div>
+
+        <div className="tool-group" role="group" aria-label="Create and share">
+          {count >= 2 && (
+            <button className="tool" onClick={props.onSlideshow} title="Play as a slideshow">
+              <Icon name="play" />
+              Slideshow
+            </button>
+          )}
+          {count >= 2 && count <= 9 && (
+            <button className="tool" onClick={props.onCollage} title="Arrange these photos on one page">
+              <Icon name="collage" />
+              Collage
+            </button>
+          )}
+          <Popover label={<><Icon name="export" />Export</>} buttonClass="tool" align="right">
+            {(close) => (
+              <ExportPanel
+                count={count}
+                previewId={props.ids[0]}
+                onExport={(options) => {
+                  props.onExport(options);
+                  close();
+                }}
+              />
+            )}
+          </Popover>
+        </div>
+
+        {contextual && (
+          <div className="tool-group" role="group" aria-label="This collection">
+            {props.onRemoveFromAlbum && (
+              <button className="tool" onClick={props.onRemoveFromAlbum}>
+                Remove from album
+              </button>
+            )}
+            {props.onSetCover && count === 1 && (
+              <button className="tool" onClick={props.onSetCover}>
+                Set as cover
+              </button>
+            )}
+            {props.onNotThisPerson && (
+              <button className="tool" onClick={props.onNotThisPerson}>
+                Not this person
+              </button>
+            )}
+            {props.onPersonCover && count === 1 && (
+              <button className="tool" onClick={props.onPersonCover}>
+                Use as their picture
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
