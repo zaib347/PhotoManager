@@ -320,6 +320,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            let started = std::time::Instant::now();
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             diag::init(&dir);
@@ -364,7 +365,15 @@ pub fn run() {
             ai_commands::run_indexer(app.handle(), &state);
             poll_volumes(app.handle().clone(), state.clone());
             app.manage(state);
+            diag::log(format!("ready in {} ms", started.elapsed().as_millis()));
             Ok(())
+        })
+        .on_page_load(|webview, payload| {
+            diag::log(format!("page load {:?}", payload.event()));
+            // The page shows its hidden window once the splash paints; this covers a page that couldn't.
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                let _ = webview.window().show();
+            }
         })
         .register_asynchronous_uri_scheme_protocol("thumb", protocol::handle_thumb)
         .register_asynchronous_uri_scheme_protocol("media", protocol::handle_media)
@@ -436,6 +445,7 @@ pub fn run() {
             map_commands::map_clusters,
             map_commands::search_cities,
             map_commands::set_location,
+            map_commands::clear_location,
             xmp_commands::set_xmp_settings,
             xmp_commands::set_description,
             cleanup_commands::duplicate_overview,

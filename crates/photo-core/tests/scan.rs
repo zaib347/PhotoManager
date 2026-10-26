@@ -619,7 +619,13 @@ fn duplicate_copies_are_removed_safely_and_come_back_on_undo() {
     let group = &duplicates::groups(&f.library.read(), 0, 10).unwrap()[0];
     assert!(group.copies[0].path.ends_with("beach.jpg") && group.copies[0].path.contains("2019"));
 
-    let extras = duplicates::extras(&f.library.read(), None, &Default::default()).unwrap();
+    let extras = duplicates::extras(
+        &f.library.read(),
+        None,
+        &Default::default(),
+        Default::default(),
+    )
+    .unwrap();
     assert_eq!(extras.len(), 2);
     let report = fileops::trash(&f.library, &extras, "duplicates", true).unwrap();
     assert_eq!((report.done, report.failed), (2, 0), "{:?}", report.errors);
@@ -844,7 +850,13 @@ fn long_and_unicode_paths_work_end_to_end() {
     );
 
     // Remove the extra copy, then undo.
-    let extras = duplicates::extras(&f.library.read(), None, &Default::default()).unwrap();
+    let extras = duplicates::extras(
+        &f.library.read(),
+        None,
+        &Default::default(),
+        Default::default(),
+    )
+    .unwrap();
     assert_eq!(extras.len(), 1);
     let removed = fileops::trash(&f.library, &extras, "duplicates", true).unwrap();
     assert_eq!(

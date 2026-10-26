@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use rusqlite::{Connection, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::Result;
 use crate::assets::{FileInfo, files_of};
@@ -129,13 +129,50 @@ fn keep_rank(f: &FileInfo) -> (bool, usize, i64, usize, i64) {
     (!f.online, hints, f.modified_at, f.path.len(), f.id)
 }
 
+/// Which copy to keep where the user hasn't picked one.
+#[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Prefer {
+    /// The one that looks like the original (`keep_rank`).
+    #[default]
+    Suggested,
+    /// The one with the oldest modified date.
+    Oldest,
+    /// The one with the newest modified date.
+    Newest,
+}
+
+/// The copy `prefer` keeps, from copies sorted by `keep_rank`: reachable ones first,
+/// ties going to the suggested one.
+fn preferred(copies: &[FileInfo], prefer: Prefer) -> i64 {
+    let online = copies.iter().filter(|f| f.online);
+    let pool: Vec<&FileInfo> = if online.clone().next().is_some() {
+        online.collect()
+    } else {
+        copies.iter().collect()
+    };
+    let pick = match prefer {
+        Prefer::Suggested => pool.first().copied(),
+        Prefer::Oldest => pool
+            .iter()
+            .copied()
+            .reduce(|a, b| if b.modified_at < a.modified_at { b } else { a }),
+        Prefer::Newest => pool
+            .iter()
+            .copied()
+            .reduce(|a, b| if b.modified_at > a.modified_at { b } else { a }),
+    };
+    pick.map_or(copies[0].id, |f| f.id)
+}
+
 /// The copies to remove so each duplicated photo keeps one: the one in `keep`
-/// (asset → file id) where given, else the suggested one. With `only`, just those
-/// photos. Copies on drives that aren't connected are left out.
+/// (asset → file id) where given, else the one `prefer` picks. With `only`, just
+/// those photos. Copies on drives that aren't connected are left out.
 pub fn extras(
     conn: &Connection,
     only: Option<&[i64]>,
     keep: &HashMap<i64, i64>,
+    prefer: Prefer,
 ) -> Result<Vec<i64>> {
     let assets: Vec<i64> = match only {
         Some(ids) => ids.to_vec(),
@@ -159,7 +196,7 @@ pub fn extras(
             .get(&asset)
             .copied()
             .filter(|id| copies.iter().any(|f| f.id == *id))
-            .unwrap_or(copies[0].id);
+            .unwrap_or_else(|| preferred(&copies, prefer));
         out.extend(
             copies
                 .iter()
@@ -211,5 +248,20 @@ mod tests {
         copies[0].online = false;
         copies.sort_by_key(keep_rank);
         assert_ne!(copies[0].id, 3);
+    }
+
+    #[test]
+    fn keeps_the_oldest_or_newest_reachable_copy() {
+        let mut copies = [
+            file(1, "D:/Photos/IMG_1.jpg", 100),
+            file(2, "D:/Backup/IMG_1.jpg", 50),
+            file(3, "D:/Downloads/IMG_1.jpg", 300),
+            file(4, "E:/Old/IMG_1.jpg", 10),
+        ];
+        copies[3].online = false;
+        copies.sort_by_key(keep_rank);
+        assert_eq!(preferred(&copies, Prefer::Suggested), 1);
+        assert_eq!(preferred(&copies, Prefer::Oldest), 2);
+        assert_eq!(preferred(&copies, Prefer::Newest), 3);
     }
 }

@@ -34,6 +34,7 @@ type Props = {
   onSetLocation: (lat: number, lon: number) => void;
   /** Opens the map to place the items with a click. */
   onPlaceOnMap: () => void;
+  onClearLocation: () => void;
   /** Opens the collage editor (2–9 photos). */
   onCollage: () => void;
   /** Plays the selection as a slideshow. */
@@ -154,6 +155,10 @@ export function SelectionBar(props: Props) {
                 }}
                 onPickOnMap={() => {
                   props.onPlaceOnMap();
+                  close();
+                }}
+                onClear={() => {
+                  props.onClearLocation();
                   close();
                 }}
               />

@@ -58,17 +58,25 @@ const ABOUT: Record<AiPack, About> = {
 
 function progressLine(about: About, p: IndexCount | null, indexing: boolean) {
   if (!p || !about.indexing) return null;
-  if (p.indexed >= p.total) return `All ${p.total.toLocaleString()} photos done`;
+  if (p.indexed >= p.total)
+    return `All ${p.total.toLocaleString()} photos done`;
   return `${about.indexing} ${p.indexed.toLocaleString()} of ${p.total.toLocaleString()} photos${
     indexing ? "…" : " (continues when scans finish and on mains power)"
   }`;
 }
 
 /** Settings for the optional AI features: what each does, its size, install and remove. */
-export function AiPage({ status, installing, onChanged, onNotice, onError }: Props) {
+export function AiPage({
+  status,
+  installing,
+  onChanged,
+  onNotice,
+  onError,
+}: Props) {
   if (!status) return null;
 
-  const install = (pack: AiPack) => api.aiInstall(pack).then(onChanged).catch(onError);
+  const install = (pack: AiPack) =>
+    api.aiInstall(pack).then(onChanged).catch(onError);
 
   const remove = async (pack: AiPack, downloaded: boolean) => {
     const about = ABOUT[pack];
@@ -79,12 +87,20 @@ export function AiPage({ status, installing, onChanged, onNotice, onError }: Pro
       : `${about.made ?? "What it made"} is deleted.`.replace(/^t/, "T");
     const ok = await confirm(
       `${downloaded ? "Remove" : "Turn off"} ${about.name}? ${deleted} Your photos aren't touched, and you can ${downloaded ? "install" : "turn"} it again later${downloaded ? "" : " on"}.`,
-      { title: "Remove AI feature", kind: "warning", okLabel: downloaded ? "Remove" : "Turn off" },
+      {
+        title: "Remove AI feature",
+        kind: "warning",
+        okLabel: downloaded ? "Remove" : "Turn off",
+      },
     );
     if (!ok) return;
     try {
       const now = await api.aiRemove(pack);
-      onNotice(now ? `${about.name} removed.` : `${about.name} removed; some files are deleted when the app restarts.`);
+      onNotice(
+        now
+          ? `${about.name} removed.`
+          : `${about.name} removed; some files are deleted when the app restarts.`,
+      );
       onChanged();
     } catch (e) {
       onError(e);
@@ -96,66 +112,87 @@ export function AiPage({ status, installing, onChanged, onNotice, onError }: Pro
       <section className="cleanup-summary">
         <h2>AI features</h2>
         <p className="muted small">
-          Optional, and off until you install them. Each runs on this computer only: your photos never leave it. Models
-          are downloaded once (from Hugging Face, Microsoft and Qualcomm), checked before use, and can be removed at any
-          time.
+          Optional, and off until you install them. Each runs on this computer
+          only: your photos never leave it. Models are downloaded once (from
+          Hugging Face, Microsoft and Qualcomm), checked before use, and can be
+          removed at any time.
         </p>
       </section>
-      {status.features.map((f) => {
-        const about = ABOUT[f.id];
-        const mine = installing?.pack === f.id ? installing : null;
-        const busy = status.installing !== null;
-        const progress = f.id === "upscale" ? null : status.progress[f.id];
-        const line = progressLine(about, progress, status.indexing);
-        return (
-          <section key={f.id} className="ai-feature">
-            <div className="ai-feature-head">
-              <h3>{about.name}</h3>
-              {f.installed && <span className="chip">{f.downloadBytes === 0 ? "On" : "Installed"}</span>}
-            </div>
-            <p>{about.what}</p>
-            <p className="muted small">{about.detail}</p>
-            {f.id === "text" && status.textLanguages.length > 0 && (
-              <p className="muted small">Reads: {status.textLanguages.join(", ")}.</p>
-            )}
-            {mine ? (
-              <div className="ai-progress">
-                <div className="progress">
-                  <div className="progress-bar" style={{ width: `${(mine.done / Math.max(1, mine.total)) * 100}%` }} />
+      <div className="ai-features">
+        {status.features.map((f) => {
+          const about = ABOUT[f.id];
+          const mine = installing?.pack === f.id ? installing : null;
+          const busy = status.installing !== null;
+          const progress = f.id === "upscale" ? null : status.progress[f.id];
+          const line = progressLine(about, progress, status.indexing);
+          return (
+            <section key={f.id} className="ai-feature">
+              <div className="ai-feature-head">
+                <h3>{about.name}</h3>
+                {f.installed && (
+                  <span className="chip">
+                    {f.downloadBytes === 0 ? "On" : "Installed"}
+                  </span>
+                )}
+              </div>
+              <p>{about.what}</p>
+              <p className="muted small">{about.detail}</p>
+              {f.id === "text" && status.textLanguages.length > 0 && (
+                <p className="muted small">
+                  Reads: {status.textLanguages.join(", ")}.
+                </p>
+              )}
+              {mine ? (
+                <div className="ai-progress">
+                  <div className="progress">
+                    <div
+                      className="progress-bar"
+                      style={{
+                        width: `${(mine.done / Math.max(1, mine.total)) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="muted small">
+                    Downloading {formatBytes(mine.done)} of{" "}
+                    {formatBytes(mine.total)}
+                  </span>
+                  <button onClick={() => api.aiCancelInstall().catch(onError)}>
+                    Stop
+                  </button>
                 </div>
-                <span className="muted small">
-                  Downloading {formatBytes(mine.done)} of {formatBytes(mine.total)}
-                </span>
-                <button onClick={() => api.aiCancelInstall().catch(onError)}>Stop</button>
-              </div>
-            ) : f.installed ? (
-              <div className="ai-actions">
-                {line && <span className="muted small">{line}</span>}
-                <div className="spacer" />
-                <button onClick={() => remove(f.id, f.downloadBytes > 0)}>
-                  {f.downloadBytes === 0 ? "Turn off" : "Remove"}
-                </button>
-              </div>
-            ) : f.unavailable ? (
-              <div className="ai-actions">
-                <span className="warn small">{f.unavailable}</span>
-              </div>
-            ) : (
-              <div className="ai-actions">
-                <span className="muted small">
-                  {f.downloadBytes === 0
-                    ? "Nothing to download"
-                    : `Download ${formatBytes(f.downloadBytes)} · ${formatBytes(f.diskBytes)} on disk`}
-                </span>
-                <div className="spacer" />
-                <button className="primary" onClick={() => install(f.id)} disabled={busy}>
-                  {f.downloadBytes === 0 ? "Turn on" : "Install"}
-                </button>
-              </div>
-            )}
-          </section>
-        );
-      })}
+              ) : f.installed ? (
+                <div className="ai-actions">
+                  {line && <span className="muted small">{line}</span>}
+                  <div className="spacer" />
+                  <button onClick={() => remove(f.id, f.downloadBytes > 0)}>
+                    {f.downloadBytes === 0 ? "Turn off" : "Remove"}
+                  </button>
+                </div>
+              ) : f.unavailable ? (
+                <div className="ai-actions">
+                  <span className="warn small">{f.unavailable}</span>
+                </div>
+              ) : (
+                <div className="ai-actions">
+                  <span className="muted small">
+                    {f.downloadBytes === 0
+                      ? "Nothing to download"
+                      : `Download ${formatBytes(f.downloadBytes)} · ${formatBytes(f.diskBytes)} on disk`}
+                  </span>
+                  <div className="spacer" />
+                  <button
+                    className="primary"
+                    onClick={() => install(f.id)}
+                    disabled={busy}
+                  >
+                    {f.downloadBytes === 0 ? "Turn on" : "Install"}
+                  </button>
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }

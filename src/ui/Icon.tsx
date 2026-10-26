@@ -51,6 +51,12 @@ const PATHS = {
       <path d="M9 3v15M15 6v15" />
     </>
   ),
+  globe: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20Z" />
+    </>
+  ),
   eyeOff: (
     <>
       <path d="M9.9 9.9a3 3 0 1 0 4.2 4.2" />

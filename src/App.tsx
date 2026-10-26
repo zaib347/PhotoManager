@@ -37,7 +37,6 @@ import { AiPage } from "./ai/AiPage";
 import { SearchBox } from "./ai/SearchBox";
 import { PeoplePage } from "./people/PeoplePage";
 import { TripsPage } from "./trips/TripsPage";
-import { Icon } from "./ui/Icon";
 import { ThemePicker } from "./ui/ThemePicker";
 import "./App.css";
 
@@ -112,6 +111,11 @@ export default function App() {
     setStats(s);
     if (keyRef.current === currentKey) setLoaded({ key: currentKey, layout });
   }, []);
+
+  // The splash in index.html covers startup until the library's first numbers arrive.
+  useEffect(() => {
+    if (stats) window.hideSplash?.();
+  }, [stats]);
 
   const reloadCollections = useCallback(async () => {
     const [a, t] = await Promise.all([api.listAlbums(), api.listTags()]);
@@ -314,12 +318,6 @@ export default function App() {
     <CollectionsContext.Provider value={collections}>
     <div className="app">
       <header className="toolbar">
-        <span className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <Icon name="photos" size={15} />
-          </span>
-          PhotoManager
-        </span>
         <span className="muted small">
           {stats ? `${stats.assets.toLocaleString()} items · ${stats.days.toLocaleString()} days` : "Loading…"}
         </span>

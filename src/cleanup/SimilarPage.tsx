@@ -161,7 +161,7 @@ export function SimilarPage({ onNotice, onError }: Props) {
                       />
                       {keep ? "Keep" : "Remove"}
                       {m.best && (
-                        <span className="badge" title="Suggested to keep">
+                        <span className="similar-best" title="Suggested to keep">
                           {WHY[m.why ?? "similar"]}
                         </span>
                       )}

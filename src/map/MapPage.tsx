@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Po
 import { api, thumbUrl, type Area, type CityInfo, type MapCluster, type MapSummary } from "../api";
 import { useCollections } from "../collections/context";
 import { theme } from "../theme";
+import { Icon } from "../ui/Icon";
 import {
   fromScreen,
   projectX,
@@ -240,6 +241,13 @@ export function MapPage({ placing, onPlace, onCancelPlacing, onError }: Props) {
               ⤢
             </button>
           )}
+          <button
+            onClick={() => view && setView(framing(null, view.width, view.height))}
+            title="Show the whole world"
+            aria-label="Show the whole world"
+          >
+            <Icon name="globe" size={15} />
+          </button>
         </div>
       </div>
 

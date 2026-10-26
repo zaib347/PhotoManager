@@ -186,6 +186,9 @@ export type TripSummary = {
   edited: boolean;
 };
 
+/** Which copy of a duplicate to keep where none was picked by hand. */
+export type KeepPreference = "suggested" | "oldest" | "newest";
+
 export type DuplicateOverview = { groups: number; extraFiles: number; extraBytes: number };
 
 /** A photo stored more than once; the suggested copy to keep is first. */
@@ -526,8 +529,9 @@ export const api = {
   duplicateGroups: (offset: number, limit: number) =>
     invoke<DuplicateGroup[]>("duplicate_groups", { offset, limit }),
   /** `keep`: asset id → file id to keep instead of the suggestion; `only`: just these photos. */
-  removeDuplicates: (keep: Record<number, number>, only?: number[]) =>
-    invoke<FileOpReport>("remove_duplicates", { keep, only: only ?? null }),
+  /** Removes extra copies, keeping the copy in `keep` (asset → file) or else the one `prefer` picks. */
+  removeDuplicates: (keep: Record<number, number>, prefer: KeepPreference, only?: number[]) =>
+    invoke<FileOpReport>("remove_duplicates", { keep, prefer, only: only ?? null }),
   similarOverview: () => invoke<SimilarOverview>("similar_overview"),
   similarGroups: (offset: number, limit: number) => invoke<SimilarGroup[]>("similar_groups", { offset, limit }),
   /** Moves every file of these photos to the trash folder (undoable). */
@@ -566,6 +570,8 @@ export const api = {
   searchCities: (query: string) => invoke<CityInfo[]>("search_cities", { query }),
   /** Places photos by hand; returns how many. */
   setLocation: (ids: number[], lat: number, lon: number) => invoke<number>("set_location", { ids, lat, lon }),
+  /** Takes photos off the map; returns how many had a location. */
+  clearLocation: (ids: number[]) => invoke<number>("clear_location", { ids }),
   aiStatus: () => invoke<AiStatus>("ai_status"),
   /** Downloads and installs an AI feature in the background; watch `events.aiInstall*`. */
   aiInstall: (pack: AiPack) => invoke<void>("ai_install", { pack }),

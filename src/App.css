@@ -363,26 +363,6 @@ button.tool.danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-}
-
-.brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  color: var(--accent-text);
-  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #000));
-}
-
 button:disabled {
   opacity: 0.5;
   cursor: default;
@@ -398,6 +378,8 @@ button:disabled {
 .content {
   flex: 1;
   min-height: 0;
+  /* Wide content scrolls inside its page instead of widening the whole area. */
+  min-width: 0;
 }
 
 .empty {
@@ -1711,18 +1693,30 @@ button.primary:disabled {
   margin: 4px 0 10px;
 }
 
+.dupe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 8px;
+}
+
+/* Each duplicated photo is a card: its thumbnail, then a row per copy. */
 .dupe-group {
   display: flex;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
+  gap: 14px;
+  margin: 12px 16px 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 
 .dupe-thumb {
-  width: 72px;
-  height: 72px;
+  width: 88px;
+  height: 88px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--placeholder);
   flex: none;
 }
@@ -1740,6 +1734,9 @@ button.primary:disabled {
 }
 
 .dupe-copies {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1749,6 +1746,16 @@ button.primary:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.dupe-copies li:hover {
+  background: var(--surface-2);
+}
+
+.dupe-copies li.kept {
+  background: var(--accent-soft);
 }
 
 .dupe-copies label {
@@ -1761,14 +1768,38 @@ button.primary:disabled {
   cursor: pointer;
 }
 
+.dupe-copies input {
+  margin: 0;
+}
+
+.dupe-name {
+  white-space: nowrap;
+}
+
+.dupe-copies li.kept .dupe-name {
+  font-weight: 600;
+}
+
+.dupe-keep-chip {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--accent-text);
+  background: var(--accent);
+}
+
 .dupe-copies .file-path {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.dupe-kept {
-  font-weight: 600;
+.dupe-date {
+  flex: none;
+  white-space: nowrap;
 }
 
 .cleanup-more {
@@ -1801,10 +1832,11 @@ button.primary:disabled {
   border-bottom: 1px solid var(--border);
 }
 
+/* Wraps rather than scrolls sideways, so every shot in a group is in view to compare and tick. */
 .similar-strip {
   display: flex;
-  gap: 10px;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  gap: 14px 10px;
   padding-top: 6px;
 }
 
@@ -1838,7 +1870,7 @@ button.primary:disabled {
   gap: 4px;
 }
 
-.badge {
+.similar-best {
   margin-left: auto;
   padding: 0 6px;
   border-radius: 8px;
@@ -1849,14 +1881,16 @@ button.primary:disabled {
 .organize-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-width: 640px;
+  gap: 18px;
+  max-width: 900px;
+  margin-top: 14px;
 }
 
-.organize-form > label {
+.organize-form > label:first-child {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
+  max-width: 420px;
 }
 
 .organize-form select {
@@ -1865,7 +1899,7 @@ button.primary:disabled {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 4px 6px;
+  padding: 6px 8px;
 }
 
 .organize-form fieldset {
@@ -1874,12 +1908,75 @@ button.primary:disabled {
   padding: 0;
 }
 
+.organize-form legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+/* Each layout is a card showing the folders it makes. */
+.organize-layouts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
 .organize-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.organize-layout:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+
+.organize-layout.chosen {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.organize-layout-name {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 2px 0;
+  font-weight: 600;
+}
+
+.organize-layout-name input {
+  margin: 0;
+}
+
+.organize-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.organize-tree span:last-child {
+  color: var(--text);
+}
+
+.organize-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   cursor: pointer;
+}
+
+.organize-option input {
+  margin: 3px 0 0;
+}
+
+.organize-option .small {
+  display: block;
+  margin-top: 2px;
 }
 
 .organize-sample {
@@ -2632,16 +2729,18 @@ button.primary:disabled {
   width: 260px;
 }
 
-.ai-page {
-  padding-bottom: 16px;
+/* Side by side when there's room, so wide windows aren't half empty. */
+.ai-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 16px;
+  padding: 16px;
 }
 
 .ai-feature {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-width: 720px;
-  margin: 16px 16px 0;
   padding: 14px 16px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -2659,6 +2758,13 @@ button.primary:disabled {
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+/* Install buttons line up along the bottom of each row of cards. */
+.ai-actions,
+.ai-progress {
+  margin-top: auto;
+  padding-top: 4px;
 }
 
 .ai-progress .progress {

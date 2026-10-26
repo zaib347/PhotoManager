@@ -21,6 +21,7 @@
     "dialog:allow-confirm",
     "dialog:allow-ask",
     "dialog:allow-save",
-    "core:window:allow-set-theme"
+    "core:window:allow-set-theme",
+    "core:window:allow-show"
   ]
 }

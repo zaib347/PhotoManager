@@ -100,3 +100,14 @@ pub async fn set_location(
     })
     .await
 }
+
+/// Takes photos off the map. Returns how many had a location.
+#[tauri::command]
+pub async fn clear_location(state: State<'_, Arc<AppState>>, ids: Vec<i64>) -> CmdResult<usize> {
+    blocking(&state, move |s| {
+        let n = map::clear_location(&s.library, &ids)?;
+        *s.map_points.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        Ok(n)
+    })
+    .await
+}
