@@ -2632,12 +2632,16 @@ button.primary:disabled {
   width: 260px;
 }
 
+.ai-page {
+  padding-bottom: 16px;
+}
+
 .ai-feature {
   display: flex;
   flex-direction: column;
   gap: 6px;
   max-width: 720px;
-  margin: 0 0 16px;
+  margin: 16px 16px 0;
   padding: 14px 16px;
   background: var(--surface);
   border: 1px solid var(--border);
