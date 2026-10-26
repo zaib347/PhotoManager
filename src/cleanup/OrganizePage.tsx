@@ -1,4 +1,4 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../ui/confirm";
 import { useEffect, useState } from "react";
 import { api, type OrganizeLayout, type OrganizePreview, type RootInfo } from "../api";
 import { fileName } from "../format";

@@ -1,9 +1,61 @@
 # Next session
 
-Where PhotoManager stands as of 2026-10-24 (night), and what to pick up next.
+Where PhotoManager stands as of 2026-10-26 (night), and what to pick up next.
 The full plan and checklists are in [docs/PLAN.md](docs/PLAN.md).
 
-## Start here
+## Start here (2026-10-27)
+
+**Tomorrow's plan (the user's words): test the AI features and fix the issues found.**
+Go through all four on the AI features page, with the user, on their real library
+(D:, ~5,300 photos):
+
+1. **Text in photos** (on now; 152 of 5,273 read so far, 80 with text). Check it reads on
+   battery now, that the count climbs, and how fast (it was ~35 photos/min reading one at
+   a time; now up to 4 at once, not yet timed). Then search words and check a photo's info
+   shows its text.
+2. **People** (installed 2026-10-26, 0 of 5,273 looked at: it was paused on battery).
+   Check faces are found, the People page fills, naming/merge/"Not this person" work.
+3. **Search by description** (not installed): install, let it index, try searches and the
+   smart albums in the sidebar.
+4. **Upscale** (not installed): install, Export → Enlarge 2×/4× on small photos.
+
+**Branch `ui-themes`** (pushed to origin, not merged to `main`; ask before merging).
+Committed and pushed in `1e5d243`:
+- Startup: window opens maximized, hidden until an animated splash (photo stack + tips,
+  in index.html) has painted, so no white screen; splash fades once library stats load.
+  `photomanager.log` records "ready in N ms" and page load times (setup ~100–200 ms).
+- Top bar: logo and title removed (the window title bar has them).
+- AI features page: cards in a responsive grid.
+- Similar photos: groups wrap instead of overflowing; `.content` has `min-width: 0`; the
+  keep badge is `.similar-best` (it clashed with the timeline's `.badge`).
+- Organize files: layout cards with a folder-tree preview.
+- Map: "Remove location" in the selection bar's Location menu (`clear_location`); a
+  globe button shows the whole world. (The user had placed 4 photos mid-Atlantic by
+  accident; remove them with Remove location.)
+- Duplicates: Keep Suggested / Oldest / Newest for all groups (`Prefer` in
+  `duplicates::extras`), per-group picks still win; Yes/No confirmations; card layout.
+
+**Not committed yet** (builds and compiles cleanly; commit to `ui-themes` first thing):
+- Themed confirm dialog `src/ui/confirm.tsx` (same call as the plugin's `confirm`); all
+  11 confirmations use it. File pickers stay native.
+- Text in photos reads up to 4 photos at once (half the cores, max 4), batches of 16.
+- **AI indexing no longer pauses on battery** (the user: "plugging in must never be a
+  requirement"). It still pauses during folder scans, and the page now says
+  "Paused while a folder is scanned" (`ai-index-paused` event, `AiStatus.paused`).
+  `photo_ai::on_battery` was removed; the unused `Win32_System_Power` feature is still in
+  crates/photo-ai/Cargo.toml (drop it with the next full rebuild).
+- AiPage.tsx and DuplicatesPage.tsx were put back to the project's ~120-column style
+  (there's no Prettier config; never run Prettier without `--print-width 120`).
+
+**Machine notes:**
+- 7.7 GB RAM, 8 cores: a full build with default parallelism crashes rustc
+  (STATUS_STACK_BUFFER_OVERRUN = out of memory). Build with `cargo build -j 3`. A full
+  rebuild takes ~19 min. The user hasn't decided on a `.cargo/config.toml` jobs limit.
+- Disk: D: was full (target/ was 34 GB); `cargo clean` was run 2026-10-26. C: has ~4 GB
+  free; a size check found `~/.cargo` is 1.9 GB but didn't finish. The user asked why
+  C: is full: finish that check (AppData\Local, Temp, npm cache, .rustup, Downloads).
+
+## Earlier (2026-10-24)
 
 **M7, the AI pack, is complete** (the user asked for all of it, then OCR, in one go):
 
@@ -60,12 +112,15 @@ free trial and **M6 subscription/payments** last. See docs/PLAN.md.
 | F1–F4 | Done, merged to `main` (not pushed) |
 | F5–F6 | On `main`, pushed; the user still tests them |
 | M7 AI pack (search, people, upscale, OCR; opt-in) | On `main`, pushed; the user still tests it |
+| UI refresh + fixes (`ui-themes`) | Pushed (`1e5d243`), more uncommitted; not merged |
 | M6 free trial + subscription | Last, after detailed testing |
 | Beta prep; M5 parts 3–4 (macOS/Linux, signing) | Later, when the user says |
 
 - **Testing:** the user's team has the installer
   (`target/release/bundle/nsis/PhotoManager_0.1.0_x64-setup.exe`, built locally with
   `npm run tauri build`, unsigned). Expect bug reports; fix those before new work.
+  `cargo clean` on 2026-10-26 deleted that local copy; rebuild it (with `-j 3` limits,
+  see Machine notes) before handing out a new one.
 
 ## How the M7 (AI pack) code works
 
@@ -245,3 +300,5 @@ Actions tab or a `v*` tag) makes unsigned installers. macOS/Linux entries are co
 - F1–F4: confirmed working by the user (2026-10-24), merged locally.
 - **F5–F6** (branches above): built, waiting for the user to test and say merge.
 - **M7** (`m7-ai`, `m7-people-upscale-text`): built, waiting for the user to test and say merge.
+- **`ui-themes`**: waiting for the user to say merge into `main`.
+- **Build parallelism**: whether to add `.cargo/config.toml` with a jobs limit.

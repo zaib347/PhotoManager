@@ -1,4 +1,4 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../ui/confirm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, NO_EDIT, type Recipe } from "../api";
 import { photoLooks } from "../looks";

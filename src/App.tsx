@@ -1,5 +1,5 @@
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "./ui/confirm";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
@@ -156,6 +156,7 @@ export default function App() {
       }),
       events.aiIndexProgress((p) => setAi((s) => (s ? { ...s, progress: p, indexing: true } : s))),
       events.aiIndexFinished(reloadAi),
+      events.aiIndexPaused((paused) => setAi((s) => (s ? { ...s, paused } : s))),
       events.aiPeopleChanged(() => setPeopleVersion((v) => v + 1)),
     ];
     return () => unlisten.forEach((p) => p.then((off) => off()));

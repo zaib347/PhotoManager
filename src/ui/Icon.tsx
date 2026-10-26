@@ -51,6 +51,18 @@ const PATHS = {
       <path d="M9 3v15M15 6v15" />
     </>
   ),
+  alert: (
+    <>
+      <path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z" />
+      <path d="M12 9v4M12 17h.01" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4M12 8h.01" />
+    </>
+  ),
   globe: (
     <>
       <circle cx="12" cy="12" r="10" />

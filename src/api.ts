@@ -67,11 +67,16 @@ export type AiFeature = {
 export type IndexCount = { indexed: number; total: number };
 /** Background indexing of each installed feature that needs it. */
 export type AiProgress = { search: IndexCount | null; people: IndexCount | null; text: IndexCount | null };
+/** Background indexing waits while folders are scanned. */
+export type AiPause = "scan";
+
 export type AiStatus = {
   features: AiFeature[];
   installing: AiPack | null;
   progress: AiProgress;
   indexing: boolean;
+  /** Why background indexing is waiting, if it is. */
+  paused: AiPause | null;
   /** Languages Windows can read text in. */
   textLanguages: string[];
 };
@@ -657,6 +662,8 @@ export const events = {
   aiIndexProgress: (cb: (p: AiProgress) => void): Promise<UnlistenFn> =>
     listen<AiProgress>("ai-index-progress", (e) => cb(e.payload)),
   aiIndexFinished: (cb: () => void): Promise<UnlistenFn> => listen("ai-index-finished", () => cb()),
+  aiIndexPaused: (cb: (reason: AiPause | null) => void): Promise<UnlistenFn> =>
+    listen<AiPause | null>("ai-index-paused", (e) => cb(e.payload)),
   /** Faces were found and grouped; the People page may have changed. */
   aiPeopleChanged: (cb: () => void): Promise<UnlistenFn> => listen("ai-people-changed", () => cb()),
   videoProgress: (cb: (p: { done: number; total: number }) => void): Promise<UnlistenFn> =>

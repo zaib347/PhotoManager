@@ -315,7 +315,7 @@ impl People {
     }
 
     /// Finds the faces in up to `limit` photos not looked at yet, in batches, and
-    /// groups them. `pause()` is checked between batches (scans, battery) and stops the
+    /// groups them. `pause()` is checked between batches (folder scans) and stops the
     /// pass when true, as does `cancel`. Calls `report` after each batch. Returns how
     /// many photos were looked at.
     #[allow(clippy::too_many_arguments)]

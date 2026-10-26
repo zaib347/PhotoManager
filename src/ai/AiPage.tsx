@@ -1,5 +1,5 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
-import { api, type AiPack, type AiStatus, type IndexCount } from "../api";
+import { confirm } from "../ui/confirm";
+import { api, type AiPack, type AiPause, type AiStatus, type IndexCount } from "../api";
 import { formatBytes } from "../format";
 
 type Props = {
@@ -26,7 +26,7 @@ const ABOUT: Record<AiPack, About> = {
     name: "Search by description",
     what: "Type what's in a photo (“beach at sunset”, “birthday cake”, “red car”) and find it, even without tags. Also adds ready-made searches like Food, Pets and Documents to the sidebar.",
     detail:
-      "Uses OpenAI's CLIP model (MIT license). After installing, your photos are indexed in the background from their thumbnails; it pauses while folders are scanned and while the computer runs on battery.",
+      "Uses OpenAI's CLIP model (MIT license). After installing, your photos are indexed in the background from their thumbnails; it pauses while folders are scanned.",
     made: "the search index",
     indexing: "Indexed",
   },
@@ -34,7 +34,7 @@ const ABOUT: Record<AiPack, About> = {
     name: "People",
     what: "Finds the faces in your photos and groups each person's photos together. Name someone once to find all their photos; fix mistakes with “Not this person”, and merge a person found twice.",
     detail:
-      "Uses OpenCV's YuNet (finding faces, MIT license) and SFace (telling faces apart, Apache 2.0). Faces are personal data: they stay in your library on this computer, are never uploaded, and are deleted completely when you remove this feature. Photos are looked at in the background, pausing for scans and on battery.",
+      "Uses OpenCV's YuNet (finding faces, MIT license) and SFace (telling faces apart, Apache 2.0). Faces are personal data: they stay in your library on this computer, are never uploaded, and are deleted completely when you remove this feature. Photos are looked at in the background, pausing while folders are scanned.",
     made: "every face found and every person, with their names",
     indexing: "Looked for faces in",
   },
@@ -50,33 +50,29 @@ const ABOUT: Record<AiPack, About> = {
     name: "Text in photos",
     what: "Finds screenshots, receipts, documents and signs by the words in them (“wifi password”, “invoice 4521”) from the same search box, and shows a photo's text in its info so you can copy it.",
     detail:
-      "Uses the text recognition built into Windows, so there's nothing to download. Photos are read in the background, pausing for scans and on battery.",
+      "Uses the text recognition built into Windows, so there's nothing to download. Photos are read in the background, pausing while folders are scanned.",
     made: "the text read from your photos",
     indexing: "Read text in",
   },
 };
 
-function progressLine(about: About, p: IndexCount | null, indexing: boolean) {
+const PAUSED: Record<AiPause, string> = {
+  scan: "Paused while a folder is scanned",
+};
+
+function progressLine(about: About, p: IndexCount | null, indexing: boolean, paused: AiPause | null) {
   if (!p || !about.indexing) return null;
-  if (p.indexed >= p.total)
-    return `All ${p.total.toLocaleString()} photos done`;
-  return `${about.indexing} ${p.indexed.toLocaleString()} of ${p.total.toLocaleString()} photos${
-    indexing ? "…" : " (continues when scans finish and on mains power)"
-  }`;
+  if (p.indexed >= p.total) return `All ${p.total.toLocaleString()} photos done`;
+  const count = `${about.indexing} ${p.indexed.toLocaleString()} of ${p.total.toLocaleString()} photos`;
+  if (paused) return `${count}. ${PAUSED[paused]}.`;
+  return indexing ? `${count}…` : `${count} (continues when scans finish)`;
 }
 
 /** Settings for the optional AI features: what each does, its size, install and remove. */
-export function AiPage({
-  status,
-  installing,
-  onChanged,
-  onNotice,
-  onError,
-}: Props) {
+export function AiPage({ status, installing, onChanged, onNotice, onError }: Props) {
   if (!status) return null;
 
-  const install = (pack: AiPack) =>
-    api.aiInstall(pack).then(onChanged).catch(onError);
+  const install = (pack: AiPack) => api.aiInstall(pack).then(onChanged).catch(onError);
 
   const remove = async (pack: AiPack, downloaded: boolean) => {
     const about = ABOUT[pack];
@@ -87,20 +83,12 @@ export function AiPage({
       : `${about.made ?? "What it made"} is deleted.`.replace(/^t/, "T");
     const ok = await confirm(
       `${downloaded ? "Remove" : "Turn off"} ${about.name}? ${deleted} Your photos aren't touched, and you can ${downloaded ? "install" : "turn"} it again later${downloaded ? "" : " on"}.`,
-      {
-        title: "Remove AI feature",
-        kind: "warning",
-        okLabel: downloaded ? "Remove" : "Turn off",
-      },
+      { title: "Remove AI feature", kind: "warning", okLabel: downloaded ? "Remove" : "Turn off" },
     );
     if (!ok) return;
     try {
       const now = await api.aiRemove(pack);
-      onNotice(
-        now
-          ? `${about.name} removed.`
-          : `${about.name} removed; some files are deleted when the app restarts.`,
-      );
+      onNotice(now ? `${about.name} removed.` : `${about.name} removed; some files are deleted when the app restarts.`);
       onChanged();
     } catch (e) {
       onError(e);
@@ -112,10 +100,9 @@ export function AiPage({
       <section className="cleanup-summary">
         <h2>AI features</h2>
         <p className="muted small">
-          Optional, and off until you install them. Each runs on this computer
-          only: your photos never leave it. Models are downloaded once (from
-          Hugging Face, Microsoft and Qualcomm), checked before use, and can be
-          removed at any time.
+          Optional, and off until you install them. Each runs on this computer only: your photos never leave it. Models
+          are downloaded once (from Hugging Face, Microsoft and Qualcomm), checked before use, and can be removed at any
+          time.
         </p>
       </section>
       <div className="ai-features">
@@ -124,23 +111,17 @@ export function AiPage({
           const mine = installing?.pack === f.id ? installing : null;
           const busy = status.installing !== null;
           const progress = f.id === "upscale" ? null : status.progress[f.id];
-          const line = progressLine(about, progress, status.indexing);
+          const line = progressLine(about, progress, status.indexing, status.paused);
           return (
             <section key={f.id} className="ai-feature">
               <div className="ai-feature-head">
                 <h3>{about.name}</h3>
-                {f.installed && (
-                  <span className="chip">
-                    {f.downloadBytes === 0 ? "On" : "Installed"}
-                  </span>
-                )}
+                {f.installed && <span className="chip">{f.downloadBytes === 0 ? "On" : "Installed"}</span>}
               </div>
               <p>{about.what}</p>
               <p className="muted small">{about.detail}</p>
               {f.id === "text" && status.textLanguages.length > 0 && (
-                <p className="muted small">
-                  Reads: {status.textLanguages.join(", ")}.
-                </p>
+                <p className="muted small">Reads: {status.textLanguages.join(", ")}.</p>
               )}
               {mine ? (
                 <div className="ai-progress">
@@ -153,12 +134,9 @@ export function AiPage({
                     />
                   </div>
                   <span className="muted small">
-                    Downloading {formatBytes(mine.done)} of{" "}
-                    {formatBytes(mine.total)}
+                    Downloading {formatBytes(mine.done)} of {formatBytes(mine.total)}
                   </span>
-                  <button onClick={() => api.aiCancelInstall().catch(onError)}>
-                    Stop
-                  </button>
+                  <button onClick={() => api.aiCancelInstall().catch(onError)}>Stop</button>
                 </div>
               ) : f.installed ? (
                 <div className="ai-actions">
@@ -180,11 +158,7 @@ export function AiPage({
                       : `Download ${formatBytes(f.downloadBytes)} · ${formatBytes(f.diskBytes)} on disk`}
                   </span>
                   <div className="spacer" />
-                  <button
-                    className="primary"
-                    onClick={() => install(f.id)}
-                    disabled={busy}
-                  >
+                  <button className="primary" onClick={() => install(f.id)} disabled={busy}>
                     {f.downloadBytes === 0 ? "Turn on" : "Install"}
                   </button>
                 </div>

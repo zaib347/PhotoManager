@@ -101,7 +101,7 @@ fn thumbnail(library: &Db, thumbs_db: &Db, id: i64) -> Image {
 }
 
 /// Embeds up to `limit` photos that have no embedding yet, in batches. `pause()` is
-/// checked between batches (scans, battery) and stops the pass when true, as does
+/// checked between batches (folder scans) and stops the pass when true, as does
 /// `cancel`. Calls `report` after each batch. Returns how many photos were done
 /// (unreadable ones included: they're recorded as such).
 pub fn index_pending(

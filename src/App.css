@@ -2860,3 +2860,115 @@ button.primary:disabled {
   word-break: break-word;
   user-select: text;
 }
+
+/* ---------- Confirm dialog (ui/confirm.tsx) ---------- */
+
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 45%);
+  animation: confirm-fade 0.15s ease-out;
+}
+
+.confirm-dialog {
+  width: min(460px, 100%);
+  overflow: hidden;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  animation: confirm-pop 0.18s ease-out;
+}
+
+.confirm-body {
+  display: flex;
+  gap: 14px;
+  padding: 20px 20px 16px;
+}
+
+.confirm-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.confirm-icon.warning {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.confirm-text {
+  min-width: 0;
+}
+
+.confirm-text h3 {
+  margin: 2px 0 8px;
+  font-size: 16px;
+}
+
+.confirm-text p {
+  margin: 0 0 8px;
+  line-height: 1.45;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.confirm-text p.muted {
+  font-size: 13px;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+}
+
+.confirm-actions button {
+  min-width: 84px;
+}
+
+button.danger-fill {
+  font-weight: 600;
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+button.danger-fill:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 85%, #000);
+}
+
+@keyframes confirm-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes confirm-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-backdrop,
+  .confirm-dialog {
+    animation: none;
+  }
+}

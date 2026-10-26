@@ -1,4 +1,4 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../ui/confirm";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { api, isFilterEmpty, type Filter, type Layout, type TimelineView } from "../api";
 import { describeReport } from "../cleanup/RecentlyRemoved";

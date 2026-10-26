@@ -1,4 +1,4 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../ui/confirm";
 import { useState } from "react";
 import { api, type AlbumInfo } from "../api";
 import { useCollections } from "./context";

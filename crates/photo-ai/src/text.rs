@@ -17,7 +17,15 @@ use crate::search::Progress;
 /// Names the engine behind stored text; changing it reads photos again.
 pub const ENGINE: &str = "windows-ocr";
 /// Photos read per batch.
-const BATCH: usize = 8;
+const BATCH: usize = 16;
+/// Most photos read at once.
+const MAX_READERS: usize = 4;
+
+/// Photos read at once: up to half the cores, leaving the rest for the app and the user.
+fn readers() -> usize {
+    let cores = std::thread::available_parallelism().map_or(2, |n| n.get());
+    (cores / 2).clamp(1, MAX_READERS)
+}
 /// Photos are read with their long edge about this long, and at most…
 const READ_EDGE: u32 = 2000;
 /// …this (the OCR engine has its own limit too).
@@ -57,7 +65,7 @@ pub fn progress(conn: &Connection) -> Result<Progress> {
 }
 
 /// Reads the text in up to `limit` photos not read yet, in batches. `pause()` is
-/// checked between batches (scans, battery) and stops the pass when true, as does
+/// checked between batches (folder scans) and stops the pass when true, as does
 /// `cancel`. Calls `report` after each batch. Returns how many photos were done.
 pub fn index_pending(
     library: &Db,
@@ -92,22 +100,31 @@ pub fn index_pending(
                 .map(|h| h.join().expect("photo reading thread"))
                 .collect()
         });
-        // The OCR engine lives on a thread of its own (its own COM apartment).
+        // Each reading thread has an OCR engine of its own (and its own COM apartment).
+        let chunk = pictures.len().div_ceil(readers()).max(1);
         let texts: Vec<(i64, Option<String>)> = std::thread::scope(|s| {
-            s.spawn(|| -> Result<Vec<(i64, Option<String>)>> {
-                let reader = os::Reader::new()?;
-                let mut out = Vec::new();
-                for (id, picture) in &pictures {
-                    match picture {
-                        Picture::Ready(image) => out.push((*id, reader.read(image).ok())),
-                        Picture::Failed => out.push((*id, None)),
-                        Picture::Later => {}
-                    }
-                }
-                Ok(out)
-            })
-            .join()
-            .expect("text reading thread")
+            let handles: Vec<_> = pictures
+                .chunks(chunk)
+                .map(|part| {
+                    s.spawn(move || -> Result<Vec<(i64, Option<String>)>> {
+                        let reader = os::Reader::new()?;
+                        let mut out = Vec::new();
+                        for (id, picture) in part {
+                            match picture {
+                                Picture::Ready(image) => out.push((*id, reader.read(image).ok())),
+                                Picture::Failed => out.push((*id, None)),
+                                Picture::Later => {}
+                            }
+                        }
+                        Ok(out)
+                    })
+                })
+                .collect();
+            let mut all = Vec::new();
+            for h in handles {
+                all.extend(h.join().expect("text reading thread")?);
+            }
+            Ok::<_, photo_core::Error>(all)
         })?;
         let mut conn = library.write();
         let tx = conn.transaction()?;
