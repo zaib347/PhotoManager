@@ -399,6 +399,7 @@ export default function App() {
               filter={filter}
               onFilter={setFilter}
               progress={ai?.progress.people ?? null}
+              bodies={ai?.progress.bodies ?? null}
               onError={report}
             />
           )}
@@ -501,6 +502,8 @@ export default function App() {
 const INSTALLED: Record<AiPack, string> = {
   search: "Search by description is installed. Your photos are being indexed in the background.",
   people: "People is installed. Faces are being found in the background; people appear under People as they're grouped.",
+  bodies:
+    "People without a visible face is installed. Photos with no face are being looked at in the background; those with someone in them leave No people.",
   upscale: "Upscale is installed. Choose Enlarge when exporting photos.",
   text: "Text in photos is on. Your photos are being read in the background; search for words in them from the search box.",
 };

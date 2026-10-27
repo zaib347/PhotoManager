@@ -55,7 +55,7 @@ export type Filter = {
 };
 
 /** An optional AI feature. */
-export type AiPack = "search" | "people" | "upscale" | "text";
+export type AiPack = "search" | "people" | "bodies" | "upscale" | "text";
 export type AiFeature = {
   id: AiPack;
   installed: boolean;
@@ -66,7 +66,13 @@ export type AiFeature = {
 };
 export type IndexCount = { indexed: number; total: number };
 /** Background indexing of each installed feature that needs it. */
-export type AiProgress = { search: IndexCount | null; people: IndexCount | null; text: IndexCount | null };
+export type AiProgress = {
+  search: IndexCount | null;
+  people: IndexCount | null;
+  /** Photos with no face looked at for people seen whole. */
+  bodies: IndexCount | null;
+  text: IndexCount | null;
+};
 /** Background indexing waits while folders are scanned. */
 export type AiPause = "scan";
 

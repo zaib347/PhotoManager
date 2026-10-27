@@ -484,15 +484,98 @@ fn finds_people_in_a_library_and_lets_the_user_correct_them() {
     );
 }
 
-/// Downloads the real People and Upscale packs (~44 MB) through the same path as the app:
-/// plain files, and a package with two files kept from it.
+/// People seen whole, with the real model (`persons.onnx` in `PHOTO_AI_TEST_MODELS`):
+/// of two photos with no face found, the one of a person (from `PHOTO_AI_TEST_FACES`)
+/// leaves No people and a plain sky stays.
+#[test]
+fn photos_with_a_person_but_no_face_leave_no_people() {
+    let Some(src) = models() else { return };
+    let Some(faces_dir) = std::env::var_os("PHOTO_AI_TEST_FACES").map(PathBuf::from) else {
+        eprintln!("skipped: set PHOTO_AI_TEST_FACES");
+        return;
+    };
+    if !src.join(photo_ai::bodies::MODEL_FILE).exists() {
+        eprintln!("skipped: no person model in PHOTO_AI_TEST_MODELS");
+        return;
+    }
+    use photo_ai::bodies::{self, Bodies};
+    use photo_core::db::Db;
+    use photo_core::scan::Scanner;
+    use photo_core::timeline::{self, View};
+    use photo_core::{library, schema};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::new(dir.path().join("ai"));
+    store.install_from(Pack::Runtime, &src).unwrap();
+    store.install_from(Pack::Bodies, &src).unwrap();
+    let detector = Bodies::load(&store, 2).unwrap();
+
+    let photos = dir.path().join("photos");
+    std::fs::create_dir_all(&photos).unwrap();
+    std::fs::copy(
+        faces_dir.join("Colin_Powell/Colin_Powell_0001.jpg"),
+        photos.join("person.jpg"),
+    )
+    .unwrap();
+    RgbImage::from_pixel(400, 300, Rgb([90, 140, 200]))
+        .save(photos.join("sky.jpg"))
+        .unwrap();
+    let library = Db::open(&dir.path().join("lib.sqlite"), 2, schema::migrate_library).unwrap();
+    let thumbs_db = Db::open(&dir.path().join("thumbs.sqlite"), 2, schema::migrate_thumbs).unwrap();
+    let root = library::add_root(&library.write(), &photos).unwrap();
+    let cancel = AtomicBool::new(false);
+    Scanner {
+        library: &library,
+        thumbs: &thumbs_db,
+        cancel: &cancel,
+    }
+    .scan_root(root, &|_| {})
+    .unwrap();
+    // As if the face finder had missed the face.
+    library
+        .write()
+        .execute(
+            "INSERT INTO ai_face_scans (asset_id, model, faces) SELECT id, 'test', 0 FROM assets",
+            [],
+        )
+        .unwrap();
+    let id_of = |file: &str| -> i64 {
+        library
+            .read()
+            .query_row(
+                "SELECT asset_id FROM files WHERE rel_path = ?1",
+                [file],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    let no_people =
+        || timeline::asset_ids(&library.read(), View::NoPeople, &Default::default()).unwrap();
+    assert_eq!(no_people().len(), 2);
+
+    let done = bodies::index_pending(&library, &detector, 100, &cancel, &|| false, &|| {}).unwrap();
+    assert_eq!(done, 2);
+    assert_eq!(no_people(), vec![id_of("sky.jpg")]);
+    let progress = bodies::progress(&library.read()).unwrap();
+    assert_eq!((progress.indexed, progress.total), (2, 2));
+    // Nothing left to look at; removing the feature forgets what it found.
+    assert_eq!(
+        bodies::index_pending(&library, &detector, 100, &cancel, &|| false, &|| {}).unwrap(),
+        0
+    );
+    bodies::clear(&library).unwrap();
+    assert_eq!(no_people().len(), 2);
+}
+
+/// Downloads the real People, Bodies and Upscale packs (~80 MB) through the same path as
+/// the app: plain files, and a package with two files kept from it.
 #[test]
 #[ignore]
 fn downloads_and_installs_people_and_upscale() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::new(dir.path());
     let cancel = AtomicBool::new(false);
-    for pack in [Pack::People, Pack::Upscale] {
+    for pack in [Pack::People, Pack::Bodies, Pack::Upscale] {
         store.install(pack, &cancel, &|_, _| {}).unwrap();
         store.verify(pack).unwrap();
         assert!(store.is_installed(pack));

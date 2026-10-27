@@ -55,6 +55,11 @@ them on the user's computer:
   2.0, Yaoyao Zhong and Weihong Deng), from the
   [OpenCV model zoo](https://huggingface.co/opencv), pinned to one revision each. Faces and
   people stay in the library on the user's computer.
+- **People without a visible face:** [YOLOX](https://github.com/Megvii-BaseDetection/YOLOX)-S
+  object detection (Apache 2.0, Megvii), from the
+  [OpenCV model zoo](https://huggingface.co/opencv/object_detection_yolox), pinned to one
+  revision. Only its "person" class is used, to keep photos with someone in them out of
+  No people.
 - **Upscale:** [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) General x4v3 (BSD
   3-Clause license, Xintao Wang et al.), in the ONNX export by
   [Qualcomm AI Hub](https://huggingface.co/qualcomm/Real-ESRGAN-General-x4v3) (release 0.65.0).

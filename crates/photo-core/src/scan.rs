@@ -415,6 +415,10 @@ impl Scanner<'_> {
                             "DELETE FROM ai_text_scans WHERE asset_id = ?1",
                             params![asset_id],
                         )?;
+                        tx.execute(
+                            "DELETE FROM ai_body_scans WHERE asset_id = ?1",
+                            params![asset_id],
+                        )?;
                         summary.updated += 1;
                         stale_thumbs.push(asset_id);
                         if !crate::edit::look_of(&tx, asset_id)?.is_plain() {

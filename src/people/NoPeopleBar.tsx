@@ -11,6 +11,8 @@ type Props = {
   onFilter: (filter: Filter) => void;
   /** How far People has looked for faces. */
   progress: IndexCount | null;
+  /** How far photos with no face have been looked at for people seen whole, if that's installed. */
+  bodies: IndexCount | null;
   onError: (e: unknown) => void;
 };
 
@@ -18,11 +20,12 @@ type Props = {
  * Above the "No people" timeline: how many photos have been looked at so far, and
  * (with search by description) chips that narrow it to beaches, food, documents…
  */
-export function NoPeopleBar({ things, filter, onFilter, progress, onError }: Props) {
+export function NoPeopleBar({ things, filter, onFilter, progress, bodies, onError }: Props) {
   const [searching, setSearching] = useState<string | null>(null);
   const chips = things.filter(([name]) => !ABOUT_PEOPLE.has(name));
   const working = !!progress && progress.indexed < progress.total;
-  if (chips.length === 0 && !working) return null;
+  const lookingAgain = !working && !!bodies && bodies.indexed < bodies.total;
+  if (chips.length === 0 && !working && !lookingAgain) return null;
 
   const pick = async (name: string, description: string) => {
     setSearching(name);
@@ -59,6 +62,12 @@ export function NoPeopleBar({ things, filter, onFilter, progress, onError }: Pro
         <p className="muted small">
           Looked at {progress.indexed.toLocaleString()} of {progress.total.toLocaleString()} photos for faces so far;
           more appear here as the rest are looked at.
+        </p>
+      )}
+      {lookingAgain && (
+        <p className="muted small">
+          Looking for people without a visible face: {bodies.indexed.toLocaleString()} of{" "}
+          {bodies.total.toLocaleString()} photos so far. Photos with someone in them leave this view.
         </p>
       )}
     </div>

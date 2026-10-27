@@ -36,6 +36,16 @@ The full plan and checklists are in [docs/PLAN.md](docs/PLAN.md).
   the repo. Private preview: https://claude.ai/artifact/1vVwQ5AqWwnZF3KfKE5ASx. The
   app's icon is still Tauri's default; the site's mark.svg could replace it.
 
+- **People without a visible face** (branch `people-bodies`, from `main`; not merged):
+  new AI pack `Pack::Bodies` (`photo-ai/src/bodies.rs`), YOLOX-S fp32 from the OpenCV
+  zoo (Apache 2.0, 35.9 MB; the int8 file was 9× slower on CPU). Runs only on photos
+  with `ai_face_scans.faces = 0`, upright, `MIN_SCORE` 0.6 (measured: real people
+  ≥ 0.62, a poster 0.57); results in `ai_body_scans` (schema v21); No people also
+  leaves out `bodies > 0`. Needs People installed; removing People removes it. Avoid
+  Ultralytics YOLO (AGPL) for anything in this paid app. Real-model test:
+  `photos_with_a_person_but_no_face_leave_no_people` (needs `persons.onnx` in
+  `PHOTO_AI_TEST_MODELS`).
+
 ## Start here (2026-10-27)
 
 **Tomorrow's plan (the user's words): test the AI features and fix the issues found.**

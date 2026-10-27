@@ -38,6 +38,14 @@ const ABOUT: Record<AiPack, About> = {
     made: "every face found and every person, with their names",
     indexing: "Looked for faces in",
   },
+  bodies: {
+    name: "People without a visible face",
+    what: "Also finds people seen from behind, far away or with their face hidden, so photos with someone in them stay out of No people. It only notices that someone is there; it doesn't tell who.",
+    detail:
+      "Works with People: it looks at the photos where no face was found. Uses YOLOX (Apache 2.0). Runs in the background, pausing while folders are scanned.",
+    made: "what it found",
+    indexing: "Looked for people in",
+  },
   upscale: {
     name: "Upscale",
     what: "Enlarges small or old photos 2× or 4× with believable detail instead of blur. Choose Enlarge when exporting.",
@@ -81,8 +89,12 @@ export function AiPage({ status, installing, onChanged, onNotice, onError }: Pro
         ? `Its model files and ${about.made} are deleted.`
         : "Its model files are deleted."
       : `${about.made ?? "What it made"} is deleted.`.replace(/^t/, "T");
+    const alsoBodies =
+      pack === "people" && status.features.some((f) => f.id === "bodies" && f.installed)
+        ? ` ${ABOUT.bodies.name} is removed with it.`
+        : "";
     const ok = await confirm(
-      `${downloaded ? "Remove" : "Turn off"} ${about.name}? ${deleted} Your photos aren't touched, and you can ${downloaded ? "install" : "turn"} it again later${downloaded ? "" : " on"}.`,
+      `${downloaded ? "Remove" : "Turn off"} ${about.name}? ${deleted}${alsoBodies} Your photos aren't touched, and you can ${downloaded ? "install" : "turn"} it again later${downloaded ? "" : " on"}.`,
       { title: "Remove AI feature", kind: "warning", okLabel: downloaded ? "Remove" : "Turn off" },
     );
     if (!ok) return;

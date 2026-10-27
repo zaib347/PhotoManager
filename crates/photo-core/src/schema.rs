@@ -417,6 +417,15 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
         DELETE FROM ai_text WHERE rowid = old.id;
     END;
     ",
+    // v21: people seen whole, from the AI pack, in photos where no face was found:
+    // photos looked at, with how many people (-1 unreadable).
+    "
+    CREATE TABLE ai_body_scans (
+        asset_id INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+        model    TEXT NOT NULL,
+        bodies   INTEGER NOT NULL
+    );
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[
