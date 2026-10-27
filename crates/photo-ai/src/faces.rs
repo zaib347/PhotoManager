@@ -242,7 +242,7 @@ fn similarity(from: &[[f32; 2]; 5], to: &[[f32; 2]; 5]) -> (f32, f32, f32, f32) 
 }
 
 /// The pixel at (x, y), blended from its four neighbours; black outside the image.
-fn bilinear(image: &RgbImage, x: f32, y: f32) -> [u8; 3] {
+pub(crate) fn bilinear(image: &RgbImage, x: f32, y: f32) -> [u8; 3] {
     let (w, h) = (image.width() as i64, image.height() as i64);
     let (x0, y0) = (x.floor() as i64, y.floor() as i64);
     let (dx, dy) = (x - x0 as f32, y - y0 as f32);

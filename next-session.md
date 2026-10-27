@@ -21,6 +21,21 @@ The full plan and checklists are in [docs/PLAN.md](docs/PLAN.md).
   Scanning section (Change…). The user chose: both size rules, ask only when adding,
   no removal of existing photos while in development.
 
+- **People finds turned faces** (`photo-ai/src/people.rs`): a photo with no face upright
+  is searched again turned 90/270/180/45/315/135/225° (`TURNS`) on a 640 px copy; when
+  found, the full-size turn is made for describing and the portrait (both upright), and
+  the box is mapped back (`Turned`, `map_face`). Same 0.85 bar as upright. On the user's
+  library 10 of 11 "no faces" photos got their face (the 11th: baby from behind); on 200
+  random D: images it found 3 more real faces and no false ones. Photos already marked 0
+  faces are looked at again once (`settings` key `people_turned_faces`). Not done: a
+  person detector for people seen from behind (offered to the user).
+- **Website** (`website/`): static landing page (index.html, styles.css, script.js,
+  assets/mark.svg, README). Scroll-linked hero (pile → timeline; unpins when the copy
+  doesn't fit the window), live demos per feature, reduced-motion end states. Claims
+  checked against the code. No download link yet (no GitHub releases): buttons go to
+  the repo. Private preview: https://claude.ai/artifact/1vVwQ5AqWwnZF3KfKE5ASx. The
+  app's icon is still Tauri's default; the site's mark.svg could replace it.
+
 ## Start here (2026-10-27)
 
 **Tomorrow's plan (the user's words): test the AI features and fix the issues found.**
