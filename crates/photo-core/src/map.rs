@@ -290,6 +290,33 @@ pub fn set_location(db: &Db, ids: &[i64], lat: f64, lon: f64) -> Result<usize> {
     Ok(changed)
 }
 
+/// Takes photos off the map. A hand-set location is forgotten too, so a later rescan of
+/// a changed file goes back to what the file says. Returns how many had a location.
+pub fn clear_location(db: &Db, ids: &[i64]) -> Result<usize> {
+    let changed = {
+        let mut conn = db.write();
+        let tx = conn.transaction()?;
+        let mut changed = 0;
+        {
+            let mut asset = tx.prepare(
+                "UPDATE assets SET lat = NULL, lon = NULL, place_id = NULL
+                 WHERE id = ?1 AND lat IS NOT NULL",
+            )?;
+            let mut meta =
+                tx.prepare("UPDATE user_meta SET location_set = 0 WHERE asset_id = ?1")?;
+            for &id in ids {
+                changed += asset.execute(params![id])?;
+                meta.execute(params![id])?;
+            }
+        }
+        tx.commit()?;
+        changed
+    };
+    crate::places::assign(db)?;
+    crate::trips::detect(&mut db.write())?;
+    Ok(changed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -406,5 +433,18 @@ mod tests {
             .ok();
         assert_eq!(place.as_deref(), Some("Paris"));
         assert!(set_location(&db, &[1], 95.0, 0.0).is_err());
+
+        assert_eq!(clear_location(&db, &[1, 99]).unwrap(), 1);
+        let (lat, set): (Option<f64>, i64) = db
+            .read()
+            .query_row(
+                "SELECT a.lat, m.location_set FROM assets a JOIN user_meta m ON m.asset_id = a.id
+                 WHERE a.id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((lat, set), (None, 0));
+        assert_eq!(clear_location(&db, &[1]).unwrap(), 0);
     }
 }

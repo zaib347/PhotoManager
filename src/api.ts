@@ -5,7 +5,7 @@ import { lookQuery } from "./looks";
 /** Views that are pages rather than timelines. */
 const PAGES = ["events", "trips", "places", "map", "people", "ai", "duplicates", "similar", "removed", "organize"] as const;
 export type PageView = (typeof PAGES)[number];
-export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | PageView;
+export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | "nopeople" | PageView;
 export type View =
   | BuiltinView
   | { album: number }
@@ -67,11 +67,16 @@ export type AiFeature = {
 export type IndexCount = { indexed: number; total: number };
 /** Background indexing of each installed feature that needs it. */
 export type AiProgress = { search: IndexCount | null; people: IndexCount | null; text: IndexCount | null };
+/** Background indexing waits while folders are scanned. */
+export type AiPause = "scan";
+
 export type AiStatus = {
   features: AiFeature[];
   installing: AiPack | null;
   progress: AiProgress;
   indexing: boolean;
+  /** Why background indexing is waiting, if it is. */
+  paused: AiPause | null;
   /** Languages Windows can read text in. */
   textLanguages: string[];
 };
@@ -185,6 +190,9 @@ export type TripSummary = {
   /** Renamed; detection leaves its days alone. */
   edited: boolean;
 };
+
+/** Which copy of a duplicate to keep where none was picked by hand. */
+export type KeepPreference = "suggested" | "oldest" | "newest";
 
 export type DuplicateOverview = { groups: number; extraFiles: number; extraBytes: number };
 
@@ -475,8 +483,25 @@ export type ScanSummary = {
   unchanged: number;
   missing: number;
   errors: number;
+  /** New files left out by the scan settings. */
+  skipped: number;
   completed: boolean;
   missingCheckSkipped: boolean;
+};
+
+/**
+ * Which new files scans add, for the whole library (0 turns a limit off). Files
+ * already in the library always stay.
+ */
+export type ScanRules = {
+  minBytes: number;
+  /** Longest side, in pixels. */
+  minSide: number;
+  png: boolean;
+  gif: boolean;
+  raw: boolean;
+  videos: boolean;
+  minVideoMs: number;
 };
 
 export type ScanFinished = { rootId: number; summary: ScanSummary | null; error: string | null };
@@ -526,8 +551,9 @@ export const api = {
   duplicateGroups: (offset: number, limit: number) =>
     invoke<DuplicateGroup[]>("duplicate_groups", { offset, limit }),
   /** `keep`: asset id → file id to keep instead of the suggestion; `only`: just these photos. */
-  removeDuplicates: (keep: Record<number, number>, only?: number[]) =>
-    invoke<FileOpReport>("remove_duplicates", { keep, only: only ?? null }),
+  /** Removes extra copies, keeping the copy in `keep` (asset → file) or else the one `prefer` picks. */
+  removeDuplicates: (keep: Record<number, number>, prefer: KeepPreference, only?: number[]) =>
+    invoke<FileOpReport>("remove_duplicates", { keep, prefer, only: only ?? null }),
   similarOverview: () => invoke<SimilarOverview>("similar_overview"),
   similarGroups: (offset: number, limit: number) => invoke<SimilarGroup[]>("similar_groups", { offset, limit }),
   /** Moves every file of these photos to the trash folder (undoable). */
@@ -566,6 +592,8 @@ export const api = {
   searchCities: (query: string) => invoke<CityInfo[]>("search_cities", { query }),
   /** Places photos by hand; returns how many. */
   setLocation: (ids: number[], lat: number, lon: number) => invoke<number>("set_location", { ids, lat, lon }),
+  /** Takes photos off the map; returns how many had a location. */
+  clearLocation: (ids: number[]) => invoke<number>("clear_location", { ids }),
   aiStatus: () => invoke<AiStatus>("ai_status"),
   /** Downloads and installs an AI feature in the background; watch `events.aiInstall*`. */
   aiInstall: (pack: AiPack) => invoke<void>("ai_install", { pack }),
@@ -624,7 +652,13 @@ export const api = {
   emptyFileOp: (id: number) => invoke<FileOpReport>("empty_file_op", { id }),
   listRoots: () => invoke<RootInfo[]>("list_roots"),
   scanningRoots: () => invoke<number[]>("scanning_roots"),
-  addRoot: (path: string) => invoke<number>("add_root", { path }),
+  /** Adds a folder, leaving out `excluded` folders inside it, and starts scanning it. */
+  addRoot: (path: string, excluded: string[] = []) => invoke<number>("add_root", { path, excluded }),
+  scanSettings: () => invoke<ScanRules>("scan_settings"),
+  setScanSettings: (rules: ScanRules) => invoke<void>("set_scan_settings", { rules }),
+  /** Folders left out of a library folder, as full paths (empty while its drive is away). */
+  rootExcluded: (rootId: number) => invoke<string[]>("root_excluded", { rootId }),
+  setRootExcluded: (rootId: number, folders: string[]) => invoke<void>("set_root_excluded", { rootId, folders }),
   removeRoot: (rootId: number) => invoke<void>("remove_root", { rootId }),
   scanRoot: (rootId: number) => invoke<boolean>("scan_root", { rootId }),
   cancelScan: (rootId: number) => invoke<void>("cancel_scan", { rootId }),
@@ -651,6 +685,8 @@ export const events = {
   aiIndexProgress: (cb: (p: AiProgress) => void): Promise<UnlistenFn> =>
     listen<AiProgress>("ai-index-progress", (e) => cb(e.payload)),
   aiIndexFinished: (cb: () => void): Promise<UnlistenFn> => listen("ai-index-finished", () => cb()),
+  aiIndexPaused: (cb: (reason: AiPause | null) => void): Promise<UnlistenFn> =>
+    listen<AiPause | null>("ai-index-paused", (e) => cb(e.payload)),
   /** Faces were found and grouped; the People page may have changed. */
   aiPeopleChanged: (cb: () => void): Promise<UnlistenFn> => listen("ai-people-changed", () => cb()),
   videoProgress: (cb: (p: { done: number; total: number }) => void): Promise<UnlistenFn> =>

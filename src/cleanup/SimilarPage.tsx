@@ -1,4 +1,4 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../ui/confirm";
 import { useCallback, useEffect, useState } from "react";
 import { api, events, thumbUrl, type SimilarGroup, type SimilarOverview } from "../api";
 import { formatBytes, formatTakenAt } from "../format";
@@ -161,7 +161,7 @@ export function SimilarPage({ onNotice, onError }: Props) {
                       />
                       {keep ? "Keep" : "Remove"}
                       {m.best && (
-                        <span className="badge" title="Suggested to keep">
+                        <span className="similar-best" title="Suggested to keep">
                           {WHY[m.why ?? "similar"]}
                         </span>
                       )}

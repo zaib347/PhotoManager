@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent, type WheelEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent, type WheelEvent } from "react";
 import { api, thumbUrl, type Area, type CityInfo, type MapCluster, type MapSummary } from "../api";
 import { useCollections } from "../collections/context";
+import { theme } from "../theme";
+import { Icon } from "../ui/Icon";
 import {
   fromScreen,
   projectX,
@@ -103,7 +105,8 @@ export function MapPage({ placing, onPlace, onCancelPlacing, onError }: Props) {
     return () => observer.disconnect();
   }, [summary]);
 
-  // Draw on the next frame after any change.
+  // Draw on the next frame after any change, the theme included.
+  const colorRevision = useSyncExternalStore(theme.subscribe, theme.revision);
   useEffect(() => {
     const c = canvas.current;
     if (!c || !world || !view) return;
@@ -117,7 +120,7 @@ export function MapPage({ placing, onPlace, onCancelPlacing, onError }: Props) {
       world.draw(ctx, view, colors(c));
     });
     return () => cancelAnimationFrame(frame);
-  }, [world, view]);
+  }, [world, view, colorRevision]);
 
   // Clusters for the view, once it stops moving.
   useEffect(() => {
@@ -238,6 +241,13 @@ export function MapPage({ placing, onPlace, onCancelPlacing, onError }: Props) {
               ⤢
             </button>
           )}
+          <button
+            onClick={() => view && setView(framing(null, view.width, view.height))}
+            title="Show the whole world"
+            aria-label="Show the whole world"
+          >
+            <Icon name="globe" size={15} />
+          </button>
         </div>
       </div>
 

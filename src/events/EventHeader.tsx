@@ -1,4 +1,4 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../ui/confirm";
 import { useEffect, useState } from "react";
 import { api, type EventSummary } from "../api";
 import { useCollections } from "../collections/context";

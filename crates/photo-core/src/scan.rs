@@ -17,7 +17,7 @@ use serde::Serialize;
 
 use crate::db::Db;
 use crate::media::{self, MediaKind, Metadata};
-use crate::{Error, Result, hash, library, now_ms, thumbs, timeline};
+use crate::{Error, Result, hash, library, now_ms, scan_rules, thumbs, timeline};
 
 const CHUNK: usize = 256;
 const BUCKET_REFRESH: Duration = Duration::from_secs(5);
@@ -59,6 +59,8 @@ pub struct Summary {
     pub unchanged: u64,
     pub missing: u64,
     pub errors: u64,
+    /// New files left out by the scan settings (`scan_rules`).
+    pub skipped: u64,
     /// False if cancelled. Missing-file detection only runs on complete scans.
     pub completed: bool,
     /// True if the walk hit unreadable folders, so missing-file detection was skipped.
@@ -123,24 +125,32 @@ impl Scanner<'_> {
 
         // Discover.
         let existing = load_existing(&self.library.read(), root_id)?;
+        let rules = scan_rules::rules(&self.library.read())?;
+        let excluded = scan_rules::excluded(&self.library.read(), root_id)?;
         let mut seen: Vec<i64> = Vec::with_capacity(existing.len());
         let mut work: Vec<Work> = Vec::new();
         // XMP sidecars: (relative path, mtime).
         let mut sidecars: Vec<(String, i64)> = Vec::new();
         let mut walk_errors = 0u64;
 
-        let walker = WalkDir::new(&root)
-            .skip_hidden(true)
-            .process_read_dir(|_, _, _, children| {
-                children.retain(|child| {
-                    child.as_ref().map_or(true, |e| {
-                        !(e.file_type().is_dir()
-                            && EXCLUDED_DIRS
-                                .iter()
-                                .any(|x| e.file_name().eq_ignore_ascii_case(x)))
-                    })
+        let (walk_root, walk_excluded) = (root.clone(), excluded.clone());
+        let walker =
+            WalkDir::new(&root)
+                .skip_hidden(true)
+                .process_read_dir(move |_, _, _, children| {
+                    children.retain(|child| {
+                        child.as_ref().map_or(true, |e| {
+                            !(e.file_type().is_dir()
+                                && (EXCLUDED_DIRS
+                                    .iter()
+                                    .any(|x| e.file_name().eq_ignore_ascii_case(x))
+                                    || (!walk_excluded.is_empty()
+                                        && rel_path(&walk_root, &e.path()).is_some_and(|rel| {
+                                            scan_rules::is_excluded(&walk_excluded, &rel)
+                                        }))))
+                        })
+                    });
                 });
-            });
         for entry in walker {
             if self.cancelled() {
                 return self.stop_early(summary);
@@ -169,6 +179,11 @@ impl Scanner<'_> {
             };
             let size = md.len() as i64;
             let mtime = mtime_of(&md);
+            // Rules decide about new files only; those already in the library stay.
+            if !existing.contains_key(&rel) && rules.skips_file(&path, kind, size as u64) {
+                summary.skipped += 1;
+                continue;
+            }
 
             summary.discovered += 1;
             match existing.get(&rel) {
@@ -190,6 +205,16 @@ impl Scanner<'_> {
                 progress(&report);
             }
         }
+        // Files already in the library inside an excluded folder weren't walked; they
+        // stay as they are rather than turning up as missing.
+        if !excluded.is_empty() {
+            seen.extend(
+                existing
+                    .iter()
+                    .filter(|(rel, _)| scan_rules::is_excluded(&excluded, rel))
+                    .map(|(_, e)| e.id),
+            );
+        }
         drop(existing);
 
         // Process.
@@ -210,8 +235,13 @@ impl Scanner<'_> {
                 return self.stop_early(summary);
             }
             let n = chunk.len() as u64;
-            let prepared: Vec<Prepared> = chunk.into_par_iter().map(|w| self.prepare(w)).collect();
-            self.commit(root_id, prepared, &mut summary, &mut seen)?;
+            let prepared: Vec<Option<Prepared>> = chunk
+                .into_par_iter()
+                .map(|w| self.prepare(w, &rules))
+                .collect();
+            let kept: Vec<Prepared> = prepared.into_iter().flatten().collect();
+            summary.skipped += n - kept.len() as u64;
+            self.commit(root_id, kept, &mut summary, &mut seen)?;
 
             report.processed += n;
             report.errors = walk_errors + summary.errors;
@@ -258,9 +288,15 @@ impl Scanner<'_> {
         Ok(summary)
     }
 
-    /// Runs on rayon workers: file reads only, no writes.
-    fn prepare(&self, work: Work) -> Prepared {
+    /// Runs on rayon workers: file reads only, no writes. `None`: a new file the scan
+    /// settings leave out, by its pixel size or length.
+    fn prepare(&self, work: Work, rules: &scan_rules::Rules) -> Option<Prepared> {
         let mut meta = media::extract(&work.abs, work.kind, work.mtime);
+        if work.existing.is_none()
+            && rules.skips_media(work.kind, meta.width, meta.height, meta.duration_ms)
+        {
+            return None;
+        }
         let quick = hash::quick_hash(&work.abs, work.size as u64).ok();
         let mut full = None;
         let mut link_asset = None;
@@ -315,7 +351,7 @@ impl Scanner<'_> {
             .flatten()
             .and_then(|x| crate::xmp::parse(&x).ok())
             .filter(|d| !d.is_empty());
-        Prepared {
+        Some(Prepared {
             work,
             meta,
             quick,
@@ -324,7 +360,7 @@ impl Scanner<'_> {
             candidate_full,
             thumb,
             xmp,
-        }
+        })
     }
 
     fn commit(

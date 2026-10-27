@@ -18,7 +18,7 @@ use photo_core::{Result, thumbs};
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use serde::Serialize;
 
-use crate::faces::{DIM, Face, Faces, portrait};
+use crate::faces::{DIM, Face, Faces, bilinear, portrait};
 use crate::picture::{Picture, picture};
 use crate::search::{Progress, quantize};
 
@@ -256,21 +256,144 @@ type Looked = (i64, Option<((u32, u32), Vec<Found>)>);
 
 /// A face found in a photo, ready to store.
 struct Found {
+    /// Where it is in the photo as it is (not turned).
     face: Face,
+    quality: f32,
     vec: Vec<f32>,
     portrait: Vec<u8>,
 }
 
+/// The detector only knows faces about upright, so a photo with none is looked at
+/// again turned: babies photographed lying down, phones held sideways. Degrees
+/// clockwise, right angles first. Measured on photos of all kinds (2026-10-27), the
+/// turns found faces upright looking missed and nothing that wasn't a face.
+const TURNS: [f32; 7] = [90.0, 270.0, 180.0, 45.0, 315.0, 135.0, 225.0];
+/// Turned photos are searched at this size (long edge), the detector's own input;
+/// the full-size turn is made only when a face is found.
+const TURN_EDGE: f32 = 640.0;
+
+/// A photo turned `deg` clockwise about its centre and scaled, on a canvas that holds
+/// all of it.
+struct Turned {
+    image: RgbImage,
+    sin: f32,
+    cos: f32,
+    /// The photo's size, the canvas's size, and canvas pixels per photo pixel.
+    size: (f32, f32),
+    canvas: (f32, f32),
+    scale: f32,
+}
+
+impl Turned {
+    fn new(photo: &RgbImage, deg: f32, scale: f32) -> Turned {
+        let (w, h) = (photo.width() as f32, photo.height() as f32);
+        let (sin, cos) = deg.to_radians().sin_cos();
+        let canvas = (
+            (w * cos.abs() + h * sin.abs()) * scale,
+            (w * sin.abs() + h * cos.abs()) * scale,
+        );
+        let mut turned = Turned {
+            image: RgbImage::new(1, 1),
+            sin,
+            cos,
+            size: (w, h),
+            canvas,
+            scale,
+        };
+        turned.image = RgbImage::from_fn(
+            (canvas.0.round() as u32).max(1),
+            (canvas.1.round() as u32).max(1),
+            |u, v| {
+                // Pixel centres.
+                let [x, y] = turned.back([u as f32 + 0.5, v as f32 + 0.5]);
+                image::Rgb(bilinear(photo, x - 0.5, y - 0.5))
+            },
+        );
+        turned
+    }
+
+    /// A point of the turned picture, in the photo's pixels.
+    fn back(&self, [u, v]: [f32; 2]) -> [f32; 2] {
+        let du = (u - self.canvas.0 / 2.0) / self.scale;
+        let dv = (v - self.canvas.1 / 2.0) / self.scale;
+        [
+            self.cos * du + self.sin * dv + self.size.0 / 2.0,
+            -self.sin * du + self.cos * dv + self.size.1 / 2.0,
+        ]
+    }
+
+    /// A point of the photo, in the turned picture's pixels.
+    fn to(&self, [x, y]: [f32; 2]) -> [f32; 2] {
+        let (dx, dy) = (x - self.size.0 / 2.0, y - self.size.1 / 2.0);
+        [
+            (self.cos * dx - self.sin * dy) * self.scale + self.canvas.0 / 2.0,
+            (self.sin * dx + self.cos * dy) * self.scale + self.canvas.1 / 2.0,
+        ]
+    }
+}
+
+/// `face` with every point moved by `to`; its box is the box around the moved corners.
+fn map_face(face: &Face, to: impl Fn([f32; 2]) -> [f32; 2]) -> Face {
+    let (x1, y1) = (face.x + face.w, face.y + face.h);
+    let corners = [[face.x, face.y], [x1, face.y], [face.x, y1], [x1, y1]].map(&to);
+    let (lo, hi) = corners
+        .iter()
+        .fold(([f32::MAX; 2], [f32::MIN; 2]), |(lo, hi), p| {
+            (
+                [lo[0].min(p[0]), lo[1].min(p[1])],
+                [hi[0].max(p[0]), hi[1].max(p[1])],
+            )
+        });
+    Face {
+        x: lo[0],
+        y: lo[1],
+        w: hi[0] - lo[0],
+        h: hi[1] - lo[1],
+        landmarks: face.landmarks.map(&to),
+        score: face.score,
+    }
+}
+
 fn find(faces: &Faces, image: &RgbImage) -> Result<Vec<Found>> {
+    let found = describe_all(faces, image, faces.detect(image)?, &|p| p)?;
+    if !found.is_empty() {
+        return Ok(found);
+    }
+    let small = (TURN_EDGE / image.width().max(image.height()) as f32).min(1.0);
+    for deg in TURNS {
+        let look = Turned::new(image, deg, small);
+        let seen = faces.detect(&look.image)?;
+        if !seen.iter().any(|f| f.w.min(f.h) / small >= MIN_FACE) {
+            continue;
+        }
+        let full = Turned::new(image, deg, 1.0);
+        let seen = seen
+            .iter()
+            .map(|f| map_face(f, |p| full.to(look.back(p))))
+            .collect();
+        return describe_all(faces, &full.image, seen, &|p| full.back(p));
+    }
+    Ok(Vec::new())
+}
+
+/// Describes and portrays the faces `detected` in `seen` (the photo, perhaps turned);
+/// `back` maps points of `seen` into the photo.
+fn describe_all(
+    faces: &Faces,
+    seen: &RgbImage,
+    detected: Vec<Face>,
+    back: &dyn Fn([f32; 2]) -> [f32; 2],
+) -> Result<Vec<Found>> {
     let mut found = Vec::new();
-    for face in faces.detect(image)? {
+    for face in detected {
         if face.w.min(face.h) < MIN_FACE {
             continue;
         }
-        let vec = faces.describe(image, &face)?;
-        let portrait = thumbs::encode_jpeg(&portrait(image, &face, PORTRAIT))?;
+        let vec = faces.describe(seen, &face)?;
+        let portrait = thumbs::encode_jpeg(&portrait(seen, &face, PORTRAIT))?;
         found.push(Found {
-            face,
+            quality: face.quality(),
+            face: map_face(&face, back),
             vec,
             portrait,
         });
@@ -279,6 +402,27 @@ fn find(faces: &Faces, image: &RgbImage) -> Result<Vec<Found>> {
         }
     }
     Ok(found)
+}
+
+/// Photos looked at before turned faces were looked for, and found to have none, are
+/// looked at again (once).
+fn look_again_for_turned_faces(conn: &mut Connection) -> Result<()> {
+    const KEY: &str = "people_turned_faces";
+    let tx = conn.transaction()?;
+    let done: bool = tx.query_row(
+        "SELECT EXISTS (SELECT 1 FROM settings WHERE key = ?1)",
+        params![KEY],
+        |r| r.get(0),
+    )?;
+    if !done {
+        tx.execute("DELETE FROM ai_face_scans WHERE faces = 0", [])?;
+        tx.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, '1')",
+            params![KEY],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
 }
 
 /// People, and the faces waiting to be grouped among them.
@@ -315,7 +459,7 @@ impl People {
     }
 
     /// Finds the faces in up to `limit` photos not looked at yet, in batches, and
-    /// groups them. `pause()` is checked between batches (scans, battery) and stops the
+    /// groups them. `pause()` is checked between batches (folder scans) and stops the
     /// pass when true, as does `cancel`. Calls `report` after each batch. Returns how
     /// many photos were looked at.
     #[allow(clippy::too_many_arguments)]
@@ -329,6 +473,7 @@ impl People {
         pause: &dyn Fn() -> bool,
         report: &dyn Fn(),
     ) -> Result<usize> {
+        look_again_for_turned_faces(&mut library.write())?;
         let mut after = i64::MIN;
         let mut done = 0;
         while done < limit && !cancel.load(Ordering::Relaxed) && !pause() {
@@ -409,7 +554,7 @@ impl People {
                                     f.face.y / h,
                                     f.face.w / w,
                                     f.face.h / h,
-                                    f.face.quality(),
+                                    f.quality,
                                     scale,
                                     bytes,
                                     person
@@ -667,6 +812,57 @@ pub fn portrait_from_photo(library: &Db, face_id: i64) -> Result<Option<Vec<u8>>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn turned_points_map_back_to_the_photo() {
+        // A marked spot; wherever turning puts it, the brightest pixel of the turned
+        // picture maps back onto it.
+        let (w, h) = (40u32, 24u32);
+        let mut image = RgbImage::new(w, h);
+        for (x, y) in [(29, 5), (30, 5), (29, 6), (30, 6)] {
+            image.put_pixel(x, y, image::Rgb([255, 0, 0]));
+        }
+        let near = |a: [f32; 2], b: [f32; 2], within: f32| {
+            (a[0] - b[0]).abs() <= within && (a[1] - b[1]).abs() <= within
+        };
+        for deg in TURNS {
+            let turned = Turned::new(&image, deg, 1.0);
+            let (u, v, _) = turned
+                .image
+                .enumerate_pixels()
+                .max_by_key(|(_, _, p)| p[0])
+                .unwrap();
+            let back = turned.back([u as f32 + 0.5, v as f32 + 0.5]);
+            assert!(near(back, [30.0, 6.0], 1.0), "{deg}°: {back:?}");
+            // A turn right puts the top of the photo on the right.
+            if deg == 90.0 {
+                assert!(u as f32 > turned.canvas.0 / 2.0 && turned.image.width() == h);
+            }
+            let p = [12.5, 20.25];
+            assert!(near(turned.back(turned.to(p)), p, 1e-3), "{deg}°");
+        }
+
+        // A face found in the small turned copy lands in the same place of the full one.
+        let (small, full) = (
+            Turned::new(&image, 45.0, 0.25),
+            Turned::new(&image, 45.0, 1.0),
+        );
+        let face = Face {
+            x: 2.0,
+            y: 3.0,
+            w: 4.0,
+            h: 4.0,
+            landmarks: [[4.0, 5.0]; 5],
+            score: 0.9,
+        };
+        let big = map_face(&face, |p| full.to(small.back(p)));
+        assert!(near([big.w, big.h], [16.0, 16.0], 1e-3), "{big:?}");
+        assert!(near(
+            full.back(big.landmarks[0]),
+            small.back([4.0, 5.0]),
+            1e-3
+        ));
+    }
 
     /// A unit vector mostly along `axis`, nudged by `noise` along another.
     fn face(axis: usize, noise: f32, other: usize) -> Vec<f32> {

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use photo_core::duplicates::{self, Group, Overview};
+use photo_core::duplicates::{self, Group, Overview, Prefer};
 use photo_core::fileops::{self, OpSummary, Report};
 use photo_core::organize::{self, Layout, Preview};
 use photo_core::{events, rename, similar, trips};
@@ -71,10 +71,16 @@ pub async fn remove_duplicates(
     state: State<'_, Arc<AppState>>,
     only: Option<Vec<i64>>,
     keep: HashMap<i64, i64>,
+    prefer: Option<Prefer>,
 ) -> CmdResult<Report> {
     no_scan_running(&state)?;
     blocking(&state, move |s| {
-        let extras = duplicates::extras(&s.library.read(), only.as_deref(), &keep)?;
+        let extras = duplicates::extras(
+            &s.library.read(),
+            only.as_deref(),
+            &keep,
+            prefer.unwrap_or_default(),
+        )?;
         fileops::trash(&s.library, &extras, "duplicates", true)
     })
     .await

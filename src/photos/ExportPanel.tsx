@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { api, type ExportFormat, type ExportOptions, type Watermark, type WatermarkPosition } from "../api";
+import { Icon } from "../ui/Icon";
 
 const SETTINGS_KEY = "export.settings";
 const WATERMARK_KEY = "export.watermark";
@@ -14,9 +15,9 @@ const FORMATS: { id: ExportFormat; label: string }[] = [
 
 const SIZES: { edge: number | null; label: string }[] = [
   { edge: null, label: "Full size" },
-  { edge: 4096, label: "Large (4096 px)" },
-  { edge: 2048, label: "Medium (2048 px)" },
-  { edge: 1080, label: "Small (1080 px)" },
+  { edge: 4096, label: "Large" },
+  { edge: 2048, label: "Medium" },
+  { edge: 1080, label: "Small" },
 ];
 
 const POSITIONS: { id: WatermarkPosition; label: string }[] = [
@@ -147,194 +148,218 @@ export function ExportPanel({ count, previewId, onExport }: Props) {
     if (typeof logo === "string") setMark({ logo });
   };
 
+  const size = SIZES.find((s) => s.edge === options.maxEdge) ?? SIZES[0];
+  const photos = `${count.toLocaleString()} ${count === 1 ? "photo" : "photos"}`;
+
   return (
-    <div className="filter-panel export-panel">
-      <div className="export-column">
-        <section>
-          <h4>Format</h4>
-          <div className="segmented">
-            {FORMATS.map((f) => (
-              <button key={f.id} className={options.format === f.id ? "on" : ""} onClick={() => set({ format: f.id })}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-          {options.format === "original" && <p className="muted small">HEIC and other formats become JPEG.</p>}
-        </section>
+    <div className="export-panel">
+      <header className="panel-head">
+        <h3>Export {photos}</h3>
+        <p className="muted small">Copies go to a folder you choose. The originals are not changed.</p>
+      </header>
 
-        {lossy && (
+      <div className="export-body">
+        <div className="export-column">
           <section>
-            <h4>Quality: {options.quality}</h4>
-            <input
-              type="range"
-              min={40}
-              max={100}
-              value={options.quality}
-              onChange={(e) => set({ quality: Number(e.target.value) })}
-              aria-label="Quality"
-            />
-            <p className="muted small">Lower is smaller. 80–90 looks the same as the original for most photos.</p>
-          </section>
-        )}
-
-        <section>
-          <h4>Size</h4>
-          <ul className="check-list">
-            {SIZES.map((s) => (
-              <li key={s.label}>
-                <label>
-                  <input type="radio" checked={options.maxEdge === s.edge} onChange={() => set({ maxEdge: s.edge })} />
-                  <span className="link-label">{s.label}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {canEnlarge && (
-          <section>
-            <h4>Enlarge (AI)</h4>
+            <h4>Format</h4>
             <div className="segmented">
-              {([null, 2, 4] as const).map((f) => (
-                <button key={f ?? 0} className={enlarge === f ? "on" : ""} onClick={() => set({ enlarge: f })}>
-                  {f === null ? "Off" : `${f}×`}
+              {FORMATS.map((f) => (
+                <button key={f.id} className={options.format === f.id ? "on" : ""} onClick={() => set({ format: f.id })}>
+                  {f.label}
                 </button>
               ))}
             </div>
-            {enlarge !== null && (
-              <p className="muted small">
-                Photos up to 2048 px are enlarged with added detail, each taking from a few seconds to a minute or two.
-                Bigger ones are exported as they are.
-              </p>
-            )}
+            {options.format === "original" && <p className="hint">HEIC and other formats become JPEG.</p>}
           </section>
-        )}
 
-        <section>
-          <h4>Privacy</h4>
-          <label className="organize-layout">
-            <input
-              type="checkbox"
-              checked={options.removeLocation}
-              onChange={(e) => set({ removeLocation: e.target.checked })}
-            />
-            <span>Remove location</span>
-          </label>
-          <p className="muted small">Date and camera are always kept.</p>
-        </section>
-
-        <section>
-          <h4>Save to</h4>
-          <button onClick={chooseFolder}>{options.folder ? "Change folder…" : "Choose folder…"}</button>
-          {options.folder && (
-            <p className="muted small file-path" title={options.folder}>
-              {options.folder}
-            </p>
-          )}
-        </section>
-      </div>
-
-      <div className="export-column">
-        <section>
-          <h4>Watermark</h4>
-          <label className="organize-layout">
-            <input
-              type="checkbox"
-              checked={marking.on}
-              onChange={(e) => setMarking((m) => ({ ...m, on: e.target.checked }))}
-            />
-            <span>Add a watermark</span>
-          </label>
-        </section>
-
-        {marking.on && (
-          <>
+          {lossy && (
             <section>
-              {mark.logo === null ? (
-                <>
-                  <input
-                    type="text"
-                    className="watermark-text"
-                    placeholder="© Your name 2026"
-                    value={mark.text}
-                    onChange={(e) => setMark({ text: e.target.value })}
-                    aria-label="Watermark text"
-                  />
-                  <button onClick={chooseLogo}>Use a logo instead…</button>
-                </>
-              ) : (
-                <>
-                  <p className="small file-path" title={mark.logo}>
-                    Logo: {fileName(mark.logo)}
-                  </p>
-                  <div className="segmented">
-                    <button onClick={chooseLogo}>Change logo…</button>
-                    <button onClick={() => setMark({ logo: null })}>Use text instead</button>
-                  </div>
-                </>
-              )}
+              <div className="field-head">
+                <h4>Quality</h4>
+                <span className="field-value">{options.quality}</span>
+              </div>
+              <input
+                type="range"
+                min={40}
+                max={100}
+                value={options.quality}
+                onChange={(e) => set({ quality: Number(e.target.value) })}
+                aria-label="Quality"
+              />
+              <p className="hint">Lower is smaller. 80–90 looks the same as the original for most photos.</p>
             </section>
+          )}
 
+          <section>
+            <h4>Size</h4>
+            <div className="segmented">
+              {SIZES.map((s) => (
+                <button key={s.label} className={options.maxEdge === s.edge ? "on" : ""} onClick={() => set({ maxEdge: s.edge })}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <p className="hint">{size.edge === null ? "Each photo keeps its size." : `Longest side ${size.edge} px at most.`}</p>
+          </section>
+
+          {canEnlarge && (
             <section>
-              <h4>Position</h4>
+              <h4>Enlarge (AI)</h4>
               <div className="segmented">
-                {POSITIONS.map((p) => (
-                  <button
-                    key={p.id}
-                    className={mark.position === p.id ? "on" : ""}
-                    onClick={() => setMark({ position: p.id })}
-                  >
-                    {p.label}
+                {([null, 2, 4] as const).map((f) => (
+                  <button key={f ?? 0} className={enlarge === f ? "on" : ""} onClick={() => set({ enlarge: f })}>
+                    {f === null ? "Off" : `${f}×`}
                   </button>
                 ))}
               </div>
+              {enlarge !== null && (
+                <p className="hint">
+                  Photos up to 2048 px are enlarged with added detail, each taking from a few seconds to a minute or
+                  two. Bigger ones are exported as they are.
+                </p>
+              )}
             </section>
+          )}
 
-            <section>
-              <h4>Size: {mark.size}%</h4>
+          <section>
+            <h4>Privacy</h4>
+            <label className="switch">
               <input
-                type="range"
-                min={2}
-                max={20}
-                value={mark.size}
-                onChange={(e) => setMark({ size: Number(e.target.value) })}
-                aria-label="Watermark size"
+                type="checkbox"
+                checked={options.removeLocation}
+                onChange={(e) => set({ removeLocation: e.target.checked })}
               />
-              <h4>Opacity: {mark.opacity}%</h4>
-              <input
-                type="range"
-                min={10}
-                max={100}
-                step={5}
-                value={mark.opacity}
-                onChange={(e) => setMark({ opacity: Number(e.target.value) })}
-                aria-label="Watermark opacity"
-              />
-            </section>
+              <span className="switch-track" aria-hidden="true" />
+              <span>Remove location</span>
+            </label>
+            <p className="hint">Date and camera are always kept.</p>
+          </section>
+        </div>
 
-            {hasMark && (
-              <section className="watermark-preview">
-                {preview.error ? (
-                  <p className="muted small">No preview: {preview.error}</p>
+        <div className="export-column">
+          <section>
+            <h4>Watermark</h4>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={marking.on}
+                onChange={(e) => setMarking((m) => ({ ...m, on: e.target.checked }))}
+              />
+              <span className="switch-track" aria-hidden="true" />
+              <span>Add a watermark</span>
+            </label>
+            {!marking.on && <p className="hint">Your name or logo on every copy.</p>}
+          </section>
+
+          {marking.on && (
+            <>
+              <section>
+                {mark.logo === null ? (
+                  <>
+                    <input
+                      type="text"
+                      className="watermark-text"
+                      placeholder="© Your name 2026"
+                      value={mark.text}
+                      onChange={(e) => setMark({ text: e.target.value })}
+                      aria-label="Watermark text"
+                    />
+                    <button className="link small" onClick={chooseLogo}>
+                      Use a logo instead…
+                    </button>
+                  </>
                 ) : (
-                  preview.url && <img src={preview.url} alt="Watermark on the first selected photo" />
+                  <>
+                    <p className="small file-path" title={mark.logo}>
+                      Logo: {fileName(mark.logo)}
+                    </p>
+                    <div className="inline-actions">
+                      <button className="link small" onClick={chooseLogo}>
+                        Change logo…
+                      </button>
+                      <button className="link small" onClick={() => setMark({ logo: null })}>
+                        Use text instead
+                      </button>
+                    </div>
+                  </>
                 )}
               </section>
-            )}
-          </>
-        )}
+
+              <section>
+                <h4>Position</h4>
+                <div className="segmented">
+                  {POSITIONS.map((p) => (
+                    <button
+                      key={p.id}
+                      className={mark.position === p.id ? "on" : ""}
+                      onClick={() => setMark({ position: p.id })}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <div className="field-head">
+                  <h4>Size</h4>
+                  <span className="field-value">{mark.size}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={2}
+                  max={20}
+                  value={mark.size}
+                  onChange={(e) => setMark({ size: Number(e.target.value) })}
+                  aria-label="Watermark size"
+                />
+                <div className="field-head">
+                  <h4>Opacity</h4>
+                  <span className="field-value">{mark.opacity}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={10}
+                  max={100}
+                  step={5}
+                  value={mark.opacity}
+                  onChange={(e) => setMark({ opacity: Number(e.target.value) })}
+                  aria-label="Watermark opacity"
+                />
+              </section>
+
+              {hasMark && (
+                <section className="watermark-preview">
+                  {preview.error ? (
+                    <p className="hint">No preview: {preview.error}</p>
+                  ) : (
+                    preview.url && <img src={preview.url} alt="Watermark on the first selected photo" />
+                  )}
+                </section>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      <button
-        className="primary export-go"
-        disabled={!options.folder}
-        onClick={() => {
-          saveSettings(options, marking);
-          onExport({ ...options, enlarge, watermark: hasMark ? mark : null });
-        }}
-      >
-        Export {count.toLocaleString()} {count === 1 ? "photo" : "photos"}
-      </button>
+      <footer className="export-foot">
+        <button className="folder-button" onClick={chooseFolder} title={options.folder || undefined}>
+          <Icon name="folder" />
+          <span className="link-label">{options.folder ? fileName(options.folder) : "Choose a folder…"}</span>
+        </button>
+        <div className="spacer" />
+        <button
+          className="primary"
+          disabled={!options.folder}
+          title={options.folder ? undefined : "Choose a folder first"}
+          onClick={() => {
+            saveSettings(options, marking);
+            onExport({ ...options, enlarge, watermark: hasMark ? mark : null });
+          }}
+        >
+          Export {photos}
+        </button>
+      </footer>
     </div>
   );
 }

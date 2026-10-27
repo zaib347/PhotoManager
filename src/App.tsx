@@ -1,5 +1,5 @@
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "./ui/confirm";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
@@ -35,8 +35,10 @@ import { PlacesPage } from "./places/PlacesPage";
 import { MapPage } from "./map/MapPage";
 import { AiPage } from "./ai/AiPage";
 import { SearchBox } from "./ai/SearchBox";
+import { NoPeopleBar } from "./people/NoPeopleBar";
 import { PeoplePage } from "./people/PeoplePage";
 import { TripsPage } from "./trips/TripsPage";
+import { ThemePicker } from "./ui/ThemePicker";
 import "./App.css";
 
 /** How often the timeline refreshes while a scan is adding photos. */
@@ -57,6 +59,10 @@ function emptyState(view: View): { title: string; hint: string } {
     favorites: { title: "No favorites yet", hint: "Press F in the viewer, or select photos and choose Favorite." },
     videos: { title: "No videos", hint: "Videos in your folders will appear here." },
     hidden: { title: "Nothing hidden", hint: "Hidden photos stay in your folders but leave the timeline." },
+    nopeople: {
+      title: "No photos without people yet",
+      hint: "People looks at your photos in the background; those with no faces in them appear here.",
+    },
     events: { title: "", hint: "" },
     trips: { title: "", hint: "" },
     places: { title: "", hint: "" },
@@ -111,6 +117,11 @@ export default function App() {
     if (keyRef.current === currentKey) setLoaded({ key: currentKey, layout });
   }, []);
 
+  // The splash in index.html covers startup until the library's first numbers arrive.
+  useEffect(() => {
+    if (stats) window.hideSplash?.();
+  }, [stats]);
+
   const reloadCollections = useCallback(async () => {
     const [a, t] = await Promise.all([api.listAlbums(), api.listTags()]);
     setAlbums(a);
@@ -150,6 +161,7 @@ export default function App() {
       }),
       events.aiIndexProgress((p) => setAi((s) => (s ? { ...s, progress: p, indexing: true } : s))),
       events.aiIndexFinished(reloadAi),
+      events.aiIndexPaused((paused) => setAi((s) => (s ? { ...s, paused } : s))),
       events.aiPeopleChanged(() => setPeopleVersion((v) => v + 1)),
     ];
     return () => unlisten.forEach((p) => p.then((off) => off()));
@@ -285,9 +297,9 @@ export default function App() {
       return "Test data cleared";
     });
 
-  const addRoot = (path: string) =>
+  const addRoot = (path: string, excluded: string[]) =>
     api
-      .addRoot(path)
+      .addRoot(path, excluded)
       .then(reloadRoots)
       .catch((e) => setNotice(String(e)));
 
@@ -312,8 +324,7 @@ export default function App() {
     <CollectionsContext.Provider value={collections}>
     <div className="app">
       <header className="toolbar">
-        <strong>PhotoManager</strong>
-        <span className="muted">
+        <span className="muted small">
           {stats ? `${stats.assets.toLocaleString()} items · ${stats.days.toLocaleString()} days` : "Loading…"}
         </span>
         <div className="spacer" />
@@ -345,6 +356,7 @@ export default function App() {
             </button>
           </span>
         )}
+        <ThemePicker />
         <details className="dev-menu">
           <summary className="muted">Test data</summary>
           <div className="dev-menu-items">
@@ -381,6 +393,15 @@ export default function App() {
         />
         <main className="content">
           {!busy && !isPage(view) && stats && stats.assets > 0 && <FilterBar filter={filter} roots={roots} onChange={setFilter} />}
+          {!busy && view === "nopeople" && (
+            <NoPeopleBar
+              things={searchReady ? things : []}
+              filter={filter}
+              onFilter={setFilter}
+              progress={ai?.progress.people ?? null}
+              onError={report}
+            />
+          )}
           {busy ? (
             <div className="empty">{busy}</div>
           ) : view === "events" ? (
@@ -501,6 +522,7 @@ function describeFinished({ summary: s, error }: ScanFinished) {
   const parts = [`${s.added.toLocaleString()} new`, `${s.updated.toLocaleString()} changed`];
   if (s.missing) parts.push(`${s.missing.toLocaleString()} no longer found`);
   if (s.errors) parts.push(`${s.errors.toLocaleString()} unreadable`);
+  if (s.skipped) parts.push(`${s.skipped.toLocaleString()} left out by your scan settings`);
   const skipped = s.missingCheckSkipped ? " Some folders couldn't be read, so nothing was marked as missing." : "";
   return `Scan complete: ${parts.join(", ")}.${skipped}`;
 }

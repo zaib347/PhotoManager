@@ -2,25 +2,45 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { api, thumbUrl, viewKey, type BuiltinView, type RootInfo, type ScanProgress, type View } from "../api";
 import { useCollections } from "../collections/context";
+import { Icon, type IconName } from "../ui/Icon";
 import { Popover } from "../ui/Popover";
 import { ImportPanel } from "./ImportPanel";
+import { ScanSection, ScanSettings } from "./ScanSettings";
 import { XmpSettings } from "./XmpSettings";
 
-const VIEWS: { id: BuiltinView; label: string }[] = [
-  { id: "all", label: "Photos" },
-  { id: "events", label: "Events" },
-  { id: "trips", label: "Trips" },
-  { id: "places", label: "Places" },
-  { id: "map", label: "Map" },
-  { id: "people", label: "People" },
-  { id: "favorites", label: "Favorites" },
-  { id: "videos", label: "Videos" },
-  { id: "hidden", label: "Hidden" },
-  { id: "duplicates", label: "Duplicates" },
-  { id: "similar", label: "Similar photos" },
-  { id: "organize", label: "Organize files" },
-  { id: "removed", label: "Recently removed" },
-  { id: "ai", label: "AI features" },
+type ViewLink = { id: BuiltinView; label: string; icon: IconName };
+
+const SECTIONS: { title: string; views: ViewLink[] }[] = [
+  {
+    title: "Library",
+    views: [
+      { id: "all", label: "Photos", icon: "photos" },
+      { id: "favorites", label: "Favorites", icon: "heart" },
+      { id: "videos", label: "Videos", icon: "video" },
+      { id: "people", label: "People", icon: "people" },
+      { id: "nopeople", label: "No people", icon: "mountain" },
+      { id: "hidden", label: "Hidden", icon: "eyeOff" },
+    ],
+  },
+  {
+    title: "Memories",
+    views: [
+      { id: "events", label: "Events", icon: "calendar" },
+      { id: "trips", label: "Trips", icon: "trip" },
+      { id: "places", label: "Places", icon: "pin" },
+      { id: "map", label: "Map", icon: "map" },
+    ],
+  },
+  {
+    title: "Clean up",
+    views: [
+      { id: "duplicates", label: "Duplicates", icon: "copy" },
+      { id: "similar", label: "Similar photos", icon: "layers" },
+      { id: "organize", label: "Organize files", icon: "folder" },
+      { id: "removed", label: "Recently removed", icon: "trash" },
+    ],
+  },
+  { title: "Smart", views: [{ id: "ai", label: "AI features", icon: "sparkles" }] },
 ];
 
 type Props = {
@@ -28,7 +48,8 @@ type Props = {
   onView: (view: View) => void;
   roots: RootInfo[];
   progress: Map<number, ScanProgress>;
-  onAdd: (path: string) => void;
+  /** Adds a folder (with folders inside it left out) and scans it. */
+  onAdd: (path: string, excluded: string[]) => void;
   onRescan: (rootId: number) => void;
   onCancel: (rootId: number) => void;
   onRemove: (root: RootInfo) => void;
@@ -61,6 +82,8 @@ export function LibraryPanel({
 }: Props) {
   const { albums, tags, reload } = useCollections();
   const [newAlbum, setNewAlbum] = useState<string | null>(null);
+  // A folder picked to add, while its scan settings are shown.
+  const [adding, setAdding] = useState<string | null>(null);
   const current = viewKey(view);
 
   const createAlbum = async () => {
@@ -74,28 +97,37 @@ export function LibraryPanel({
 
   const pickFolder = async () => {
     const path = await open({ directory: true, multiple: false, title: "Add a folder to your library" });
-    if (typeof path === "string") onAdd(path);
+    // Scanned once its settings are confirmed.
+    if (typeof path === "string") setAdding(path);
   };
 
   return (
     <aside className="sidebar">
-      <nav className="views" aria-label="Library">
-        {VIEWS.filter((v) => v.id !== "people" || people).map((v) => (
-          <button
-            key={v.id}
-            className={`view-link${v.id === current ? " active" : ""}`}
-            aria-current={v.id === current ? "page" : undefined}
-            onClick={() => onView(v.id)}
-          >
-            {v.label}
-          </button>
-        ))}
-      </nav>
+      {SECTIONS.map((section) => (
+        <nav key={section.title} className="views" aria-label={section.title}>
+          <div className="sidebar-title">
+            <span>{section.title}</span>
+          </div>
+          {section.views
+            .filter((v) => (v.id !== "people" && v.id !== "nopeople") || people)
+            .map((v) => (
+              <button
+                key={v.id}
+                className={`view-link${v.id === current ? " active" : ""}`}
+                aria-current={v.id === current ? "page" : undefined}
+                onClick={() => onView(v.id)}
+              >
+                <Icon name={v.icon} />
+                <span className="link-label">{v.label}</span>
+              </button>
+            ))}
+        </nav>
+      ))}
 
       <div className="sidebar-title">
         <span>Albums</span>
-        <button className="ghost" onClick={() => setNewAlbum("")} title="New album">
-          +
+        <button className="icon-button" onClick={() => setNewAlbum("")} title="New album">
+          <Icon name="plus" size={14} />
         </button>
       </div>
       {newAlbum !== null && (
@@ -125,7 +157,9 @@ export function LibraryPanel({
               {a.coverAssetId !== null ? (
                 <img className="album-cover" src={thumbUrl(a.coverAssetId)} alt="" />
               ) : (
-                <span className="album-cover" />
+                <span className="album-cover">
+                  <Icon name="album" size={14} />
+                </span>
               )}
               <span className="link-label">{a.name}</span>
               <span className="muted count">{a.count.toLocaleString()}</span>
@@ -145,6 +179,7 @@ export function LibraryPanel({
           <nav className="views" aria-label="Things">
             {things.map(([name, description]) => (
               <button key={name} className="view-link" onClick={() => onThing(name, description)}>
+                <Icon name="sparkles" />
                 <span className="link-label">{name}</span>
               </button>
             ))}
@@ -167,7 +202,8 @@ export function LibraryPanel({
                   aria-current={active ? "page" : undefined}
                   onClick={() => onView({ tag: t.id })}
                 >
-                  <span className="link-label"># {t.name}</span>
+                  <Icon name="tag" />
+                  <span className="link-label">{t.name}</span>
                   <span className="muted count">{t.count.toLocaleString()}</span>
                 </button>
               );
@@ -178,11 +214,17 @@ export function LibraryPanel({
 
       <div className="sidebar-title">
         <span>Folders</span>
-        <button onClick={pickFolder}>Add folder</button>
+        <button className="icon-button" onClick={pickFolder} title="Add folder">
+          <Icon name="plus" size={14} />
+        </button>
       </div>
       {roots.length === 0 && (
         <p className="muted sidebar-hint">
           Add the folders or drives that hold your photos. Files stay where they are.
+          <button className="primary sidebar-add" onClick={pickFolder}>
+            <Icon name="plus" size={14} />
+            Add folder
+          </button>
         </p>
       )}
       <ul className="roots">
@@ -212,7 +254,7 @@ export function LibraryPanel({
                     Rescan
                   </button>
                   <button onClick={() => onRemove(root)}>Remove</button>
-                  <Popover label="Import…" title="Google Takeout or iCloud export">
+                  <Popover label="Import…" title="Google Takeout or iCloud export" buttonClass="ghost">
                     {() => (
                       <ImportPanel rootId={root.id} onChanged={onImported} onNotice={onNotice} onError={onError} />
                     )}
@@ -228,9 +270,23 @@ export function LibraryPanel({
       </ul>
 
       <div className="sidebar-title">
+        <span>Scanning</span>
+      </div>
+      <ScanSection roots={roots} onError={onError} />
+
+      <div className="sidebar-title">
         <span>Sidecars</span>
       </div>
       <XmpSettings onError={onError} />
+      {adding !== null && (
+        <ScanSettings
+          target={{ kind: "add", path: adding }}
+          roots={roots}
+          onStart={onAdd}
+          onClose={() => setAdding(null)}
+          onError={onError}
+        />
+      )}
     </aside>
   );
 }

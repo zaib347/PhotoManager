@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PhotoManager: every photo you own, in one calm timeline</title>
+    <meta
+      name="description"
+      content="PhotoManager brings the photos and videos scattered across your drives into one fast timeline, on your own computer. Memories, clean-up, editing and optional on-device AI. Your files stay where they are."
+    />
+    <meta name="theme-color" content="#0e1014" />
+    <link rel="icon" href="assets/mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="nav" id="nav">
+      <a class="brand" href="#top" aria-label="PhotoManager home">
+        <img src="assets/mark.svg" alt="" width="28" height="28" />
+        <span>PhotoManager</span>
+      </a>
+      <nav aria-label="Sections">
+        <a href="#how">How it works</a>
+        <a href="#memories">Memories</a>
+        <a href="#cleanup">Clean up</a>
+        <a href="#ai">AI</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <a class="btn btn-small" href="#get">Get the beta</a>
+    </header>
+
+    <main id="main">
+      <!-- 1. Hero: a messy pile of photos settles into a timeline as you scroll. -->
+      <section class="hero" id="top">
+        <div class="hero-sticky">
+          <div class="hero-copy">
+            <p class="eyebrow"><span class="dot"></span> Windows beta · runs on your computer</p>
+            <h1>
+              Every photo you own.<br />
+              <span class="grad">One calm timeline.</span>
+            </h1>
+            <p class="lede">
+              Your photos are spread over phones, old backups, USB drives and download folders. PhotoManager reads them
+              <em>where they are</em> and lays them out by day: fast, private, and without moving a single file.
+            </p>
+            <div class="hero-actions">
+              <a class="btn" href="#get">Get the beta</a>
+              <a class="btn btn-ghost" href="#how">See how it works</a>
+            </div>
+            <p class="hero-caption" aria-live="polite">
+              <span class="cap cap-a">Scroll: watch the mess become a timeline ↓</span>
+              <span class="cap cap-b">Read in place, sorted by the day they were taken.</span>
+            </p>
+          </div>
+          <div class="stage-wrap">
+            <div class="stage" id="stage" aria-hidden="true"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Numbers -->
+      <section class="facts reveal" aria-label="At a glance">
+        <div class="fact">
+          <strong data-count="1000000">0</strong>
+          <span>photos in one library, tested for speed</span>
+        </div>
+        <div class="fact">
+          <strong data-count="0">0</strong>
+          <span>photos uploaded anywhere, ever</span>
+        </div>
+        <div class="fact">
+          <strong data-count="29">0</strong>
+          <span>photo, RAW and video file types</span>
+        </div>
+        <div class="fact">
+          <strong data-count="1">0</strong>
+          <span>click puts removed photos back</span>
+        </div>
+      </section>
+
+      <!-- 3. How it works -->
+      <section class="how" id="how">
+        <header class="section-head reveal">
+          <p class="eyebrow">How it works</p>
+          <h2>Three steps, and the first one is the only work you do.</h2>
+        </header>
+        <div class="how-grid">
+          <ol class="steps reveal">
+            <li data-step="0">
+              <span class="num">1</span>
+              <div>
+                <h3>Add your folders</h3>
+                <p>
+                  Point it at the folders or whole drives that hold your photos. Before the first scan you choose what to
+                  skip: tiny icons and stickers, screenshots, short clips, or whole folders.
+                </p>
+              </div>
+            </li>
+            <li data-step="1">
+              <span class="num">2</span>
+              <div>
+                <h3>It reads everything, in the background</h3>
+                <p>
+                  Dates, cameras and places come from each photo itself (EXIF, file names, Google and iCloud exports).
+                  Copies of the same photo are spotted on the way. You can browse while it works.
+                </p>
+              </div>
+            </li>
+            <li data-step="2">
+              <span class="num">3</span>
+              <div>
+                <h3>Browse years in seconds</h3>
+                <p>
+                  One timeline, day by day, with your days grouped into events and trips. Unplug a drive and its photos
+                  wait for it; plug it back in, even as another drive letter, and they're back.
+                </p>
+              </div>
+            </li>
+          </ol>
+          <div class="window scan-demo reveal" id="scanDemo" aria-hidden="true">
+            <div class="window-bar"><i></i><i></i><i></i><span>PhotoManager</span></div>
+            <div class="window-body">
+              <aside class="mini-side">
+                <b>Folders</b>
+                <div class="folder f1"><span class="led"></span>D:\Camera <small>2016–2025</small></div>
+                <div class="folder f2"><span class="led"></span>E:\Phone backup <small>USB drive</small></div>
+                <div class="folder f3"><span class="led"></span>Downloads <small>WhatsApp, email</small></div>
+              </aside>
+              <div class="mini-main">
+                <div class="scan-status">
+                  <span class="scan-label">Ready to scan</span>
+                  <div class="bar"><i></i></div>
+                </div>
+                <ul class="scan-found">
+                  <li><span>Photos and videos</span><b data-to="48213">0</b></li>
+                  <li><span>Dates read</span><b data-to="48107">0</b></li>
+                  <li><span>Places named</span><b data-to="31642">0</b></li>
+                  <li><span>Events found</span><b data-to="612">0</b></li>
+                  <li><span>Copies spotted</span><b data-to="2381">0</b></li>
+                </ul>
+                <div class="mini-grid"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Timeline -->
+      <section class="chapter" id="timeline">
+        <div class="chapter-copy reveal">
+          <p class="eyebrow">The timeline</p>
+          <h2>Built for libraries that never stopped growing.</h2>
+          <p>
+            Most photo apps slow down after a few thousand pictures. PhotoManager was designed and measured with a
+            <strong>million</strong>: the timeline is laid out from precomputed days, thumbnails are cached, and the
+            heavy work runs in the background.
+          </p>
+          <ul class="ticks">
+            <li>Jump to any year from the scroll bar</li>
+            <li>Filter by camera, place, country, folder, rating or date range</li>
+            <li>Favorites, ratings, tags, albums and hidden photos</li>
+            <li>Live Photos kept together; RAW files and videos in the same timeline</li>
+          </ul>
+        </div>
+        <div class="window tl-demo reveal" aria-hidden="true">
+          <div class="window-bar"><i></i><i></i><i></i><span>Photos</span></div>
+          <div class="tl-body">
+            <div class="tl-scroll" id="tlScroll"></div>
+            <div class="tl-years"><span>2025</span><span>2023</span><span>2021</span><span>2019</span><span>2016</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Memories -->
+      <section class="chapter flip" id="memories">
+        <div class="chapter-copy reveal">
+          <p class="eyebrow">Memories</p>
+          <h2>Your days, already sorted into stories.</h2>
+          <p>
+            Photos taken close together become <strong>events</strong>. Days away from home become <strong>trips</strong>,
+            named after the towns you visited. Every located photo lands on a detailed <strong>world map</strong> that
+            works without an internet connection.
+          </p>
+          <ul class="ticks">
+            <li>Rename, merge or split events; your edits stick</li>
+            <li>Every town over 15,000 people, in every country, built in</li>
+            <li>Put photos without GPS on the map by hand, or remove a wrong location</li>
+            <li>On This Day, slideshows of any event or trip</li>
+          </ul>
+        </div>
+        <div class="mem-demo reveal" aria-hidden="true">
+          <div class="map">
+            <svg viewBox="0 0 400 260" class="map-lines" preserveAspectRatio="none">
+              <path d="M10 70 C80 40 120 90 190 60 S320 30 390 70" />
+              <path d="M10 120 C70 100 140 150 210 120 S330 90 390 130" />
+              <path d="M10 175 C90 150 150 205 230 175 S340 150 390 185" />
+              <path d="M10 225 C80 205 160 245 240 222 S350 205 390 232" />
+            </svg>
+            <span class="pin p1" style="--x: 22%; --y: 34%"><b>Lahore</b></span>
+            <span class="pin p2" style="--x: 30%; --y: 22%"><b>Islamabad</b></span>
+            <span class="pin p3" style="--x: 41%; --y: 12%"><b>Hunza</b></span>
+            <span class="pin p4" style="--x: 68%; --y: 48%"><b>Dubai</b></span>
+            <span class="pin p5" style="--x: 84%; --y: 30%"><b>London</b></span>
+            <span class="cluster" style="--x: 30%; --y: 24%">1,284</span>
+          </div>
+          <div class="mem-cards">
+            <article class="mem-card c1">
+              <div class="mem-thumbs"><i class="ph s-snow"></i><i class="ph s-forest"></i><i class="ph s-sea"></i></div>
+              <div><b>Trip to Hunza and Skardu</b><span>6 days · 3 towns · 214 photos</span></div>
+            </article>
+            <article class="mem-card c2">
+              <div class="mem-thumbs"><i class="ph s-dusk"></i><i class="ph s-sunset"></i><i class="ph s-night"></i></div>
+              <div><b>Birthday at home</b><span>Saturday evening · 46 photos</span></div>
+            </article>
+            <article class="mem-card c3">
+              <div class="mem-thumbs"><i class="ph s-beach"></i><i class="ph s-sea"></i><i class="ph s-desert"></i></div>
+              <div><b>One year ago today</b><span>On This Day · 12 photos</span></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Clean up -->
+      <section class="chapter" id="cleanup">
+        <div class="chapter-copy reveal">
+          <p class="eyebrow">Clean up, safely</p>
+          <h2>Free up gigabytes without ever losing a photo.</h2>
+          <p>
+            <strong>Duplicates</strong> finds exact copies across all your drives, even with different names.
+            <strong>Similar photos</strong> groups bursts and near-identical shots and suggests the best one to keep.
+          </p>
+          <p>
+            Nothing is deleted outright. Removed photos wait in a hidden folder on the same drive, and
+            <strong>Recently removed</strong> puts them back with one click. The Recycle Bin only gets them when you say so.
+          </p>
+          <ul class="ticks">
+            <li>Organize files into folders by date, with a preview first</li>
+            <li>Rename by pattern: date, place, counter</li>
+            <li>Every move and rename is journaled and can be undone</li>
+          </ul>
+        </div>
+        <div class="clean-demo reveal" aria-hidden="true">
+          <div class="clean-row dupes">
+            <span class="clean-label">Duplicates</span>
+            <div class="dupe-pair">
+              <div class="tile keep"><i class="ph s-sunset"></i><em>IMG_2041.jpg</em></div>
+              <div class="tile copy"><i class="ph s-sunset"></i><em>IMG_2041 (1).jpg</em></div>
+            </div>
+            <div class="trash">
+              <span>Recently removed</span>
+              <b class="undo">Undo</b>
+            </div>
+          </div>
+          <div class="clean-row similar">
+            <span class="clean-label">Similar photos</span>
+            <div class="burst">
+              <i class="ph s-meadow blur1"></i>
+              <i class="ph s-meadow best"><span class="star">★ Keep</span></i>
+              <i class="ph s-meadow blur2"></i>
+              <i class="ph s-meadow blur3"></i>
+            </div>
+          </div>
+          <div class="saved"><b data-count="38.6" data-decimals="1">0</b> GB free again</div>
+        </div>
+      </section>
+
+      <!-- 7. Edit and create -->
+      <section class="create" id="create">
+        <header class="section-head reveal">
+          <p class="eyebrow">Edit and create</p>
+          <h2>Make them look right. Then make something with them.</h2>
+          <p class="sub">Edits are a recipe kept beside the photo. Your original file is never rewritten.</p>
+        </header>
+        <div class="create-grid">
+          <figure class="card reveal">
+            <div class="compare" id="compare">
+              <div class="compare-img ph s-dusk"></div>
+              <div class="compare-img ph s-dusk edited" id="compareAfter"></div>
+              <div class="compare-handle" id="compareHandle" role="slider" tabindex="0" aria-label="Before and after"
+                aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
+              <span class="tag left">Before</span><span class="tag right">After</span>
+            </div>
+            <figcaption>
+              <b>Editor</b> Light, colour, crop, straighten, sharpen. Copy one photo's look and paste it on a hundred.
+            </figcaption>
+          </figure>
+          <figure class="card reveal">
+            <div class="collage" id="collage" data-layout="grid">
+              <i class="ph s-sea"></i><i class="ph s-sunset"></i><i class="ph s-forest"></i>
+              <i class="ph s-snow"></i><i class="ph s-city"></i>
+            </div>
+            <figcaption>
+              <b>Collage and print</b> <span id="collageName">Grid</span>, Mosaic, Feature or Strips, for social posts
+              or prints at 300 dpi.
+            </figcaption>
+          </figure>
+          <figure class="card reveal">
+            <div class="show">
+              <i class="ph s-sunset"></i><i class="ph s-sea"></i><i class="ph s-night"></i>
+              <div class="show-bar"><span>▶</span><i></i><em>♪ your music</em></div>
+            </div>
+            <figcaption>
+              <b>Slideshow and video</b> Gentle pans and fades, the best shot of each burst, saved as a 1080p MP4 with
+              your music.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- 8. AI -->
+      <section class="ai" id="ai">
+        <header class="section-head reveal">
+          <p class="eyebrow">Optional AI pack</p>
+          <h2>Smart when you ask for it. Off until you do.</h2>
+          <p class="sub">
+            Each feature is a separate download you install from the app, and it runs on your own computer. No account,
+            no cloud, and removing a feature deletes everything it made.
+          </p>
+        </header>
+        <div class="ai-wrap reveal">
+          <div class="ai-tabs" role="tablist" aria-label="AI features">
+            <button role="tab" class="ai-tab on" data-ai="search" aria-selected="true">
+              <b>Search by description</b><span>“beach at sunset”, “dog”, “receipt”</span><em>~167 MB</em>
+            </button>
+            <button role="tab" class="ai-tab" data-ai="people" aria-selected="false">
+              <b>People</b><span>Faces grouped into people you can name</span><em>~39 MB</em>
+            </button>
+            <button role="tab" class="ai-tab" data-ai="text" aria-selected="false">
+              <b>Text in photos</b><span>Find screenshots and receipts by their words</span><em>No download</em>
+            </button>
+            <button role="tab" class="ai-tab" data-ai="upscale" aria-selected="false">
+              <b>Upscale</b><span>Enlarge small or old photos 2× or 4×</span><em>~4.5 MB</em>
+            </button>
+          </div>
+          <div class="ai-stage window" aria-hidden="true">
+            <div class="window-bar"><i></i><i></i><i></i><span id="aiTitle">Search</span></div>
+            <div class="ai-panel on" data-panel="search">
+              <div class="search-box"><span id="typed"></span><i class="caret"></i></div>
+              <div class="search-grid" id="searchGrid"></div>
+            </div>
+            <div class="ai-panel" data-panel="people">
+              <div class="faces" id="faces"></div>
+              <p class="panel-note">Faces never leave the library on your computer.</p>
+            </div>
+            <div class="ai-panel" data-panel="text">
+              <div class="receipt">
+                <div class="scanline"></div>
+                <p>CITY BAKERY</p>
+                <p>Chocolate cake ......... 1,800</p>
+                <p>Candles ................. 150</p>
+                <p class="hit">TOTAL ............... 2,450</p>
+                <p>Thank you!</p>
+              </div>
+              <div class="search-box small"><span>total 2450</span></div>
+              <p class="panel-note">Uses Windows' own text reading. Nothing to download.</p>
+            </div>
+            <div class="ai-panel" data-panel="upscale">
+              <div class="upscale">
+                <canvas id="tiny" width="16" height="12"></canvas>
+                <div class="arrow">→</div>
+                <div class="big ph s-sunset"></div>
+              </div>
+              <p class="panel-note">Real-ESRGAN, when you export. Believable detail instead of blur.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9. Privacy -->
+      <section class="privacy" id="privacy">
+        <div class="privacy-inner">
+          <div class="orbit reveal" aria-hidden="true">
+            <div class="pc">
+              <svg viewBox="0 0 64 48"><rect x="4" y="4" width="56" height="34" rx="3" /><path d="M0 44h64" /></svg>
+              <span>Your computer</span>
+            </div>
+            <i class="ph s-sea o1"></i><i class="ph s-sunset o2"></i><i class="ph s-forest o3"></i>
+            <i class="ph s-night o4"></i><i class="ph s-snow o5"></i>
+            <div class="cloud">☁<s></s></div>
+          </div>
+          <div class="privacy-copy reveal">
+            <p class="eyebrow">Private by design</p>
+            <h2>Your photos never leave your computer.</h2>
+            <ul class="promises">
+              <li><b>Files stay where they are.</b> PhotoManager reads your folders; it doesn't copy them into a vault.</li>
+              <li><b>Originals stay original.</b> Edits, rotations and dates are kept in the library, not burned into files.</li>
+              <li><b>Every change can be undone.</b> Moves, renames and removals are journaled first.</li>
+              <li><b>AI stays on this PC.</b> Models download only when you ask, and faces are never uploaded.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 10. Works with -->
+      <section class="works reveal" aria-label="Works with your tools">
+        <h2>Plays well with the tools you already use.</h2>
+        <div class="works-grid">
+          <div>
+            <b>Lightroom · darktable · digiKam</b>
+            <span>Ratings, tags and descriptions read from XMP sidecars, and written back if you like.</span>
+          </div>
+          <div>
+            <b>Google Takeout · iCloud export</b>
+            <span>Dates, places, favorites and albums brought in from the export's own files. Undo any import.</span>
+          </div>
+          <div>
+            <b>Any drive</b>
+            <span>Internal disks and USB drives. Drives are known by identity, not by letter.</span>
+          </div>
+        </div>
+        <div class="marquee" aria-label="Supported formats">
+          <div class="marquee-track" id="formats"></div>
+        </div>
+      </section>
+
+      <!-- 11. Themes -->
+      <section class="themes reveal" id="themes">
+        <div class="themes-copy">
+          <p class="eyebrow">Make it yours</p>
+          <h2>Light, dark, and a few favourites.</h2>
+          <p>Pick a look from the palette in the top bar. Try them here:</p>
+          <div class="swatches" role="group" aria-label="Theme">
+            <button data-t="light" class="on" aria-pressed="true">Light</button>
+            <button data-t="dark" aria-pressed="false">Dark</button>
+            <button data-t="nord" aria-pressed="false">Nord</button>
+            <button data-t="dracula" aria-pressed="false">Dracula</button>
+            <button data-t="atom" aria-pressed="false">Atom</button>
+            <button data-t="solarized" aria-pressed="false">Solarized</button>
+          </div>
+        </div>
+        <div class="app-mock" id="appMock" data-t="light" aria-hidden="true">
+          <div class="am-top"><span>48,213 items · 2,904 days</span><i></i></div>
+          <div class="am-body">
+            <div class="am-side">
+              <b>Library</b><span class="on">Photos</span><span>Favorites</span><span>People</span>
+              <b>Memories</b><span>Events</span><span>Trips</span><span>Map</span>
+            </div>
+            <div class="am-main">
+              <em>Sat, Oct 4, 2025</em>
+              <div class="am-grid" id="amGrid"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 12. FAQ -->
+      <section class="faq" id="faq">
+        <header class="section-head reveal">
+          <p class="eyebrow">Questions</p>
+          <h2>Good to know</h2>
+        </header>
+        <div class="faq-list reveal">
+          <details>
+            <summary>Does PhotoManager upload my photos?</summary>
+            <p>
+              No. It works entirely on your computer. Even the optional AI features run locally; their models are
+              downloaded once, only if you install them.
+            </p>
+          </details>
+          <details>
+            <summary>Will it move or change my files?</summary>
+            <p>
+              Not unless you ask. Browsing, rating, tagging, editing and rotating never touch your files. When you do
+              organize, rename or remove photos, you see a preview first, and every change is journaled so it can be
+              undone.
+            </p>
+          </details>
+          <details>
+            <summary>What happens when I unplug a drive?</summary>
+            <p>
+              Its photos stay in your timeline and are marked offline. Plug it back in, even if Windows gives it a
+              different letter, and they're available again. Nothing is marked missing just because a drive is away.
+            </p>
+          </details>
+          <details>
+            <summary>Do I need the AI features?</summary>
+            <p>
+              No. Everything else works without them, and they're off by default. Each one is a separate download you
+              can remove at any time, which deletes everything it made.
+            </p>
+          </details>
+          <details>
+            <summary>Which photos and videos does it read?</summary>
+            <p>
+              JPEG, HEIC, PNG, WebP, GIF, AVIF and TIFF; RAW files from most cameras (DNG, CR2, CR3, NEF, ARW, ORF, RW2,
+              RAF, SRW, PEF); and MP4, MOV, MKV, AVI, 3GP, MTS and WebM videos.
+            </p>
+          </details>
+          <details>
+            <summary>Mac or Linux?</summary>
+            <p>Windows comes first. macOS and Linux versions are planned once the Windows version is settled.</p>
+          </details>
+          <details>
+            <summary>What will it cost?</summary>
+            <p>Pricing for the full release will be announced before it ships, and there will be a free trial.</p>
+          </details>
+        </div>
+      </section>
+
+      <!-- 13. Get it -->
+      <section class="get" id="get">
+        <div class="get-inner reveal">
+          <div class="get-stack" aria-hidden="true">
+            <i class="ph s-sunset"></i><i class="ph s-sea"></i><i class="ph s-night"></i>
+          </div>
+          <h2>Bring your photos home.</h2>
+          <p>PhotoManager is in beta on Windows (64-bit). Follow the project to hear when new builds are out.</p>
+          <div class="hero-actions center">
+            <a class="btn" href="https://github.com/zaib347/PhotoManager" rel="noopener">Follow on GitHub</a>
+            <a class="btn btn-ghost" href="#how">How it works</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="brand"><img src="assets/mark.svg" alt="" width="22" height="22" /><span>PhotoManager</span></div>
+      <p>
+        Place names from <a href="https://www.geonames.org/" rel="noopener">GeoNames</a> (CC BY 4.0). World map from
+        <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a> (public domain).
+      </p>
+      <p class="muted">© <span id="year"></span> PhotoManager</p>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>

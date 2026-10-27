@@ -2,12 +2,219 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PhotoManager</title>
+    <script>
+      // The saved theme, before anything paints, so the splash matches the app (theme.ts keeps it after).
+      try {
+        var saved = localStorage.getItem("theme");
+        if (saved && saved !== "system") document.documentElement.dataset.theme = saved;
+      } catch (e) {}
+    </script>
+    <style>
+      /* Startup splash: shown until the app has its first library numbers (App.tsx). */
+      :root {
+        --sp-bg: #f5f5f7;
+        --sp-card: #ffffff;
+        --sp-accent: #2f6fde;
+        --sp-text: #1c1c1e;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme]) { --sp-bg: #161617; --sp-card: #1f1f21; --sp-accent: #6b9cff; --sp-text: #ececee; }
+      }
+      :root[data-theme="dark"] { --sp-bg: #161617; --sp-card: #1f1f21; --sp-accent: #6b9cff; --sp-text: #ececee; }
+      :root[data-theme="nord"] { --sp-bg: #2e3440; --sp-card: #3b4252; --sp-accent: #88c0d0; --sp-text: #eceff4; }
+      :root[data-theme="dracula"] { --sp-bg: #282a36; --sp-card: #2e3140; --sp-accent: #bd93f9; --sp-text: #f8f8f2; }
+      :root[data-theme="atom"] { --sp-bg: #21252b; --sp-card: #282c34; --sp-accent: #61afef; --sp-text: #d7dae0; }
+      :root[data-theme="solarized"] { --sp-bg: #eee8d5; --sp-card: #fdf6e3; --sp-accent: #268bd2; --sp-text: #073642; }
+
+      html,
+      body {
+        margin: 0;
+        background: var(--sp-bg);
+      }
+
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 28px;
+        color: var(--sp-text);
+        background: var(--sp-bg);
+        font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        transition: opacity 0.35s ease;
+      }
+      #splash.gone {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* Three photos dealt from a stack, over and over. */
+      .sp-stack {
+        position: relative;
+        width: 180px;
+        height: 150px;
+      }
+      .sp-photo {
+        position: absolute;
+        inset: 0;
+        padding: 8px 8px 26px;
+        border-radius: 6px;
+        background: var(--sp-card);
+        box-shadow: 0 10px 30px rgb(0 0 0 / 22%), 0 2px 6px rgb(0 0 0 / 12%);
+        animation: sp-deal 5.4s ease-in-out infinite;
+      }
+      .sp-photo:nth-child(2) { animation-delay: -1.8s; }
+      .sp-photo:nth-child(3) { animation-delay: -3.6s; }
+      .sp-picture {
+        position: relative;
+        height: 100%;
+        overflow: hidden;
+        border-radius: 3px;
+      }
+      /* A sun (or moon) and hills, painted per photo. */
+      .sp-picture::before {
+        content: "";
+        position: absolute;
+        top: 18%;
+        right: 18%;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--sun);
+      }
+      .sp-picture::after {
+        content: "";
+        position: absolute;
+        inset: 45% 0 0;
+        background: var(--hills);
+        clip-path: polygon(0 60%, 22% 25%, 40% 55%, 62% 5%, 84% 45%, 100% 30%, 100% 100%, 0 100%);
+      }
+      .sp-sunset { background: linear-gradient(#ff9a5a, #ffd29a); --sun: #fff3c4; --hills: #7a4b6a; }
+      .sp-sea { background: linear-gradient(#5aa9e6, #bfe3ff); --sun: #fffbe0; --hills: #2f7d6d; }
+      .sp-night { background: linear-gradient(#1d2a55, #5b4a8c); --sun: #f2f0ff; --hills: #151a33; }
+
+      @keyframes sp-deal {
+        0%, 28% { transform: translate(-14px, -8px) rotate(-8deg) scale(0.92); z-index: 1; opacity: 1; }
+        33%, 61% { transform: translate(10px, -4px) rotate(5deg) scale(0.96); z-index: 2; }
+        66%, 88% { transform: rotate(-1deg); z-index: 3; opacity: 1; }
+        95% { transform: translate(150px, -40px) rotate(20deg); z-index: 3; opacity: 0; }
+        96% { transform: translate(-14px, -8px) rotate(-8deg) scale(0.92); z-index: 1; opacity: 0; }
+        100% { transform: translate(-14px, -8px) rotate(-8deg) scale(0.92); z-index: 1; opacity: 1; }
+      }
+
+      .sp-title {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .sp-bar {
+        width: 180px;
+        height: 3px;
+        overflow: hidden;
+        border-radius: 3px;
+        background: color-mix(in srgb, var(--sp-text) 12%, transparent);
+      }
+      .sp-bar::after {
+        content: "";
+        display: block;
+        width: 40%;
+        height: 100%;
+        border-radius: 3px;
+        background: var(--sp-accent);
+        animation: sp-slide 1.4s ease-in-out infinite;
+      }
+      @keyframes sp-slide {
+        from { transform: translateX(-100%); }
+        to { transform: translateX(250%); }
+      }
+      .sp-tip {
+        max-width: 420px;
+        min-height: 2.8em;
+        margin: 0;
+        padding: 0 16px;
+        text-align: center;
+        font-size: 13px;
+        line-height: 1.4;
+        opacity: 0.7;
+        transition: opacity 0.4s ease;
+      }
+      .sp-tip.fading {
+        opacity: 0;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .sp-photo,
+        .sp-bar::after {
+          animation: none;
+        }
+        .sp-photo:nth-child(1) { transform: translate(-14px, -8px) rotate(-8deg) scale(0.92); }
+        .sp-photo:nth-child(2) { transform: translate(10px, -4px) rotate(5deg) scale(0.96); }
+      }
+    </style>
   </head>
 
   <body>
+    <div id="splash" role="status" aria-label="Opening your library">
+      <div class="sp-stack" aria-hidden="true">
+        <div class="sp-photo"><div class="sp-picture sp-sunset"></div></div>
+        <div class="sp-photo"><div class="sp-picture sp-sea"></div></div>
+        <div class="sp-photo"><div class="sp-picture sp-night"></div></div>
+      </div>
+      <p class="sp-title">Opening your library…</p>
+      <div class="sp-bar" aria-hidden="true"></div>
+      <p class="sp-tip" id="sp-tip"></p>
+    </div>
+    <script>
+      (function () {
+        var tips = [
+          "Duplicates finds exact copies of a photo, so you can free up space.",
+          "Similar photos groups photos that look nearly the same, so you can keep the best one.",
+          "The Map shows where your photos were taken.",
+          "Removed photos wait in Recently removed, so nothing is lost by accident.",
+          "AI features run on this computer only: your photos never leave it.",
+          "Pick a different look for the app from the palette button in the top bar.",
+        ];
+        var el = document.getElementById("sp-tip");
+        var i = Math.floor(Math.random() * tips.length);
+        el.textContent = tips[i];
+        var timer = setInterval(function () {
+          el.classList.add("fading");
+          setTimeout(function () {
+            i = (i + 1) % tips.length;
+            el.textContent = tips[i];
+            el.classList.remove("fading");
+          }, 400);
+        }, 3600);
+
+        window.hideSplash = function () {
+          var splash = document.getElementById("splash");
+          if (!splash) return;
+          clearInterval(timer);
+          splash.classList.add("gone");
+          setTimeout(function () {
+            splash.remove();
+          }, 400);
+        };
+        // Never cover the app for good, even if startup fails before the app can say it's ready.
+        setTimeout(window.hideSplash, 30000);
+
+        // The window starts hidden (tauri.conf.json) so it never shows blank: show it once
+        // the splash has painted. The backend shows it anyway when the page finishes loading.
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            try {
+              window.__TAURI_INTERNALS__.invoke("plugin:window|show", { label: "main" });
+            } catch (e) {}
+          });
+        });
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -20,7 +20,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::{AppState, CmdResult, blocking};
 
-/// While paused (scan running, on battery), the indexer checks again this often.
+/// While paused (a scan running), the indexer checks again this often.
 const PAUSE_POLL: Duration = Duration::from_secs(20);
 /// Photos each feature indexes before letting the next one have a turn.
 const TURN: usize = 64;
@@ -187,8 +187,15 @@ pub struct AiStatus {
     installing: Option<Pack>,
     progress: IndexProgress,
     indexing: bool,
+    /// Why background indexing is waiting, if it is: "scan".
+    paused: Option<&'static str>,
     /// Languages Windows reads text in.
     text_languages: Vec<String>,
+}
+
+/// Why background indexing waits right now: a folder scan, which reads the same disk.
+fn pause_reason(state: &AppState) -> Option<&'static str> {
+    (!crate::scans::running(state).is_empty()).then_some("scan")
 }
 
 #[tauri::command]
@@ -229,6 +236,7 @@ pub async fn ai_status(state: State<'_, Arc<AppState>>) -> CmdResult<AiStatus> {
             installing: *ai.installing.lock().unwrap_or_else(|e| e.into_inner()),
             progress: index_progress(ai, &s.library)?,
             indexing: ai.indexing.load(Ordering::SeqCst),
+            paused: pause_reason(s),
             text_languages: languages,
         })
     })
@@ -542,8 +550,8 @@ pub async fn ai_photo_people(
 }
 
 /// Indexes new photos in the background for each installed feature that needs it
-/// (search, faces, text), taking turns. Waits while a scan runs or the computer is on
-/// battery; ends when everything is done.
+/// (search, faces, text), taking turns. Waits while a scan runs; ends when everything
+/// is done.
 pub(crate) fn run_indexer(app: &AppHandle, state: &Arc<AppState>) {
     let ai = &state.ai;
     let wanted = [Pack::Search, Pack::People, Pack::Text]
@@ -558,7 +566,15 @@ pub(crate) fn run_indexer(app: &AppHandle, state: &Arc<AppState>) {
         .name("ai-index".into())
         .spawn(move || {
             let ai = &state.ai;
-            let paused = || !crate::scans::running(&state).is_empty() || photo_ai::on_battery();
+            // Tells the page when indexing starts or stops waiting, and why.
+            let shown = Cell::new(None);
+            let paused = || {
+                let reason = pause_reason(&state);
+                if shown.replace(reason) != reason {
+                    let _ = app.emit("ai-index-paused", reason);
+                }
+                reason.is_some()
+            };
             let last = Cell::new(Instant::now());
             let report = || {
                 if last.get().elapsed() >= Duration::from_secs(1) {

@@ -1,4 +1,4 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../ui/confirm";
 import { useEffect, useState } from "react";
 import { api, type OrganizeLayout, type OrganizePreview, type RootInfo } from "../api";
 import { fileName } from "../format";
@@ -95,18 +95,32 @@ export function OrganizePage({ roots, onChanged, onNotice, onError }: Props) {
             </label>
             <fieldset>
               <legend className="muted small">Layout</legend>
-              {LAYOUTS.map((l) => (
-                <label key={l.id} className="organize-layout">
-                  <input type="radio" checked={layout === l.id} onChange={() => setLayout(l.id)} />
-                  <span>{l.label}</span>
-                  <code className="muted small">{l.example}</code>
-                </label>
-              ))}
+              <div className="organize-layouts">
+                {LAYOUTS.map((l) => (
+                  <label key={l.id} className={`organize-layout${layout === l.id ? " chosen" : ""}`}>
+                    <span className="organize-layout-name">
+                      <input type="radio" checked={layout === l.id} onChange={() => setLayout(l.id)} />
+                      {l.label}
+                    </span>
+                    {/* The example path drawn as the folders it makes. */}
+                    <code className="organize-tree">
+                      {l.example.split("/").map((part, i, parts) => (
+                        <span key={i} style={{ paddingLeft: i * 14 }}>
+                          {part}
+                          {i < parts.length - 1 ? "/" : ""}
+                        </span>
+                      ))}
+                    </code>
+                  </label>
+                ))}
+              </div>
             </fieldset>
-            <label className="organize-layout">
+            <label className="organize-option">
               <input type="checkbox" checked={includeUndated} onChange={(e) => setIncludeUndated(e.target.checked)} />
-              <span>Also move files that only have a file date</span>
-              <span className="muted small">(often the date they were copied, not taken)</span>
+              <span>
+                Also move files that only have a file date
+                <span className="muted small">Often the date they were copied, not the date they were taken.</span>
+              </span>
             </label>
             <div>
               <button className="primary" disabled={busy || !root?.online} onClick={makePreview}>

@@ -1,4 +1,4 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../ui/confirm";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { api, isFilterEmpty, type Filter, type Layout, type TimelineView } from "../api";
 import { describeReport } from "../cleanup/RecentlyRemoved";
@@ -291,6 +291,17 @@ export function PhotosView({ view, filter, layout, onLibraryChanged, onNotice, o
             })
           }
           onPlaceOnMap={() => onPlaceOnMap([...selection])}
+          onClearLocation={() =>
+            run(async () => {
+              const n = await api.clearLocation([...selection]);
+              onNotice(
+                n === 0
+                  ? "None of these had a location."
+                  : `Location removed from ${n.toLocaleString()} ${n === 1 ? "item" : "items"}.`,
+              );
+              await afterTimelineChange();
+            })
+          }
           onCollage={() => setCollage([...selection])}
           onSlideshow={() => play([...selection], `${selection.size.toLocaleString()} photos`)}
           onPasteEdit={(what) =>
