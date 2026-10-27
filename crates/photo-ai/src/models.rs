@@ -71,6 +71,9 @@ pub enum Pack {
     Search,
     /// Faces found and grouped into people (YuNet and SFace).
     People,
+    /// People seen whole, for photos with no face found (YOLOX): part of People, a
+    /// separate choice.
+    Bodies,
     /// Enlarging photos on export (Real-ESRGAN).
     Upscale,
     /// Reading the text in photos, with the operating system's own OCR: nothing to
@@ -79,13 +82,20 @@ pub enum Pack {
 }
 
 impl Pack {
-    pub const FEATURES: [Pack; 4] = [Pack::Search, Pack::People, Pack::Upscale, Pack::Text];
+    pub const FEATURES: [Pack; 5] = [
+        Pack::Search,
+        Pack::People,
+        Pack::Bodies,
+        Pack::Upscale,
+        Pack::Text,
+    ];
 
     fn dir_name(self) -> &'static str {
         match self {
             Pack::Runtime => "runtime",
             Pack::Search => "search",
             Pack::People => "people",
+            Pack::Bodies => "bodies",
             Pack::Upscale => "upscale",
             Pack::Text => "text",
         }
@@ -96,6 +106,7 @@ impl Pack {
             Pack::Runtime => RUNTIME,
             Pack::Search => SEARCH,
             Pack::People => PEOPLE,
+            Pack::Bodies => BODIES,
             Pack::Upscale => UPSCALE,
             Pack::Text => &[],
         }
@@ -191,6 +202,17 @@ const PEOPLE: &[Remote] = &[
         extract: &[],
     },
 ];
+
+/// YOLOX-S (Apache 2.0, Megvii), from the OpenCV model zoo, pinned to one revision. Its
+/// 8-bit version is a quarter of the size but ran nine times slower on the CPU (2.4 s a
+/// photo against 0.27 s) for the same results.
+const BODIES: &[Remote] = &[Remote {
+    name: crate::bodies::MODEL_FILE,
+    url: "https://huggingface.co/opencv/object_detection_yolox/resolve/78c368f74ce73ee28fc7a1be418a598c71b58b52/object_detection_yolox_2022nov.onnx",
+    size: 35_858_002,
+    sha256: "c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063",
+    extract: &[],
+}];
 
 /// Real-ESRGAN General x4v3 (BSD 3-Clause, Xintao Wang et al.), as exported to ONNX by
 /// Qualcomm AI Hub (release 0.65.0): the model and its weights file.

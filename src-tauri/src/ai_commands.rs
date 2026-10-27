@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use photo_ai::bodies::{self, Bodies};
 use photo_ai::clip::Clip;
 use photo_ai::faces::Faces;
 use photo_ai::models::{Pack, Store};
@@ -45,6 +46,7 @@ pub(crate) struct AiState {
     /// Search embeddings in memory, dropped when indexing adds more.
     index: Mutex<Option<Arc<Index>>>,
     faces: Mutex<Option<Arc<Faces>>>,
+    bodies: Mutex<Option<Arc<Bodies>>>,
     pub(crate) people: People,
     upscaler: Mutex<Option<Arc<Upscaler>>>,
     indexing: AtomicBool,
@@ -90,6 +92,7 @@ impl AiState {
             clip: Mutex::default(),
             index: Mutex::default(),
             faces: Mutex::default(),
+            bodies: Mutex::default(),
             people: People::default(),
             upscaler: Mutex::default(),
             indexing: AtomicBool::new(false),
@@ -105,6 +108,12 @@ impl AiState {
     fn faces(&self) -> photo_core::Result<Arc<Faces>> {
         cached(&self.faces, || {
             Faces::load(&self.store, background_threads())
+        })
+    }
+
+    fn bodies(&self) -> photo_core::Result<Arc<Bodies>> {
+        cached(&self.bodies, || {
+            Bodies::load(&self.store, background_threads())
         })
     }
 
@@ -156,6 +165,8 @@ pub struct FeatureStatus {
 pub struct IndexProgress {
     search: Option<Progress>,
     people: Option<Progress>,
+    /// Photos with no face looked at for people seen whole.
+    bodies: Option<Progress>,
     text: Option<Progress>,
 }
 
@@ -169,6 +180,11 @@ fn index_progress(ai: &AiState, library: &photo_core::db::Db) -> photo_core::Res
         },
         people: if ai.installed(Pack::People) {
             Some(photo_ai::people::progress(conn)?)
+        } else {
+            None
+        },
+        bodies: if ai.installed(Pack::Bodies) {
+            Some(bodies::progress(conn)?)
         } else {
             None
         },
@@ -223,10 +239,12 @@ pub async fn ai_status(state: State<'_, Arc<AppState>>) -> CmdResult<AiStatus> {
                         } else {
                             0
                         },
-                    unavailable: if p == Pack::Text {
-                        text_unavailable.clone()
-                    } else {
-                        None
+                    unavailable: match p {
+                        Pack::Text => text_unavailable.clone(),
+                        Pack::Bodies if !ai.installed(Pack::People) => {
+                            Some("Install People first".into())
+                        }
+                        _ => None,
                     },
                 }
             })
@@ -270,6 +288,9 @@ pub async fn ai_install(
     // Before downloading anything that couldn't run here.
     if pack.needs_runtime() {
         photo_ai::runtime::check_cpp_runtime().map_err(|e| e.to_string())?;
+    }
+    if pack == Pack::Bodies && !state.ai.installed(Pack::People) {
+        return Err("Install People first".into());
     }
     if pack == Pack::Text
         && let (Some(why), _) = ask_text_support()
@@ -322,6 +343,7 @@ pub async fn ai_install(
                 match pack {
                     Pack::Search => drop(ai.clip()?),
                     Pack::People => drop(ai.faces()?),
+                    Pack::Bodies => drop(ai.bodies()?),
                     Pack::Upscale => drop(ai.upscaler()?),
                     Pack::Text | Pack::Runtime => {}
                 }
@@ -377,6 +399,14 @@ pub async fn ai_remove(
             Pack::People => {
                 clear(&ai.faces);
                 ai.people.clear(&s.library, &s.thumbs)?;
+                // Only ever used with People.
+                clear(&ai.bodies);
+                bodies::clear(&s.library)?;
+                ai.store.remove(Pack::Bodies, false)?;
+            }
+            Pack::Bodies => {
+                clear(&ai.bodies);
+                bodies::clear(&s.library)?;
             }
             Pack::Upscale => clear(&ai.upscaler),
             Pack::Text => text::clear(&s.library)?,
@@ -640,6 +670,17 @@ pub(crate) fn run_indexer(app: &AppHandle, state: &Arc<AppState>) {
                             done += n;
                         }
                         Err(e) => fail(&mut failed, Pack::People, e),
+                    }
+                }
+                if ai.installed(Pack::Bodies)
+                    && ai.installed(Pack::People)
+                    && !failed.contains(&Pack::Bodies)
+                {
+                    match ai.bodies().and_then(|b| {
+                        bodies::index_pending(&state.library, &b, TURN, cancel, &paused, &report)
+                    }) {
+                        Ok(n) => done += n,
+                        Err(e) => fail(&mut failed, Pack::Bodies, e),
                     }
                 }
                 if ai.installed(Pack::Text) && !failed.contains(&Pack::Text) {

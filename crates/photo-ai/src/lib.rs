@@ -4,6 +4,7 @@
 //!
 //! Kept out of `photo-core` so the core stays small and testable without models.
 
+pub mod bodies;
 pub mod clip;
 pub mod faces;
 pub mod models;

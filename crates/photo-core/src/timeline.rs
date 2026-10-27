@@ -61,10 +61,12 @@ impl View {
             View::Person(id) => format!(
                 "{VISIBLE} AND a.id IN (SELECT asset_id FROM ai_faces WHERE person_id = {id})"
             ),
-            // Photos not looked at yet, or unreadable (-1), aren't known to have no one.
+            // Photos not looked at yet, or unreadable (-1), aren't known to have no one;
+            // a person seen whole (no face showing) counts too.
             View::NoPeople => format!(
                 "{VISIBLE} AND a.media_kind != 1
-                 AND a.id IN (SELECT asset_id FROM ai_face_scans WHERE faces = 0)"
+                 AND a.id IN (SELECT asset_id FROM ai_face_scans WHERE faces = 0)
+                 AND a.id NOT IN (SELECT asset_id FROM ai_body_scans WHERE bodies > 0)"
             ),
         }
     }

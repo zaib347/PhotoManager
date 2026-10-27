@@ -16,7 +16,7 @@ fn migrations_are_idempotent() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 20);
+    assert_eq!(version, 21);
 }
 
 #[test]
@@ -129,16 +129,28 @@ fn no_people_shows_photos_looked_at_with_no_faces() {
     };
     let photos = ids_where("media_kind != 1");
     let video = ids_where("media_kind = 1")[0];
-    let (empty, faces, unreadable, hidden) = (photos[0], photos[1], photos[2], photos[3]);
+    let (empty, faces, unreadable, hidden, back, nobody) = (
+        photos[0], photos[1], photos[2], photos[3], photos[4], photos[5],
+    );
     for (id, n) in [
         (empty, 0),
         (faces, 2),
         (unreadable, -1),
         (hidden, 0),
         (video, 0),
+        (back, 0),
+        (nobody, 0),
     ] {
         conn.execute(
             "INSERT INTO ai_face_scans (asset_id, model, faces) VALUES (?1, 'test', ?2)",
+            [id, n],
+        )
+        .unwrap();
+    }
+    // No face, but a person seen from behind; and one looked at with nobody found.
+    for (id, n) in [(back, 1), (nobody, 0)] {
+        conn.execute(
+            "INSERT INTO ai_body_scans (asset_id, model, bodies) VALUES (?1, 'test', ?2)",
             [id, n],
         )
         .unwrap();
@@ -149,11 +161,13 @@ fn no_people_shows_photos_looked_at_with_no_faces() {
     )
     .unwrap();
 
-    // Not looked at yet (photos[4..]), faces found, unreadable, hidden and videos stay out.
-    let shown = timeline::asset_ids(&conn, View::NoPeople, &Default::default()).unwrap();
-    assert_eq!(shown, vec![empty]);
+    // Not looked at yet (photos[6..]), faces or a person found, unreadable, hidden and
+    // videos stay out.
+    let mut shown = timeline::asset_ids(&conn, View::NoPeople, &Default::default()).unwrap();
+    shown.sort();
+    assert_eq!(shown, vec![empty, nobody]);
     let layout = timeline::layout(&conn, View::NoPeople, &Default::default()).unwrap();
-    assert_eq!(layout.counts.iter().sum::<u32>(), 1);
+    assert_eq!(layout.counts.iter().sum::<u32>(), 2);
 }
 
 #[test]
