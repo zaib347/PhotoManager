@@ -36,7 +36,12 @@ The full plan and checklists are in [docs/PLAN.md](docs/PLAN.md).
   the repo. Private preview: https://claude.ai/artifact/1vVwQ5AqWwnZF3KfKE5ASx. The
   app's icon is still Tauri's default; the site's mark.svg could replace it.
 
-- **People without a visible face** (branch `people-bodies`, from `main`; not merged):
+- **Next (the user, 2026-10-27): test tomorrow.** Untested in the app so far: People
+  without a visible face (install it on the AI page; the Netflix photo should leave No
+  people), turned faces, No people chips, scan settings; also Search by description,
+  Upscale and Text in photos. Pricing/subscription (app and website) stays last.
+- **People without a visible face** (branch `people-bodies`, merged to `main` and pushed
+  2026-10-27 at the user's request, before testing):
   new AI pack `Pack::Bodies` (`photo-ai/src/bodies.rs`), YOLOX-S fp32 from the OpenCV
   zoo (Apache 2.0, 35.9 MB; the int8 file was 9× slower on CPU). Runs only on photos
   with `ai_face_scans.faces = 0`, upright, `MIN_SCORE` 0.6 (measured: real people
