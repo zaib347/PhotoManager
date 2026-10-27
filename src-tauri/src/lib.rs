@@ -23,7 +23,8 @@ use std::time::{Duration, Instant};
 use photo_core::db::Db;
 use photo_core::timeline::{Filter, View};
 use photo_core::{
-    assets, edit, events, fileops, library, places, rotate, schema, synth, thumbs, timeline, trips,
+    assets, edit, events, fileops, library, places, rotate, scan_rules, schema, synth, thumbs,
+    timeline, trips,
 };
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 
@@ -212,19 +213,64 @@ async fn scanning_roots(state: State<'_, Arc<AppState>>) -> CmdResult<Vec<i64>> 
     Ok(scans::running(&state))
 }
 
-/// Adds a folder to the library and starts scanning it.
+/// Adds a folder to the library, leaving out `excluded` folders inside it, and starts
+/// scanning it.
 #[tauri::command]
 async fn add_root(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     path: PathBuf,
+    excluded: Option<Vec<PathBuf>>,
 ) -> CmdResult<i64> {
     let root_id = blocking(&state, move |s| {
-        library::add_root(&s.library.write(), &path)
+        let mut conn = s.library.write();
+        let tx = conn.transaction()?;
+        let root_id = library::add_root(&tx, &path)?;
+        scan_rules::set_excluded(&tx, root_id, &excluded.unwrap_or_default())?;
+        tx.commit()?;
+        Ok(root_id)
     })
     .await?;
     scans::start(&app, &state, root_id);
     Ok(root_id)
+}
+
+/// Which new files scans add (for the whole library).
+#[tauri::command]
+async fn scan_settings(state: State<'_, Arc<AppState>>) -> CmdResult<scan_rules::Rules> {
+    blocking(&state, |s| scan_rules::rules(&s.library.read())).await
+}
+
+#[tauri::command]
+async fn set_scan_settings(
+    state: State<'_, Arc<AppState>>,
+    rules: scan_rules::Rules,
+) -> CmdResult<()> {
+    blocking(&state, move |s| {
+        scan_rules::set_rules(&s.library.write(), &rules)
+    })
+    .await
+}
+
+/// Folders left out of a library folder, as full paths (empty while its drive is away).
+#[tauri::command]
+async fn root_excluded(state: State<'_, Arc<AppState>>, root_id: i64) -> CmdResult<Vec<PathBuf>> {
+    blocking(&state, move |s| {
+        scan_rules::excluded_paths(&s.library.read(), root_id)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_root_excluded(
+    state: State<'_, Arc<AppState>>,
+    root_id: i64,
+    folders: Vec<PathBuf>,
+) -> CmdResult<()> {
+    blocking(&state, move |s| {
+        scan_rules::set_excluded(&s.library.write(), root_id, &folders)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -477,6 +523,10 @@ pub fn run() {
             list_roots,
             scanning_roots,
             add_root,
+            scan_settings,
+            set_scan_settings,
+            root_excluded,
+            set_root_excluded,
             remove_root,
             scan_root,
             cancel_scan,

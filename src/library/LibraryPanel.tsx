@@ -5,6 +5,7 @@ import { useCollections } from "../collections/context";
 import { Icon, type IconName } from "../ui/Icon";
 import { Popover } from "../ui/Popover";
 import { ImportPanel } from "./ImportPanel";
+import { ScanSection, ScanSettings } from "./ScanSettings";
 import { XmpSettings } from "./XmpSettings";
 
 type ViewLink = { id: BuiltinView; label: string; icon: IconName };
@@ -17,6 +18,7 @@ const SECTIONS: { title: string; views: ViewLink[] }[] = [
       { id: "favorites", label: "Favorites", icon: "heart" },
       { id: "videos", label: "Videos", icon: "video" },
       { id: "people", label: "People", icon: "people" },
+      { id: "nopeople", label: "No people", icon: "mountain" },
       { id: "hidden", label: "Hidden", icon: "eyeOff" },
     ],
   },
@@ -46,7 +48,8 @@ type Props = {
   onView: (view: View) => void;
   roots: RootInfo[];
   progress: Map<number, ScanProgress>;
-  onAdd: (path: string) => void;
+  /** Adds a folder (with folders inside it left out) and scans it. */
+  onAdd: (path: string, excluded: string[]) => void;
   onRescan: (rootId: number) => void;
   onCancel: (rootId: number) => void;
   onRemove: (root: RootInfo) => void;
@@ -79,6 +82,8 @@ export function LibraryPanel({
 }: Props) {
   const { albums, tags, reload } = useCollections();
   const [newAlbum, setNewAlbum] = useState<string | null>(null);
+  // A folder picked to add, while its scan settings are shown.
+  const [adding, setAdding] = useState<string | null>(null);
   const current = viewKey(view);
 
   const createAlbum = async () => {
@@ -92,7 +97,8 @@ export function LibraryPanel({
 
   const pickFolder = async () => {
     const path = await open({ directory: true, multiple: false, title: "Add a folder to your library" });
-    if (typeof path === "string") onAdd(path);
+    // Scanned once its settings are confirmed.
+    if (typeof path === "string") setAdding(path);
   };
 
   return (
@@ -103,7 +109,7 @@ export function LibraryPanel({
             <span>{section.title}</span>
           </div>
           {section.views
-            .filter((v) => v.id !== "people" || people)
+            .filter((v) => (v.id !== "people" && v.id !== "nopeople") || people)
             .map((v) => (
               <button
                 key={v.id}
@@ -264,9 +270,23 @@ export function LibraryPanel({
       </ul>
 
       <div className="sidebar-title">
+        <span>Scanning</span>
+      </div>
+      <ScanSection roots={roots} onError={onError} />
+
+      <div className="sidebar-title">
         <span>Sidecars</span>
       </div>
       <XmpSettings onError={onError} />
+      {adding !== null && (
+        <ScanSettings
+          target={{ kind: "add", path: adding }}
+          roots={roots}
+          onStart={onAdd}
+          onClose={() => setAdding(null)}
+          onError={onError}
+        />
+      )}
     </aside>
   );
 }

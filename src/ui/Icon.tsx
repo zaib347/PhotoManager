@@ -39,6 +39,7 @@ const PATHS = {
       <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
     </>
   ),
+  mountain: <path d="m8 3 4 8 5-5 5 15H2L8 3Z" />,
   pin: (
     <>
       <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />

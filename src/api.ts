@@ -5,7 +5,7 @@ import { lookQuery } from "./looks";
 /** Views that are pages rather than timelines. */
 const PAGES = ["events", "trips", "places", "map", "people", "ai", "duplicates", "similar", "removed", "organize"] as const;
 export type PageView = (typeof PAGES)[number];
-export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | PageView;
+export type BuiltinView = "all" | "favorites" | "videos" | "hidden" | "nopeople" | PageView;
 export type View =
   | BuiltinView
   | { album: number }
@@ -483,8 +483,25 @@ export type ScanSummary = {
   unchanged: number;
   missing: number;
   errors: number;
+  /** New files left out by the scan settings. */
+  skipped: number;
   completed: boolean;
   missingCheckSkipped: boolean;
+};
+
+/**
+ * Which new files scans add, for the whole library (0 turns a limit off). Files
+ * already in the library always stay.
+ */
+export type ScanRules = {
+  minBytes: number;
+  /** Longest side, in pixels. */
+  minSide: number;
+  png: boolean;
+  gif: boolean;
+  raw: boolean;
+  videos: boolean;
+  minVideoMs: number;
 };
 
 export type ScanFinished = { rootId: number; summary: ScanSummary | null; error: string | null };
@@ -635,7 +652,13 @@ export const api = {
   emptyFileOp: (id: number) => invoke<FileOpReport>("empty_file_op", { id }),
   listRoots: () => invoke<RootInfo[]>("list_roots"),
   scanningRoots: () => invoke<number[]>("scanning_roots"),
-  addRoot: (path: string) => invoke<number>("add_root", { path }),
+  /** Adds a folder, leaving out `excluded` folders inside it, and starts scanning it. */
+  addRoot: (path: string, excluded: string[] = []) => invoke<number>("add_root", { path, excluded }),
+  scanSettings: () => invoke<ScanRules>("scan_settings"),
+  setScanSettings: (rules: ScanRules) => invoke<void>("set_scan_settings", { rules }),
+  /** Folders left out of a library folder, as full paths (empty while its drive is away). */
+  rootExcluded: (rootId: number) => invoke<string[]>("root_excluded", { rootId }),
+  setRootExcluded: (rootId: number, folders: string[]) => invoke<void>("set_root_excluded", { rootId, folders }),
   removeRoot: (rootId: number) => invoke<void>("remove_root", { rootId }),
   scanRoot: (rootId: number) => invoke<boolean>("scan_root", { rootId }),
   cancelScan: (rootId: number) => invoke<void>("cancel_scan", { rootId }),

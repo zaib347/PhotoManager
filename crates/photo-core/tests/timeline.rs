@@ -113,6 +113,50 @@ fn synthetic_trips_leave_home_and_show_their_days() {
 }
 
 #[test]
+fn no_people_shows_photos_looked_at_with_no_faces() {
+    let mut conn = library();
+    synth::generate(&mut conn, 200, 3).unwrap();
+    let ids_where = |kind: &str| -> Vec<i64> {
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT id FROM assets WHERE status = 0 AND paired_with IS NULL AND {kind} ORDER BY id"
+            ))
+            .unwrap();
+        stmt.query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    };
+    let photos = ids_where("media_kind != 1");
+    let video = ids_where("media_kind = 1")[0];
+    let (empty, faces, unreadable, hidden) = (photos[0], photos[1], photos[2], photos[3]);
+    for (id, n) in [
+        (empty, 0),
+        (faces, 2),
+        (unreadable, -1),
+        (hidden, 0),
+        (video, 0),
+    ] {
+        conn.execute(
+            "INSERT INTO ai_face_scans (asset_id, model, faces) VALUES (?1, 'test', ?2)",
+            [id, n],
+        )
+        .unwrap();
+    }
+    conn.execute(
+        "INSERT INTO user_meta (asset_id, hidden) VALUES (?1, 1)",
+        [hidden],
+    )
+    .unwrap();
+
+    // Not looked at yet (photos[4..]), faces found, unreadable, hidden and videos stay out.
+    let shown = timeline::asset_ids(&conn, View::NoPeople, &Default::default()).unwrap();
+    assert_eq!(shown, vec![empty]);
+    let layout = timeline::layout(&conn, View::NoPeople, &Default::default()).unwrap();
+    assert_eq!(layout.counts.iter().sum::<u32>(), 1);
+}
+
+#[test]
 fn local_day_respects_timezone() {
     // 2024-01-01 23:30 UTC is already 2024-01-02 in UTC+5.
     let t = 1_704_151_800_000;

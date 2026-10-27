@@ -19,7 +19,7 @@ export function XmpSettings({ onError }: { onError: (e: unknown) => void }) {
   };
   return (
     <div className="xmp-settings">
-      <label className="check">
+      <label className="xmp-write">
         <input type="checkbox" checked={settings.write} onChange={(e) => save({ ...settings, write: e.target.checked })} />
         Write ratings, tags and descriptions to XMP sidecars
       </label>

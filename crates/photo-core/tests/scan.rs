@@ -6,7 +6,7 @@ use image::{Rgb, RgbImage};
 use photo_core::db::Db;
 use photo_core::scan::{Scanner, Summary};
 use photo_core::timeline::View;
-use photo_core::{duplicates, fileops, library, schema, thumbs, timeline};
+use photo_core::{duplicates, fileops, library, scan_rules, schema, thumbs, timeline};
 use rusqlite::params;
 
 struct Fixture {
@@ -105,6 +105,50 @@ fn indexes_supported_files_and_skips_excluded() {
 
     let layout = timeline::layout(&f.library.read(), View::All, &Default::default()).unwrap();
     assert_eq!(layout.counts.iter().sum::<u32>(), 4);
+}
+
+#[test]
+fn scan_settings_leave_out_new_files_only() {
+    let f = fixture();
+    let set_rules =
+        |rules: scan_rules::Rules| scan_rules::set_rules(&f.library.write(), &rules).unwrap();
+    // chart.png is 40 px wide, the JPEGs 64 px.
+    set_rules(scan_rules::Rules {
+        min_side: 50,
+        videos: false,
+        ..Default::default()
+    });
+    let s = f.scan();
+    assert_eq!((s.added, s.skipped, s.missing), (2, 2, 0), "{s:?}");
+
+    // An excluded folder keeps what the library already has from it.
+    scan_rules::set_excluded(&f.library.write(), f.root_id, &[f.photos.join("2019")]).unwrap();
+    assert_eq!(
+        scan_rules::excluded(&f.library.read(), f.root_id).unwrap(),
+        vec!["2019".to_owned()]
+    );
+    set_rules(Default::default());
+    let s = f.scan();
+    assert_eq!((s.added, s.skipped, s.missing), (2, 0, 0), "{s:?}");
+    assert_eq!(f.visible_assets(), 4);
+
+    // Rules never drop files already in the library.
+    set_rules(scan_rules::Rules {
+        min_bytes: 1 << 30,
+        min_side: 10_000,
+        png: false,
+        videos: false,
+        ..Default::default()
+    });
+    let s = f.scan();
+    assert_eq!((s.unchanged, s.skipped, s.missing), (2, 0, 0), "{s:?}");
+    assert_eq!(f.visible_assets(), 4);
+
+    // A new file in an excluded folder isn't added.
+    set_rules(Default::default());
+    write_jpeg(&f.photos.join("2019/new.jpg"), 7);
+    let s = f.scan();
+    assert_eq!((s.added, s.missing), (0, 0), "{s:?}");
 }
 
 #[test]

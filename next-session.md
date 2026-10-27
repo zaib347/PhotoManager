@@ -3,6 +3,24 @@
 Where PhotoManager stands as of 2026-10-26 (night), and what to pick up next.
 The full plan and checklists are in [docs/PLAN.md](docs/PLAN.md).
 
+## Done 2026-10-27 (on `ui-themes`, pushed)
+
+- **XMP checkbox was invisible:** its label used class `check`, the timeline's selection
+  circle (absolute, 22 px, opacity 0). Now `xmp-write`.
+- **No people** (sidebar, under People, only when People is installed): `View::NoPeople`
+  = photos with `ai_face_scans.faces = 0` (no videos, hidden or unreadable ones).
+  `src/people/NoPeopleBar.tsx`: progress line, and with Search by description chips from
+  `SMART_ALBUMS` (minus Babies/Parties) that set `filter.ids`. Not done: dropping
+  back-of-head photos with CLIP (z-scores don't single them out in a people-heavy library).
+- **Scan settings** (`photo-core/src/scan_rules.rs`): library-wide `Rules` in `settings`
+  key `scan_rules` (min bytes, min longest side, PNG/GIF/RAW/videos, min video length);
+  excluded folders per root in the old unused `roots.excluded_globs` (JSON, relative
+  paths). Rules only judge **new** files; existing files stay, and existing files in an
+  excluded folder are counted as seen (not missing). `Summary.skipped`. Dialog
+  `src/library/ScanSettings.tsx` opens on Add folder (Start scan) and from the sidebar's
+  Scanning section (Change…). The user chose: both size rules, ask only when adding,
+  no removal of existing photos while in development.
+
 ## Start here (2026-10-27)
 
 **Tomorrow's plan (the user's words): test the AI features and fix the issues found.**

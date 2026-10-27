@@ -29,6 +29,7 @@ pub mod raw;
 pub mod rename;
 pub mod rotate;
 pub mod scan;
+pub mod scan_rules;
 pub mod schema;
 pub mod similar;
 pub mod synth;
