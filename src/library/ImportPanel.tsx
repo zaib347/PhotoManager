@@ -30,6 +30,8 @@ export function describeImport(r: ImportReport) {
 export function ImportPanel({ rootId, onChanged, onNotice, onError }: Props) {
   const [list, setList] = useState<ImportInfo[] | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Why the last import didn't run, shown in the panel (the app's notice is easy to miss). */
+  const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
     api.listImports(rootId).then(setList).catch(onError);
@@ -37,6 +39,7 @@ export function ImportPanel({ rootId, onChanged, onNotice, onError }: Props) {
 
   const run = async () => {
     setBusy(true);
+    setProblem(null);
     try {
       const r = await api.importMetadata(rootId);
       onNotice(
@@ -45,7 +48,7 @@ export function ImportPanel({ rootId, onChanged, onNotice, onError }: Props) {
       setList(await api.listImports(rootId));
       onChanged();
     } catch (e) {
-      onError(e);
+      setProblem(String(e));
     } finally {
       setBusy(false);
     }
@@ -68,16 +71,21 @@ export function ImportPanel({ rootId, onChanged, onNotice, onError }: Props) {
   return (
     <div className="import-panel">
       <p className="small">
-        For a folder that holds a <strong>Google Takeout</strong> or <strong>iCloud Photos</strong> export: reads the
-        dates, places, favorites, hidden photos, descriptions and albums those services keep beside the photos.
+        Reads the dates, places, favorites, hidden photos, descriptions and albums that a <strong>Google Takeout</strong>{" "}
+        or <strong>iCloud Photos</strong> export keeps beside the photos.
       </p>
+      <ol className="small import-steps">
+        <li>Unzip the export's zip files into one folder.</li>
+        <li>Add that folder under Folders and let it scan.</li>
+        <li>Open Import… on that folder and press the button below.</li>
+      </ol>
       <p className="muted small">
-        Only fills in what's missing: a date only when the photo has none of its own, a place only without GPS. Scan
-        the folder first.
+        Only fills in what's missing: a date only when the photo has none of its own, a place only without GPS.
       </p>
       <button className="primary" onClick={run} disabled={busy}>
         {busy ? "Working…" : "Import from export"}
       </button>
+      {problem && <p className="small import-problem">{problem}</p>}
       {list && list.length > 0 && (
         <ul className="import-list">
           {list.map((i) => (

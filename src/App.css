@@ -1159,9 +1159,9 @@ button.icon-button.star:hover:not(:disabled) {
   position: relative;
 }
 
+/* Fixed and placed by Popover.tsx from its button, so scrolling containers don't clip it. */
 .popover {
-  position: absolute;
-  top: calc(100% + 6px);
+  position: fixed;
   z-index: 50;
   width: 260px;
   padding: 10px;
@@ -1178,14 +1178,6 @@ button.icon-button.star:hover:not(:disabled) {
     opacity: 0;
     translate: 0 -4px;
   }
-}
-
-.popover.left {
-  left: 0;
-}
-
-.popover.right {
-  right: 0;
 }
 
 .picker-list {
@@ -2676,6 +2668,10 @@ button.primary:disabled {
 
 /* ---------- Imports ---------- */
 
+.popover:has(.import-panel) {
+  width: auto;
+}
+
 .import-panel {
   display: flex;
   flex-direction: column;
@@ -2685,6 +2681,15 @@ button.primary:disabled {
 
 .import-panel p {
   margin: 0;
+}
+
+.import-steps {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.import-problem {
+  color: var(--danger);
 }
 
 .import-list {

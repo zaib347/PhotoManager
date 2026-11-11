@@ -38,31 +38,34 @@ export function Popover({ label, title, children, align = "left", buttonClass }:
     };
   }, [open]);
 
-  // Keeps the panel inside the window: shifted sideways, and no taller than the space below.
+  // Places the panel (fixed, so a scrolling sidebar can't clip it) below its button,
+  // inside the window: shifted sideways, and no taller than the space below.
   useLayoutEffect(() => {
     const el = panel.current;
     if (!open || !el) return;
     const fit = () => {
-      el.style.transform = "";
-      const r = el.getBoundingClientRect();
-      const dx =
-        r.right > window.innerWidth - MARGIN
-          ? Math.max(MARGIN - r.left, window.innerWidth - MARGIN - r.right)
-          : r.left < MARGIN
-            ? MARGIN - r.left
-            : 0;
-      if (dx) el.style.transform = `translateX(${dx}px)`;
-      el.style.maxHeight = `${window.innerHeight - r.top - MARGIN}px`;
+      const anchor = ref.current;
+      if (!anchor) return;
+      const a = anchor.getBoundingClientRect();
+      const w = el.offsetWidth;
+      const left = Math.max(MARGIN, Math.min(align === "right" ? a.right - w : a.left, window.innerWidth - MARGIN - w));
+      const top = a.bottom + 6;
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+      el.style.maxHeight = `${window.innerHeight - top - MARGIN}px`;
     };
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(el);
     window.addEventListener("resize", fit);
+    // Scrolling the sidebar or a panel moves the button; the panel follows it.
+    window.addEventListener("scroll", fit, true);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", fit);
+      window.removeEventListener("scroll", fit, true);
     };
-  }, [open]);
+  }, [open, align]);
 
   return (
     <div className="popover-anchor" ref={ref}>
