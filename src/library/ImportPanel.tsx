@@ -22,7 +22,19 @@ export function describeImport(r: ImportReport) {
   add(r.descriptions, "description", "descriptions");
   add(r.albums, "new album", "new albums");
   add(r.albumItems, "album item", "album items");
-  return parts.length ? parts.join(", ") : "nothing new";
+  return parts.length ? parts.join(", ") : "nothing to change";
+}
+
+/** A sentence on what an import did, saying why when it changed nothing. */
+export function importOutcome(r: ImportReport) {
+  const found = r.found.toLocaleString();
+  const matched = r.matched.toLocaleString();
+  if (r.matched === 0)
+    return `None of the export's ${found} items matched a photo in this folder. Scan the folder first, then import again.`;
+  const of = r.matched === r.found ? `all ${found}` : `${matched} of ${found}`;
+  if (describeImport(r) === "nothing to change")
+    return `Matched ${of} items from the export. The photos already had their own dates and places, and the export had no favorites, descriptions or albums to add, so nothing needed changing.`;
+  return `Matched ${of} items from the export: ${describeImport(r)}.`;
 }
 
 /**
@@ -32,8 +44,8 @@ export function describeImport(r: ImportReport) {
 export function ImportPanel({ rootId, onChanged, onNotice, onError, onImportZips }: Props) {
   const [list, setList] = useState<ImportInfo[] | null>(null);
   const [busy, setBusy] = useState(false);
-  /** Why the last import didn't run, shown in the panel (the app's notice is easy to miss). */
-  const [problem, setProblem] = useState<string | null>(null);
+  /** What the last import did, or why it did not run, shown in the panel (the app's notice is easy to miss). */
+  const [outcome, setOutcome] = useState<{ text: string; failed: boolean } | null>(null);
 
   useEffect(() => {
     api.listImports(rootId).then(setList).catch(onError);
@@ -41,16 +53,16 @@ export function ImportPanel({ rootId, onChanged, onNotice, onError, onImportZips
 
   const run = async () => {
     setBusy(true);
-    setProblem(null);
+    setOutcome(null);
     try {
       const r = await api.importMetadata(rootId);
-      onNotice(
-        `Matched ${r.matched.toLocaleString()} of ${r.found.toLocaleString()} items from the export: ${describeImport(r)}.`,
-      );
+      const text = importOutcome(r);
+      onNotice(text);
+      setOutcome({ text, failed: false });
       setList(await api.listImports(rootId));
       onChanged();
     } catch (e) {
-      setProblem(String(e));
+      setOutcome({ text: String(e), failed: true });
     } finally {
       setBusy(false);
     }
@@ -91,7 +103,7 @@ export function ImportPanel({ rootId, onChanged, onNotice, onError, onImportZips
       <button onClick={run} disabled={busy}>
         {busy ? "Working…" : "Import from this folder"}
       </button>
-      {problem && <p className="small import-problem">{problem}</p>}
+      {outcome && <p className={`small${outcome.failed ? " import-problem" : ""}`}>{outcome.text}</p>}
       {list && list.length > 0 && (
         <ul className="import-list">
           {list.map((i) => (

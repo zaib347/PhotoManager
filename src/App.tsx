@@ -30,7 +30,7 @@ import { RecentlyRemoved } from "./cleanup/RecentlyRemoved";
 import { SimilarPage } from "./cleanup/SimilarPage";
 import { EventsPage } from "./events/EventsPage";
 import { formatBytes } from "./format";
-import { describeImport } from "./library/ImportPanel";
+import { importOutcome } from "./library/ImportPanel";
 import { LibraryPanel } from "./library/LibraryPanel";
 import { FilterBar } from "./photos/FilterBar";
 import { PhotosView } from "./photos/PhotosView";
@@ -268,10 +268,7 @@ export default function App() {
       }),
       events.zipImportFinished(({ report: r, error }) => {
         if (error) setNotice(error);
-        else if (r)
-          setNotice(
-            `Export imported: matched ${r.matched.toLocaleString()} of ${r.found.toLocaleString()} items (${describeImport(r)}).`,
-          );
+        else if (r) setNotice(importOutcome(r));
         Promise.all([reloadTimeline(), reloadCollections(), reloadRoots()]).catch(report);
         setEventsVersion((v) => v + 1);
       }),
