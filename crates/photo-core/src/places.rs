@@ -1,9 +1,16 @@
-//! Places: offline reverse geocoding against a bundled list of cities.
+//! Places: offline reverse geocoding against a bundled list of towns and landmarks.
 //!
-//! The list is GeoNames `cities15000` (every town of 15,000+ people, ~32k entries,
-//! CC BY 4.0), packed by `examples/build_places.rs` into `data/places.bin`. Each
-//! photo with GPS gets the nearest city, where big cities reach further so their
-//! suburbs don't take the photos of the city itself.
+//! The list comes from GeoNames (CC BY 4.0), packed by `examples/build_places.rs`
+//! into `data/places.bin`: every town of 15,000+ people, smaller towns with a
+//! Wikipedia article 25 km or more from those (so Naran is there, but not every
+//! village around a city), and landmarks with a Wikipedia article: lakes, parks,
+//! mountains, passes, valleys, glaciers, waterfalls, islands, beaches, forts and
+//! historic sites.
+//!
+//! Each photo with GPS gets the nearest town, where big cities reach further so their
+//! suburbs don't take the photos of the city itself. Out of town, a landmark close by
+//! names the photo instead (Lake Saiful Muluk rather than a town 5 km away); in town,
+//! the town always does, so a city's photos aren't split over its parks and monuments.
 //!
 //! Only places that photos actually use are copied into the `places` table, so
 //! filters and lists are plain SQL.
@@ -19,13 +26,18 @@ use crate::{Error, Result};
 
 const DATA: &[u8] = include_bytes!("../data/places.bin");
 const MAGIC: &[u8; 4] = b"PMPL";
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 /// Photos further than this from any town (plus the town's own reach) get no place.
 const MAX_KM: f64 = 60.0;
 /// A city of population `p` reaches `REACH_KM * sqrt(p)` km past its centre:
 /// ~15 km for London, ~1 km for a town of 30,000.
 const REACH_KM: f64 = 0.005;
+/// A photo within a town's reach plus this is in town: the town names it, never a
+/// landmark.
+const IN_TOWN_KM: f64 = 2.0;
+/// A landmark names photos out of town up to this far from its point.
+const LANDMARK_KM: f64 = 3.0;
 const EARTH_KM: f64 = 6371.0;
 /// `assets.place_id` for photos that were looked up but are nowhere near a town.
 pub const NOWHERE: i64 = 0;
@@ -45,13 +57,15 @@ pub struct City {
     pub country_code: String,
     pub country: String,
     pub population: u32,
+    /// A lake, park, mountain… rather than a town.
+    pub landmark: bool,
 }
 
 /// Packs cities into the bundled format:
 /// `"PMPL" version:u32 regions:u32 countries:u32 cities:u32`, then the region names,
 /// the countries (`code\tname`) and the city names as `len:u16 bytes`, then per city
-/// `id:u32 lat:i32 lon:i32 region:u16 country:u16 population_k:u16` (degrees × 1e5;
-/// region `u16::MAX` for none). Integers are little-endian.
+/// `id:u32 lat:i32 lon:i32 region:u16 country:u16 population_k:u16 landmark:u8`
+/// (degrees × 1e5; region `u16::MAX` for none). Integers are little-endian.
 pub fn pack(cities: &[City]) -> Vec<u8> {
     fn intern<K: Eq + std::hash::Hash + Copy>(
         list: &mut Vec<K>,
@@ -107,6 +121,7 @@ pub fn pack(cities: &[City]) -> Vec<u8> {
         out.extend_from_slice(&country.to_le_bytes());
         let thousands = (c.population / 1000).min(u16::MAX as u32) as u16;
         out.extend_from_slice(&thousands.to_le_bytes());
+        out.push(c.landmark as u8);
     }
     out
 }
@@ -172,6 +187,7 @@ pub fn unpack(data: &[u8]) -> Result<Vec<City>> {
                 country_code: country_code.to_owned(),
                 country: country.to_owned(),
                 population: r.u16()? as u32 * 1000,
+                landmark: r.take(1)?[0] != 0,
             })
         })
         .collect()
@@ -274,37 +290,56 @@ impl Index {
         self.cities.is_empty()
     }
 
-    /// The city a photo taken at (`lat`, `lon`) belongs to, if any is close enough.
+    /// The place a photo taken at (`lat`, `lon`) belongs to, if any is close enough:
+    /// its town, or out of town a landmark close by.
     pub fn nearest(&self, lat: f64, lon: f64) -> Option<&City> {
         if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lon) {
             return None;
         }
+        // (score, distance, reach) of the best town, and (distance) of the nearest landmark.
+        let mut town: Option<(f64, f64, f64, &City)> = None;
+        let mut landmark: Option<(f64, &City)> = None;
+        self.visit(lat, lon, |city, d| {
+            if city.landmark {
+                if d <= LANDMARK_KM && landmark.is_none_or(|(best, _)| d < best) {
+                    landmark = Some((d, city));
+                }
+                return;
+            }
+            let reach = REACH_KM * (city.population as f64).sqrt();
+            if d > MAX_KM + reach {
+                return;
+            }
+            let score = d - reach;
+            if town.is_none_or(|(s, ..)| score < s) {
+                town = Some((score, d, reach, city));
+            }
+        });
+        match (town, landmark) {
+            (Some((_, d, reach, t)), _) if d <= reach + IN_TOWN_KM => Some(t),
+            (_, Some((_, l))) => Some(l),
+            (t, None) => t.map(|(.., c)| c),
+        }
+    }
+
+    /// Calls `f` with every place in the cells around (`lat`, `lon`) and its distance.
+    fn visit<'a>(&'a self, lat: f64, lon: f64, mut f: impl FnMut(&'a City, f64)) {
         // Reach never exceeds ~25 km, so everything in range is within one cell of
         // latitude (111 km); cells shrink in longitude towards the poles.
         let (row, col) = row_col(lat, lon);
         let widest = (lat.abs() + 1.0).min(89.0).to_radians().cos();
         let span = ((1.0 / widest).ceil() as usize).min(180);
         let cos_lat = lat.to_radians().cos();
-        let mut best: Option<(f64, &City)> = None;
         for r in row.saturating_sub(1)..=(row + 1).min(179) {
             for dc in 0..=(2 * span).min(359) {
                 let c = (col + 360 - span + dc) % 360;
                 let (lo, hi) = (self.cells[cell(r, c)], self.cells[cell(r, c) + 1]);
                 for &i in &self.order[lo as usize..hi as usize] {
                     let city = &self.cities[i as usize];
-                    let reach = REACH_KM * (city.population as f64).sqrt();
-                    let d = distance_km(lat, lon, cos_lat, city.lat, city.lon);
-                    if d > MAX_KM + reach {
-                        continue;
-                    }
-                    let score = d - reach;
-                    if best.is_none_or(|(s, _)| score < s) {
-                        best = Some((score, city));
-                    }
+                    f(city, distance_km(lat, lon, cos_lat, city.lat, city.lon));
                 }
             }
         }
-        best.map(|(_, c)| c)
     }
 }
 
@@ -500,7 +535,37 @@ mod tests {
             country_code: "PK".into(),
             country: "Pakistan".into(),
             population,
+            landmark: false,
         }
+    }
+
+    fn landmark(id: u32, name: &str, lat: f64, lon: f64) -> City {
+        City {
+            landmark: true,
+            ..city(id, name, lat, lon, 0)
+        }
+    }
+
+    #[test]
+    fn landmarks_name_photos_out_of_town_only() {
+        let index = Index::new(vec![
+            city(1, "Big City", 0.0, 0.0, 4_000_000), // reaches 10 km
+            landmark(2, "City Park", 0.05, 0.0),      // 5.6 km north, in town
+            city(3, "Village", 1.0, 0.0, 0),
+            landmark(4, "Lake", 1.04, 0.0), // 4.4 km from the village
+        ]);
+        assert_eq!(index.nearest(0.05, 0.0).unwrap().name, "Big City");
+        assert_eq!(index.nearest(1.035, 0.0).unwrap().name, "Lake");
+        assert_eq!(
+            index.nearest(1.005, 0.0).unwrap().name,
+            "Village",
+            "in the village"
+        );
+        assert_eq!(
+            index.nearest(1.0, 0.04).unwrap().name,
+            "Village",
+            "no landmark close by"
+        );
     }
 
     #[test]
@@ -510,6 +575,7 @@ mod tests {
             city(1166000, "Shāhdara", 31.62, 74.28, 400_000),
         ];
         cities[1].region = None;
+        cities.push(landmark(1168005, "Lake Saiful Muluk", 34.87686, 73.69485));
         assert_eq!(unpack(&pack(&cities)).unwrap(), cities);
     }
 
@@ -547,6 +613,15 @@ mod tests {
             "New York City"
         );
         assert!(index.nearest(0.0, -140.0).is_none(), "mid-Pacific");
+        // Lake Saiful Muluk: Naran (a small town with an article), 5 km away, rather
+        // than Muzaffarabad, 60 km away and in another province.
+        let naran = index.nearest(34.8837, 73.6957).unwrap();
+        assert_eq!(
+            (naran.name.as_str(), naran.region.as_deref()),
+            ("Naran", Some("Khyber Pakhtunkhwa"))
+        );
+        let pass = index.nearest(32.3716, 77.2466).unwrap();
+        assert!(pass.landmark && pass.name == "Rohtang Pass");
     }
 
     #[test]

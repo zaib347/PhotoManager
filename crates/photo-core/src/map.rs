@@ -252,6 +252,7 @@ pub fn city_labels() -> Vec<(String, f32, f32, u32)> {
     let mut cities: Vec<(String, f32, f32, u32)> = Index::bundled()
         .cities()
         .iter()
+        .filter(|c| !c.landmark)
         .map(|c| (c.name.clone(), c.lat as f32, c.lon as f32, c.population))
         .collect();
     cities.sort_by_key(|c| std::cmp::Reverse(c.3));

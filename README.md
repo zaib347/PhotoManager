@@ -36,9 +36,12 @@ cargo run --release -p photo-core --example build_map -- ./natural-earth
 
 ## Data credits
 
-Place names come from [GeoNames](https://www.geonames.org/) (`cities15000`, admin1 codes
-and country info), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-They are repacked into a compact binary file with no other changes.
+Place names come from [GeoNames](https://www.geonames.org/) (`allCountries`, alternate
+names, admin1 codes and country info), licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Towns of 15,000+ people,
+smaller towns away from those, and landmarks are kept, choosing the smaller towns and
+landmarks by whether GeoNames links them to an English Wikipedia article; landmarks
+are named by that article's title. They are repacked into a compact binary file.
 
 The world map is made from [Natural Earth](https://www.naturalearthdata.com/) vector data
 (v5.1.2: land, lakes, urban areas, borders, rivers and roads), which is in the public

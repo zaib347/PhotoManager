@@ -426,6 +426,12 @@ const LIBRARY_MIGRATIONS: &[&str] = &[
         bodies   INTEGER NOT NULL
     );
     ",
+    // v22: places gained smaller towns away from cities and landmarks (see `places`):
+    // every photo with GPS is looked up again (at startup, followed by event and trip
+    // detection, see `places::needs_assign`).
+    "
+    UPDATE assets SET place_id = NULL WHERE lat IS NOT NULL;
+    ",
 ];
 
 const THUMBS_MIGRATIONS: &[&str] = &[

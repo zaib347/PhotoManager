@@ -3,6 +3,27 @@
 Where PhotoManager stands as of 2026-10-26 (night), and what to pick up next.
 The full plan and checklists are in [docs/PLAN.md](docs/PLAN.md).
 
+## Done 2026-11-11: places with small remote towns and landmarks (branch `places-landmarks`, on top of `takeout-zip`, not merged)
+
+- User's Saif ul Malook photo showed "Muzaffarabad, Azad Kashmir" (nearest `cities15000`
+  town, 60 km, wrong province); Google says Saif ul Malook. `cities1000` alone would
+  have said "Dregun" (Naran has population 0 in GeoNames), so not that.
+- `places.bin` now built from `allCountries` + `alternateNamesV2` (both read zipped by
+  `examples/build_places.rs`): towns 15k+ and capitals, smaller towns **with an English
+  Wikipedia link** only when ≥ 25 km (`REMOTE_KM`) from those (user chose this over
+  "everything": 6.3 MB vs 12 MB, ~3.4 MB vs ~6 MB compressed), and 57k landmarks with a
+  link (`LANDMARKS`: lakes, parks, peaks, passes, valleys, islands, beaches, forts,
+  historic sites…), named by the article title. 207,738 places.
+- `City.landmark`; format `VERSION 2` (+1 byte per place). `Index::nearest`: in town
+  (within reach + `IN_TOWN_KM` 2 km) the town wins; out of town a landmark within
+  `LANDMARK_KM` 3 km wins; else the town. Map labels skip landmarks.
+- Migration v22 clears `assets.place_id` for photos with GPS; startup `catch_up`
+  re-assigns and re-detects events and trips.
+- Results: Saif ul Malook → Naran, KPK; Rohtang Pass, Windermere → landmarks; Lahore,
+  Karachi, London, NYC, Paris, Delhi, Toronto unchanged. Quirk: Dubai Marina → "The Palm
+  Jumeirah". The lake itself has no Wikipedia link in GeoNames, so it can't be named.
+- D: ran out of space during the build (target was 20 GB); `cargo clean --profile dev`.
+
 ## Done 2026-11-11 (branches `import-popover` → `takeout-zip`, not merged yet)
 
 - **Popovers no longer clipped by the sidebar** (`src/ui/Popover.tsx`): `position: fixed`,
