@@ -3,6 +3,22 @@
 Where PhotoManager stands as of 2026-10-26 (night), and what to pick up next.
 The full plan and checklists are in [docs/PLAN.md](docs/PLAN.md).
 
+## Done 2026-11-11 (branches `import-popover` → `takeout-zip`, not merged yet)
+
+- **Popovers no longer clipped by the sidebar** (`src/ui/Popover.tsx`): `position: fixed`,
+  placed from the button, follow it on scroll. Import… panel showed cut off and with a
+  horizontal scrollbar.
+- **Import shows its error in the panel** (it went to the easy-to-miss notice, so the
+  user thought nothing happened on a non-export folder).
+- **Import from zips** (`photo-core/src/unzip.rs`, `import_export_zips` in
+  `src-tauri/src/import_commands.rs`): pick all Takeout/iCloud zips + an empty folder →
+  unzip (all parts merged into one tree, free-space check, `.partial` then rename, never
+  overwrites, skips what's there so a retry resumes, zip-slip names dropped) → add the
+  folder (`library::root_at` refuses overlaps up front, reuses it when it's already a
+  library folder) → scan (`scans::start_then`) → `imports::run`. Entry points: Import…
+  panel "Choose zip files…", and the empty-library hint. Progress + Stop in the header.
+  Not done: `.tgz` Takeout exports.
+
 ## Done 2026-10-27 (on `ui-themes`, pushed)
 
 - **XMP checkbox was invisible:** its label used class `check`, the timeline's selection

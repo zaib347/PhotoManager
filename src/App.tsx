@@ -1,3 +1,4 @@
+import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { confirm } from "./ui/confirm";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +18,7 @@ import {
   type ScanProgress,
   type Stats,
   type TagInfo,
+  type UnzipProgress,
   type View,
   type AiPack,
   type AiStatus,
@@ -28,6 +30,7 @@ import { RecentlyRemoved } from "./cleanup/RecentlyRemoved";
 import { SimilarPage } from "./cleanup/SimilarPage";
 import { EventsPage } from "./events/EventsPage";
 import { formatBytes } from "./format";
+import { describeImport } from "./library/ImportPanel";
 import { LibraryPanel } from "./library/LibraryPanel";
 import { FilterBar } from "./photos/FilterBar";
 import { PhotosView } from "./photos/PhotosView";
@@ -100,6 +103,7 @@ export default function App() {
   // Bumped when scans or background detection may have changed events.
   const [eventsVersion, setEventsVersion] = useState(0);
   const [exporting, setExporting] = useState<{ done: number; total: number } | null>(null);
+  const [unzipping, setUnzipping] = useState<UnzipProgress | null>(null);
   const [makingVideo, setMakingVideo] = useState<{ done: number; total: number } | null>(null);
   // Items being placed on the map by hand, and the view to go back to.
   const [placing, setPlacing] = useState<{ ids: number[]; from: View; filter: Filter } | null>(null);
@@ -250,6 +254,27 @@ export default function App() {
         setEventsVersion((v) => v + 1);
       }),
       events.eventsChanged(() => setEventsVersion((v) => v + 1)),
+      events.unzipProgress((p) => setUnzipping(p)),
+      events.unzipFinished(({ rootId, summary, error }) => {
+        setUnzipping(null);
+        if (error) setNotice(`The export couldn't be unzipped: ${error}`);
+        else if (summary && !summary.completed)
+          setNotice("Unzipping stopped. What's unzipped stays; choose the same zips and folder again to go on.");
+        else if (rootId !== null) {
+          const n = summary ? summary.files + summary.skipped : 0;
+          setNotice(`Unzipped ${n.toLocaleString()} files. Scanning them; dates, places and albums are imported next.`);
+          reloadRoots().catch(report);
+        }
+      }),
+      events.zipImportFinished(({ report: r, error }) => {
+        if (error) setNotice(error);
+        else if (r)
+          setNotice(
+            `Export imported: matched ${r.matched.toLocaleString()} of ${r.found.toLocaleString()} items (${describeImport(r)}).`,
+          );
+        Promise.all([reloadTimeline(), reloadCollections(), reloadRoots()]).catch(report);
+        setEventsVersion((v) => v + 1);
+      }),
       events.exportProgress((p) => setExporting(p)),
       events.exportFinished(({ report: r, error }) => {
         setExporting(null);
@@ -303,6 +328,26 @@ export default function App() {
       .then(reloadRoots)
       .catch((e) => setNotice(String(e)));
 
+  /** Picks an export's zips and a folder to unzip them into, then unzips, scans and imports. */
+  const importZips = async () => {
+    const zips = await open({
+      multiple: true,
+      filters: [{ name: "Zip files", extensions: ["zip"] }],
+      title: "Choose the export's zip files (all parts)",
+    });
+    if (!zips || zips.length === 0) return;
+    const dest = await open({ directory: true, multiple: false, title: "Choose an empty folder to unzip them into" });
+    if (typeof dest !== "string") return;
+    // Shown before the call: unzipping may already report (or end) when it returns.
+    setUnzipping({ zip: 1, zips: zips.length, bytes: 0, totalBytes: 0 });
+    try {
+      await api.importExportZips(zips, dest);
+    } catch (e) {
+      setUnzipping(null);
+      setNotice(String(e));
+    }
+  };
+
   const removeRoot = async (root: RootInfo) => {
     const ok = await confirm(
       `Remove "${root.path}" from the library?\n\nYour files are not touched. Favorites, tags and albums for photos that only exist in this folder are removed from the library.`,
@@ -339,6 +384,15 @@ export default function App() {
             }
             onSearch={(q) => searchPhotos(q, q, true)}
           />
+        )}
+        {unzipping && (
+          <span className="export-status muted">
+            Unzipping{unzipping.zips > 1 ? ` part ${unzipping.zip} of ${unzipping.zips}` : ""}{" "}
+            {Math.floor((unzipping.bytes / Math.max(1, unzipping.totalBytes)) * 100)}%
+            <button className="link small" onClick={() => api.cancelUnzip().catch(report)}>
+              Stop
+            </button>
+          </span>
         )}
         {exporting && (
           <span className="export-status muted">
@@ -386,6 +440,7 @@ export default function App() {
           things={searchReady ? things : []}
           onThing={(name, description) => searchPhotos(description, name, false)}
           people={installed("people")}
+          onImportZips={importZips}
           onImported={() => {
             Promise.all([reloadTimeline(), reloadCollections()]).catch(report);
             setEventsVersion((v) => v + 1);

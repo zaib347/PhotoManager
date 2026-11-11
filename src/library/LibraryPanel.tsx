@@ -57,6 +57,8 @@ type Props = {
   onNotice: (message: string) => void;
   /** An import changed dates, places, albums or favorites. */
   onImported: () => void;
+  /** Unzips a Google Takeout or iCloud export into a new library folder and imports it. */
+  onImportZips: () => void;
   /** Ready-made searches (name, description), once search by description is ready. */
   things: [string, string][];
   onThing: (name: string, description: string) => void;
@@ -76,6 +78,7 @@ export function LibraryPanel({
   onError,
   onNotice,
   onImported,
+  onImportZips,
   things,
   onThing,
   people,
@@ -225,6 +228,9 @@ export function LibraryPanel({
             <Icon name="plus" size={14} />
             Add folder
           </button>
+          <button className="link small" onClick={onImportZips}>
+            Import a Google Takeout or iCloud zip…
+          </button>
         </p>
       )}
       <ul className="roots">
@@ -256,7 +262,13 @@ export function LibraryPanel({
                   <button onClick={() => onRemove(root)}>Remove</button>
                   <Popover label="Import…" title="Google Takeout or iCloud export" buttonClass="ghost">
                     {() => (
-                      <ImportPanel rootId={root.id} onChanged={onImported} onNotice={onNotice} onError={onError} />
+                      <ImportPanel
+                        rootId={root.id}
+                        onChanged={onImported}
+                        onNotice={onNotice}
+                        onError={onError}
+                        onImportZips={onImportZips}
+                      />
                     )}
                   </Popover>
                   {root.lastScanAt && (

@@ -28,6 +28,17 @@ struct FinishedEvent {
 
 /// Starts a scan unless one is already running for this root. Returns whether it started.
 pub fn start(app: &AppHandle, state: &Arc<AppState>, root_id: i64) -> bool {
+    start_then(app, state, root_id, |_, _, _| {})
+}
+
+/// [`start`], then `after` on the scan thread once it ends, with the summary of a
+/// scan that ran to the end (`None` when it failed or was cancelled).
+pub fn start_then(
+    app: &AppHandle,
+    state: &Arc<AppState>,
+    root_id: i64,
+    after: impl FnOnce(&AppHandle, &Arc<AppState>, Option<&Summary>) + Send + 'static,
+) -> bool {
     let cancel = Arc::new(AtomicBool::new(false));
     {
         let mut scans = state.scans.lock().unwrap_or_else(|e| e.into_inner());
@@ -71,6 +82,7 @@ pub fn start(app: &AppHandle, state: &Arc<AppState>, root_id: i64) -> bool {
                 Ok(s) => (Some(s), None),
                 Err(e) => (None, Some(e.to_string())),
             };
+            let completed = summary.clone().filter(|s| s.completed);
             let _ = app.emit(
                 "scan-finished",
                 FinishedEvent {
@@ -79,6 +91,7 @@ pub fn start(app: &AppHandle, state: &Arc<AppState>, root_id: i64) -> bool {
                     error,
                 },
             );
+            after(&app, &state, completed.as_ref());
             crate::similar_commands::run_in_background(&app, &state);
             crate::ai_commands::run_indexer(&app, &state);
         })

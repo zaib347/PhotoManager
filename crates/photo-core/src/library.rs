@@ -32,19 +32,8 @@ pub fn add_root(conn: &Connection, path: &Path) -> Result<i64> {
         params![vol.uuid],
         |r| r.get(0),
     )?;
-
-    // Nested roots would index the same files twice.
-    let mut stmt = conn.prepare("SELECT rel_path FROM roots WHERE volume_id = ?1")?;
-    let existing = stmt.query_map(params![volume_id], |r| r.get::<_, String>(0))?;
-    for other in existing {
-        let other = other?;
-        let inside = |a: &str, b: &str| b.is_empty() || a == b || a.starts_with(&format!("{b}/"));
-        if inside(&rel, &other) || inside(&other, &rel) {
-            return Err(Error::Invalid(format!(
-                "This folder overlaps a folder already in the library ({})",
-                vol.mount.join(&other).display()
-            )));
-        }
+    if let Some(other) = overlapping(conn, volume_id, &rel)? {
+        return Err(overlap_error(&vol.mount.join(other)));
     }
 
     conn.execute(
@@ -52,6 +41,59 @@ pub fn add_root(conn: &Connection, path: &Path) -> Result<i64> {
         params![volume_id, rel],
     )?;
     Ok(conn.last_insert_rowid())
+}
+
+/// A root on the volume that contains, or is inside, `rel`: nested roots would index
+/// the same files twice.
+fn overlapping(conn: &Connection, volume_id: i64, rel: &str) -> Result<Option<String>> {
+    let mut stmt = conn.prepare("SELECT rel_path FROM roots WHERE volume_id = ?1")?;
+    let existing = stmt.query_map(params![volume_id], |r| r.get::<_, String>(0))?;
+    let inside = |a: &str, b: &str| b.is_empty() || a == b || a.starts_with(&format!("{b}/"));
+    for other in existing {
+        let other = other?;
+        if inside(rel, &other) || inside(&other, rel) {
+            return Ok(Some(other));
+        }
+    }
+    Ok(None)
+}
+
+fn overlap_error(other: &Path) -> Error {
+    Error::Invalid(format!(
+        "This folder overlaps a folder already in the library ({})",
+        other.display()
+    ))
+}
+
+/// Whether `path` can hold new library files: `Some(root)` when it is a library folder
+/// already, `None` when it can be added. A folder inside or around another library
+/// folder is refused.
+pub fn root_at(conn: &Connection, path: &Path) -> Result<Option<i64>> {
+    let (vol, rel) = volume::identify(path)?;
+    let volume_id: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM volumes WHERE uuid = ?1",
+            params![vol.uuid],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(volume_id) = volume_id else {
+        return Ok(None);
+    };
+    let exact: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM roots WHERE volume_id = ?1 AND rel_path = ?2",
+            params![volume_id, rel],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if exact.is_some() {
+        return Ok(exact);
+    }
+    match overlapping(conn, volume_id, &rel)? {
+        Some(other) => Err(overlap_error(&vol.mount.join(other))),
+        None => Ok(None),
+    }
 }
 
 /// Removes a root, its files, and any assets that only existed under it.

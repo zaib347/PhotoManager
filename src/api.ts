@@ -306,6 +306,20 @@ export type ImportReport = {
 };
 export type ImportInfo = { id: number; rootId: number; createdAt: number; undone: boolean; report: ImportReport };
 
+/** Unzipping an export's zips: the zip being unzipped (1-based) and bytes so far. */
+export type UnzipProgress = { zip: number; zips: number; bytes: number; totalBytes: number };
+export type UnzipSummary = {
+  /** Files written, and files already in the folder (left as they were). */
+  files: number;
+  skipped: number;
+  /** Entries whose names would land outside the folder, left out. */
+  unsafeNames: number;
+  completed: boolean;
+};
+/** `rootId`: the library folder now being scanned, then imported. */
+export type UnzipFinished = { rootId: number | null; summary: UnzipSummary | null; error: string | null };
+export type ZipImportFinished = { rootId: number; report: ImportReport | null; error: string | null };
+
 /** XMP sidecars are always read; writing them is off by default. */
 export type XmpSettings = {
   write: boolean;
@@ -633,6 +647,13 @@ export const api = {
   saveCollage: (collage: CollageSpec, path: string) => invoke<void>("save_collage", { collage, path }),
   /** Reads a Google Takeout or iCloud export's metadata in a library folder. */
   importMetadata: (rootId: number) => invoke<ImportReport>("import_metadata", { rootId }),
+  /**
+   * Unzips an export's zips into `dest`, adds it to the library, scans it and imports its
+   * metadata, in the background: watch `events.unzipProgress`, `unzipFinished`, then
+   * `zipImportFinished`.
+   */
+  importExportZips: (zips: string[], dest: string) => invoke<void>("import_export_zips", { zips, dest }),
+  cancelUnzip: () => invoke<void>("cancel_unzip"),
   listImports: (rootId: number) => invoke<ImportInfo[]>("list_imports", { rootId }),
   /** Takes an import back; returns how many changes were undone. */
   undoImport: (id: number) => invoke<number>("undo_import", { id }),
@@ -680,6 +701,12 @@ export const events = {
   volumesChanged: (cb: () => void): Promise<UnlistenFn> => listen("volumes-changed", () => cb()),
   /** Events were (re)detected in the background. */
   eventsChanged: (cb: () => void): Promise<UnlistenFn> => listen("events-changed", () => cb()),
+  unzipProgress: (cb: (p: UnzipProgress) => void): Promise<UnlistenFn> =>
+    listen<UnzipProgress>("unzip-progress", (e) => cb(e.payload)),
+  unzipFinished: (cb: (f: UnzipFinished) => void): Promise<UnlistenFn> =>
+    listen<UnzipFinished>("unzip-finished", (e) => cb(e.payload)),
+  zipImportFinished: (cb: (f: ZipImportFinished) => void): Promise<UnlistenFn> =>
+    listen<ZipImportFinished>("zip-import-finished", (e) => cb(e.payload)),
   exportProgress: (cb: (p: { done: number; total: number }) => void): Promise<UnlistenFn> =>
     listen<{ done: number; total: number }>("export-progress", (e) => cb(e.payload)),
   exportFinished: (cb: (f: { report: ExportReport | null; error: string | null }) => void): Promise<UnlistenFn> =>

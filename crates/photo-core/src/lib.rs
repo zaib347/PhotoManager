@@ -36,6 +36,7 @@ pub mod synth;
 pub mod thumbs;
 pub mod timeline;
 pub mod trips;
+pub mod unzip;
 pub mod video;
 pub mod volume;
 pub mod watermark;

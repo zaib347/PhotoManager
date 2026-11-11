@@ -2683,9 +2683,10 @@ button.primary:disabled {
   margin: 0;
 }
 
-.import-steps {
-  margin: 0;
-  padding-left: 18px;
+.import-heading {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .import-problem {

@@ -7,6 +7,8 @@ type Props = {
   onChanged: () => void;
   onNotice: (message: string) => void;
   onError: (e: unknown) => void;
+  /** Unzips an export into a new library folder, then scans and imports it. */
+  onImportZips: () => void;
 };
 
 /** "3 dates, 2 places, …" for a report. */
@@ -27,7 +29,7 @@ export function describeImport(r: ImportReport) {
  * Reads what a Google Takeout or iCloud export knows about its photos (dates, places,
  * favorites, albums…) into the library, with a list of past imports to undo.
  */
-export function ImportPanel({ rootId, onChanged, onNotice, onError }: Props) {
+export function ImportPanel({ rootId, onChanged, onNotice, onError, onImportZips }: Props) {
   const [list, setList] = useState<ImportInfo[] | null>(null);
   const [busy, setBusy] = useState(false);
   /** Why the last import didn't run, shown in the panel (the app's notice is easy to miss). */
@@ -74,16 +76,20 @@ export function ImportPanel({ rootId, onChanged, onNotice, onError }: Props) {
         Reads the dates, places, favorites, hidden photos, descriptions and albums that a <strong>Google Takeout</strong>{" "}
         or <strong>iCloud Photos</strong> export keeps beside the photos.
       </p>
-      <ol className="small import-steps">
-        <li>Unzip the export's zip files into one folder.</li>
-        <li>Add that folder under Folders and let it scan.</li>
-        <li>Open Import… on that folder and press the button below.</li>
-      </ol>
       <p className="muted small">
         Only fills in what's missing: a date only when the photo has none of its own, a place only without GPS.
       </p>
-      <button className="primary" onClick={run} disabled={busy}>
-        {busy ? "Working…" : "Import from export"}
+      <h4 className="import-heading">Still in zip files?</h4>
+      <p className="small">
+        Choose all the export's zips and an empty folder: they're unzipped there, the folder is added and scanned,
+        and then imported. Needs as much free space as the photos take.
+      </p>
+      <button className="primary" onClick={onImportZips} disabled={busy}>
+        Choose zip files…
+      </button>
+      <h4 className="import-heading">Already unzipped in this folder?</h4>
+      <button onClick={run} disabled={busy}>
+        {busy ? "Working…" : "Import from this folder"}
       </button>
       {problem && <p className="small import-problem">{problem}</p>}
       {list && list.length > 0 && (

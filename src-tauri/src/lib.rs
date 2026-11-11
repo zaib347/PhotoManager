@@ -46,6 +46,9 @@ pub(crate) struct AppState {
     /// An export is running / should stop.
     exporting: AtomicBool,
     export_cancel: AtomicBool,
+    /// A Google Takeout or iCloud export is being unzipped / should stop.
+    unzipping: AtomicBool,
+    unzip_cancel: AtomicBool,
     /// A slideshow video is being made / should stop.
     making_video: AtomicBool,
     video_cancel: AtomicBool,
@@ -387,6 +390,8 @@ pub fn run() {
                 hash_cancel: AtomicBool::new(false),
                 exporting: AtomicBool::new(false),
                 export_cancel: AtomicBool::new(false),
+                unzipping: AtomicBool::new(false),
+                unzip_cancel: AtomicBool::new(false),
                 making_video: AtomicBool::new(false),
                 video_cancel: AtomicBool::new(false),
                 watermark_base: Mutex::default(),
@@ -468,6 +473,8 @@ pub fn run() {
             edit_commands::edit_paste,
             xmp_commands::xmp_settings,
             import_commands::import_metadata,
+            import_commands::import_export_zips,
+            import_commands::cancel_unzip,
             ai_commands::ai_status,
             ai_commands::ai_install,
             ai_commands::ai_cancel_install,
